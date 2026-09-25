@@ -1,0 +1,13 @@
+{
+  "active_season": "2026-27",
+  "active_stage": "draft",
+  "sources": {
+    "cbs": true,
+    "fantasypros": true
+  },
+  "http": {
+    "timeout": 30,
+    "retries": 2,
+    "pause_seconds": 1.5
+  }
+}

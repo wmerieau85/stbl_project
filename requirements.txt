@@ -1,0 +1,4 @@
+beautifulsoup4>=4.12
+cloudscraper>=1.2.71
+lxml>=5.0
+pandas>=2.0

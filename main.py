@@ -1,41 +1,71 @@
-import json
-import os
+"""Pipeline STBL : import des projections puis rapprochement des joueurs.
+
+Exemples :
+    python main.py                        # sources et étape définies dans config/settings.json
+    python main.py --stage ros            # force les projections "rest of season"
+    python main.py --sources cbs          # une seule source
+"""
+
+import argparse
+import logging
+import sys
+
+from scripts.config import load_settings
 from scripts.db import init_db
-from scripts.scraper_cbs import fetch_cbs_projections
-from scripts.scraper_fantasypros import fetch_fantasypros_projections
+from scripts.http_client import HttpClient
+from scripts.player_linker import link_players
+from scripts.sources import SOURCES
 
-SETTINGS_PATH = os.path.join("config", "settings.json")
-
-
-def load_settings():
-    if os.path.exists(SETTINGS_PATH):
-        with open(SETTINGS_PATH, "r", encoding="utf-8") as f:
-            return json.load(f)
-    return {"sources": {"cbs": True, "fantasypros": True}}
+log = logging.getLogger("stbl")
 
 
-def run_pipeline():
+def parse_args():
+    parser = argparse.ArgumentParser(description="Pipeline de projections fantasy NBA (STBL)")
+    parser.add_argument("--season", help="ex. 2026-27 (sinon valeur de settings.json)")
+    parser.add_argument("--stage", choices=["draft", "ros"], help="draft ou ros")
+    parser.add_argument("--sources", nargs="+", choices=sorted(SOURCES), help="sources à importer")
+    parser.add_argument("--skip-link", action="store_true", help="ne pas lancer le rapprochement des joueurs")
+    parser.add_argument("-v", "--verbose", action="store_true", help="logs détaillés")
+    return parser.parse_args()
+
+
+def run_pipeline(args):
     settings = load_settings()
-    sources_config = settings.get("sources", {})
+    if args.season:
+        settings["active_season"] = args.season
+    if args.stage:
+        settings["active_stage"] = args.stage
 
-    print("=== DÉMARRAGE DU PIPELINE STBL ===")
+    selected = args.sources or [name for name, enabled in settings["sources"].items() if enabled]
+    unknown = [name for name in selected if name not in SOURCES]
+    if unknown:
+        log.warning("Sources inconnues ignorées : %s", ", ".join(unknown))
+
+    log.info("=== Pipeline STBL : saison %s, étape %s ===", settings["active_season"], settings["active_stage"])
     init_db()
 
-    positions = ["PG", "SG", "SF", "PF", "C"]
+    http = HttpClient.from_settings(settings)
+    results = {}
+    for name in selected:
+        if name in SOURCES:
+            results[name] = SOURCES[name](settings, http=http).run()
 
-    # CBS
-    if sources_config.get("cbs", False):
-        print("\n--- Lancement du scraping CBS ---")
-        for pos in positions:
-            fetch_cbs_projections(position=pos)
+    if not args.skip_link:
+        link_players(season=settings["active_season"], stage=settings["active_stage"])
 
-    # FantasyPros
-    if sources_config.get("fantasypros", False):
-        print("\n--- Lancement du scraping FantasyPros ---")
-        fetch_fantasypros_projections(position="overall")
-
-    print("\n✅ Pipeline terminé !")
+    failed = [name for name, ok in results.items() if not ok]
+    if failed:
+        log.error("Pipeline terminé avec des erreurs : %s", ", ".join(failed))
+        return 1
+    log.info("Pipeline terminé.")
+    return 0
 
 
 if __name__ == "__main__":
-    run_pipeline()
+    cli_args = parse_args()
+    logging.basicConfig(
+        level=logging.DEBUG if cli_args.verbose else logging.INFO,
+        format="%(asctime)s %(levelname)-7s %(message)s",
+        datefmt="%H:%M:%S",
+    )
+    sys.exit(run_pipeline(cli_args))
