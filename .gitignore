@@ -1,0 +1,16 @@
+# Fichiers de clés et identifiants
+credentials.json
+*.json
+!config/mappings.json
+!config/params.json
+
+# Base de données locale
+*.sqlite
+*.db
+
+# Environnement virtuel et cache Python
+venv/
+.venv/
+__pycache__/
+.idea/
+.vscode/

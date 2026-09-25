@@ -1,0 +1,48 @@
+{
+  "cbs": {
+    "type": "totals",
+    "urls": {
+      "draft": "https://www.cbssports.com/fantasy/basketball/stats/{position}/{year}/restofseason/projections/",
+      "ros": "https://www.cbssports.com/fantasy/basketball/stats/{position}/{year}/restofseason/projections/"
+    },
+    "columns": {
+      "Player": "player",
+      "gp": "gp",
+      "min": "min",
+      "fgm": "fgm",
+      "fga": "fga",
+      "fg%": "fgp",
+      "3pm": "3pm",
+      "ftm": "ftm",
+      "fta": "fta",
+      "ft%": "ftp",
+      "reb": "reb",
+      "ast": "ast",
+      "stl": "stl",
+      "blk": "blk",
+      "to": "to",
+	  "pts": "pts"
+    }
+  },
+   "fantasypros": {
+    "type": "totals",
+     "urls": {
+      "draft": "https://www.fantasypros.com/nba/projections/overall.php",
+      "ros": "https://www.fantasypros.com/nba/projections/ros-overall.php"
+    },
+    "columns": {
+      "Player": "player",
+      "GP": "gp",
+      "MIN": "min",
+      "FG%": "fgp",
+      "3PM": "3pm",
+      "FT%": "ftp",
+      "REB": "reb",
+      "AST": "ast",
+      "STL": "stl",
+      "BLK": "blk",
+      "TO": "to",
+	  "PTS": "pts"
+    }
+  }
+}
