@@ -21,7 +21,7 @@ POSITION_ORDER = ["PG", "SG", "G", "SF", "PF", "F", "C"]
 # Codes équipe harmonisés sur les abréviations officielles NBA
 TEAM_CODES = {
     "GS": "GSW", "NO": "NOP", "NOR": "NOP", "NY": "NYK", "SA": "SAS",
-    "UTH": "UTA", "PHO": "PHX", "WSH": "WAS", "BRK": "BKN", "CHO": "CHA",
+    "UTH": "UTA", "UTAH": "UTA", "PHO": "PHX", "WSH": "WAS", "BRK": "BKN", "CHO": "CHA",
 }
 
 
