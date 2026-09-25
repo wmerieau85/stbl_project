@@ -1,16 +1,29 @@
-# Fichiers de clés et identifiants
+# Clés et identifiants (Google Sheets, etc.)
 credentials.json
+token.json
+service_account*.json
+.env
+
+# JSON ignorés par défaut, sauf la configuration partagée
 *.json
 !config/mappings.json
-!config/params.json
+!config/settings.example.json
+!config/player_aliases.json
+# config/settings.json reste local : copier settings.example.json
 
 # Base de données locale
 *.sqlite
+*.sqlite-journal
 *.db
+
+# Fichiers de travail
+*.log
+Sans nom*.csv
 
 # Environnement virtuel et cache Python
 venv/
 .venv/
 __pycache__/
+*.pyc
 .idea/
 .vscode/

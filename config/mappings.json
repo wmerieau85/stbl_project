@@ -1,48 +1,52 @@
 {
   "cbs": {
-    "type": "totals",
     "urls": {
-      "draft": "https://www.cbssports.com/fantasy/basketball/stats/{position}/{year}/restofseason/projections/",
+      "draft": "https://www.cbssports.com/fantasy/basketball/stats/{position}/{year}/season/projections/",
       "ros": "https://www.cbssports.com/fantasy/basketball/stats/{position}/{year}/restofseason/projections/"
     },
+    "positions": ["PG", "SG", "SF", "PF", "C"],
+    "percent_scale": 100,
     "columns": {
-      "Player": "player",
       "gp": "gp",
+      "gs": "gs",
+      "fpts": "fpts",
       "min": "min",
+      "mpg": "mpg",
       "fgm": "fgm",
       "fga": "fga",
       "fg%": "fgp",
-      "3pm": "3pm",
       "ftm": "ftm",
       "fta": "fta",
       "ft%": "ftp",
+      "3pm": "fg3m",
+      "3pa": "fg3a",
+      "3fg%": "fg3p",
+      "pts": "pts",
       "reb": "reb",
       "ast": "ast",
       "stl": "stl",
       "blk": "blk",
-      "to": "to",
-	  "pts": "pts"
+      "to": "tov"
     }
   },
-   "fantasypros": {
-    "type": "totals",
-     "urls": {
+  "fantasypros": {
+    "urls": {
       "draft": "https://www.fantasypros.com/nba/projections/overall.php",
       "ros": "https://www.fantasypros.com/nba/projections/ros-overall.php"
     },
+    "percent_scale": 1,
     "columns": {
-      "Player": "player",
       "GP": "gp",
       "MIN": "min",
       "FG%": "fgp",
-      "3PM": "3pm",
       "FT%": "ftp",
+      "3PM": "fg3m",
+      "PTS": "pts",
       "REB": "reb",
       "AST": "ast",
       "STL": "stl",
       "BLK": "blk",
-      "TO": "to",
-	  "PTS": "pts"
+      "TO": "tov"
     }
   }
 }
