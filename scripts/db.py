@@ -8,7 +8,7 @@ from scripts.config import DB_PATH
 
 log = logging.getLogger(__name__)
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 
 # Colonnes de stats standardisées (totaux sur la saison, pourcentages en décimal 0-1)
 STAT_COLUMNS = [
@@ -21,9 +21,14 @@ STAT_COLUMNS = [
 ]
 PERCENT_COLUMNS = {"fgp", "ftp", "fg3p"}
 
+# Informations de draft (hors stats) : ADP, coût moyen observé en enchères
+# et valeur d'enchère estimée par la source (peut être négative)
+META_COLUMNS = ["adp", "auction_cost", "auction_value"]
+NUMERIC_COLUMNS = STAT_COLUMNS + META_COLUMNS
+
 PROJECTION_COLUMNS = [
     "player", "player_key", "team", "positions", "source", "season", "stage",
-] + STAT_COLUMNS
+] + NUMERIC_COLUMNS
 
 
 @contextmanager
@@ -38,7 +43,16 @@ def get_connection():
 
 
 def _migrate(conn, current_version):
-    if 0 < current_version < SCHEMA_VERSION or (
+    if current_version == 2:
+        # v2 -> v3 : ajout des colonnes de draft, sans perte de données
+        log.info("Migration du schéma v2 -> v3 (colonnes %s).", ", ".join(META_COLUMNS))
+        existing = {row[1] for row in conn.execute("PRAGMA table_info(raw_projections)")}
+        for col in META_COLUMNS:
+            if col not in existing:
+                conn.execute(f"ALTER TABLE raw_projections ADD COLUMN {col} REAL")
+        conn.execute("DROP VIEW IF EXISTS v_projections")
+        return
+    if 0 < current_version < 2 or (
         current_version == 0 and _table_exists(conn, "raw_projections")
     ):
         # Ancien schéma (colonnes "to"/"3pm", pas de player_key) : les données brutes
@@ -57,7 +71,7 @@ def _table_exists(conn, name):
 
 
 def init_db():
-    stats_sql = ",\n            ".join(f"{col} REAL" for col in STAT_COLUMNS)
+    stats_sql = ",\n            ".join(f"{col} REAL" for col in NUMERIC_COLUMNS)
     with get_connection() as conn, conn:
         current_version = conn.execute("PRAGMA user_version").fetchone()[0]
         if current_version != SCHEMA_VERSION:
