@@ -5,7 +5,8 @@
     "cbs": true,
     "fantasypros": true,
     "fanscout": true,
-    "draftkick": true
+    "draftkick": true,
+    "lineupexperts": true
   },
   "http": {
     "timeout": 30,
