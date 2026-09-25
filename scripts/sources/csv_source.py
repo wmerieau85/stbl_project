@@ -13,7 +13,7 @@ import logging
 import os
 
 from scripts.config import BASE_DIR
-from scripts.sources.base import ProjectionSource, parse_number
+from scripts.sources.base import COUNTING_COLUMNS, ProjectionSource, parse_number
 
 log = logging.getLogger(__name__)
 
@@ -89,11 +89,41 @@ class CsvProjectionSource(ProjectionSource):
         log.info("[%s] Stats détectées : %s.", self.label, "par match" if per_game else "totaux sur la saison")
         return per_game
 
+    @staticmethod
+    def _unique_headers(headers):
+        """Rend les en-têtes uniques : un 2e "Team" devient "Team_2", un 3e "Team_3"..."""
+        seen = {}
+        result = []
+        for header in (h.strip() for h in headers):
+            seen[header] = seen.get(header, 0) + 1
+            result.append(header if seen[header] == 1 else f"{header}_{seen[header]}")
+        return result
+
+    def _clean_values(self, row):
+        """Applique les valeurs sentinelles (ex. ADP 999 = non drafté) et les cases vides."""
+        empty_as_zero = self.mapping.get("empty_as_zero", False)
+        sentinels = {
+            col: {str(v) for v in values}
+            for col, values in self.mapping.get("missing_values", {}).items()
+        }
+        for col, value in row.items():
+            if value in sentinels.get(col, ()):
+                row[col] = ""
+            elif value == "" and empty_as_zero and col in self.mapping["columns"] \
+                    and self.mapping["columns"][col] in COUNTING_COLUMNS:
+                row[col] = "0"
+        return row
+
     def parse_page(self, text, _context):
-        reader = csv.DictReader(io.StringIO(text), delimiter=detect_delimiter(text))
+        reader = csv.reader(io.StringIO(text), delimiter=detect_delimiter(text))
+        try:
+            headers = self._unique_headers(next(reader))
+        except StopIteration:
+            return []
         rows = [
-            {(k or "").strip(): (v or "").strip() for k, v in row.items() if k is not None}
-            for row in reader
+            self._clean_values({h: (v or "").strip() for h, v in zip(headers, values)})
+            for values in reader
+            if any(v.strip() for v in values)
         ]
         if not rows:
             return []
@@ -108,6 +138,10 @@ class CsvProjectionSource(ProjectionSource):
         unknown = sorted(set(rows[0]) - set(self.mapping["columns"]) - {player_col, team_col, pos_col})
         if unknown:
             log.debug("[%s] Colonnes ignorées : %s", self.label, ", ".join(unknown))
+
+        # Lignes parasites propres à une source (ex. "Unknown Player" chez DraftKick)
+        skipped = {name.lower() for name in self.mapping.get("skip_players", [])}
+        rows = [row for row in rows if row.get(player_col, "").lower() not in skipped]
 
         self.per_game = self._detect_per_game(rows)
         return [

@@ -44,6 +44,7 @@ python -m scripts.tools.build_aliases alias.csv   # CSV -> config/player_aliases
 | CBS | web | automatique, une page par poste |
 | FantasyPros | web | automatique |
 | FanScout | fichier CSV | export manuel depuis [fanscout.pro/projections](https://fanscout.pro/projections), déposé dans `data/imports/fanscout/` sous le nom `fanscout_<étape>_AAAA-MM-JJ.csv` |
+| DraftKick | fichier CSV | export manuel, déposé dans `data/imports/draftkick/` sous le nom `draftkick_<étape>_AAAA-MM-JJ.csv` |
 
 Pour les sources CSV, l'import prend le fichier le plus récent de l'étape active
 (ou celui passé avec `--file`). Totaux ou moyennes par match : détection
@@ -62,6 +63,7 @@ scripts/sources/csv_source.py  base des sources alimentées par un fichier CSV
 scripts/sources/cbs.py       CBS Sports (une page par poste)
 scripts/sources/fantasypros.py
 scripts/sources/fanscout.py  FanScout (CSV)
+scripts/sources/draftkick.py DraftKick (CSV)
 data/imports/<source>/       dépôt des exports CSV
 scripts/player_linker.py     table players et rapprochement entre sources
 scripts/tools/build_aliases.py
@@ -70,8 +72,12 @@ scripts/tools/build_aliases.py
 Ajouter une source :
 - **web** : une classe héritant de `ProjectionSource` (méthodes `page_requests` et `parse_page`) ;
 - **CSV** : une classe de deux lignes héritant de `CsvProjectionSource` (voir `fanscout.py`) ;
-  tout le reste se règle dans `mappings.json` (`import_dir`, `files`, `player_column`,
-  `team_column`, `positions_column`, `stat_mode`, `percent_scale`, `columns`) ;
+  tout le reste se règle dans `mappings.json` :
+  - `import_dir`, `files` (motif du fichier par étape) ;
+  - `player_column`, `team_column`, `positions_column` (un en-tête en double devient `Nom_2`) ;
+  - `stat_mode` (`auto`, `totals`, `per_game`), `percent_scale` (1 ou 100) ;
+  - `empty_as_zero` (case vide = 0), `missing_values` (ex. ADP 999 = vide), `skip_players` ;
+  - `columns` (en-tête du CSV -> colonne standard) ;
 
 puis un bloc dans `mappings.json` et une ligne dans `scripts/sources/__init__.py`.
 
@@ -80,8 +86,8 @@ puis un bloc dans `mappings.json` et une ligne dans `scripts/sources/__init__.py
 - `raw_projections` : une ligne par joueur, source, saison et étape (contrainte d'unicité).
   Colonnes : `player`, `player_key`, `team` (codes NBA officiels), `positions`
   (ex. `PG,SG`), puis les stats standard `gp gs min mpg pts reb ast stl blk tov
-  fgm fga fgp ftm fta ftp fg3m fg3a fg3p fpts`, et pour le draft `adp` et `auction_cost`
-  (Yahoo, fournis par FanScout).
+  fgm fga fgp ftm fta ftp fg3m fg3a fg3p fpts`, et pour le draft `adp`, `auction_cost`
+  (coût moyen Yahoo, FanScout) et `auction_value` (valeur estimée, DraftKick).
 - Stats dérivées automatiquement quand une source ne les donne pas :
   `mpg = min / gp`, `fgm = fgp × fga`, `ftm = ftp × fta`, et l'inverse.
 - Toutes les stats sont des **totaux sur la saison** ; les pourcentages sont en **décimal (0.485)**.

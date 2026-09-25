@@ -4,7 +4,8 @@
   "sources": {
     "cbs": true,
     "fantasypros": true,
-    "fanscout": true
+    "fanscout": true,
+    "draftkick": true
   },
   "http": {
     "timeout": 30,

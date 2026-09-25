@@ -15,7 +15,7 @@ ALIASES_PATH = os.path.join(CONFIG_DIR, "player_aliases.json")
 DEFAULT_SETTINGS = {
     "active_season": "2026-27",
     "active_stage": "draft",  # "draft" ou "ros"
-    "sources": {"cbs": True, "fantasypros": True, "fanscout": True},
+    "sources": {"cbs": True, "fantasypros": True, "fanscout": True, "draftkick": True},
     "http": {"timeout": 30, "retries": 2, "pause_seconds": 1.5},
 }
 

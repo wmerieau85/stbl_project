@@ -78,5 +78,36 @@
       "Yahoo average draft position": "adp",
       "Yahoo avg. auction cost": "auction_cost"
     }
+  },
+  "draftkick": {
+    "import_dir": "data/imports/draftkick",
+    "files": {
+      "draft": "draftkick_draft_*.csv",
+      "ros": "draftkick_ros_*.csv"
+    },
+    "stat_mode": "auto",
+    "percent_scale": 1,
+    "empty_as_zero": true,
+    "missing_values": {
+      "ADP": [999]
+    },
+    "skip_players": ["Unknown Player"],
+    "player_column": "Name",
+    "team_column": "Team_2",
+    "positions_column": "Position",
+    "columns": {
+      "GP": "gp",
+      "PTS": "pts",
+      "REB": "reb",
+      "AST": "ast",
+      "STL": "stl",
+      "BLK": "blk",
+      "TO": "tov",
+      "FG%": "fgp",
+      "FT%": "ftp",
+      "3PM": "fg3m",
+      "ADP": "adp",
+      "$": "auction_value"
+    }
   }
 }

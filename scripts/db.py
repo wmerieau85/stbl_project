@@ -21,8 +21,9 @@ STAT_COLUMNS = [
 ]
 PERCENT_COLUMNS = {"fgp", "ftp", "fg3p"}
 
-# Informations de draft (hors stats) : ADP et coût moyen en enchères
-META_COLUMNS = ["adp", "auction_cost"]
+# Informations de draft (hors stats) : ADP, coût moyen observé en enchères
+# et valeur d'enchère estimée par la source (peut être négative)
+META_COLUMNS = ["adp", "auction_cost", "auction_value"]
 NUMERIC_COLUMNS = STAT_COLUMNS + META_COLUMNS
 
 PROJECTION_COLUMNS = [
@@ -45,8 +46,10 @@ def _migrate(conn, current_version):
     if current_version == 2:
         # v2 -> v3 : ajout des colonnes de draft, sans perte de données
         log.info("Migration du schéma v2 -> v3 (colonnes %s).", ", ".join(META_COLUMNS))
+        existing = {row[1] for row in conn.execute("PRAGMA table_info(raw_projections)")}
         for col in META_COLUMNS:
-            conn.execute(f"ALTER TABLE raw_projections ADD COLUMN {col} REAL")
+            if col not in existing:
+                conn.execute(f"ALTER TABLE raw_projections ADD COLUMN {col} REAL")
         conn.execute("DROP VIEW IF EXISTS v_projections")
         return
     if 0 < current_version < 2 or (
