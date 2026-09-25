@@ -16,6 +16,9 @@ service_account*.json
 *.sqlite-journal
 *.db
 
+# Exports CSV déposés à la main (données, pas du code)
+data/imports/**/*.csv
+
 # Fichiers de travail
 *.log
 Sans nom*.csv

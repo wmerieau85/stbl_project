@@ -48,5 +48,35 @@
       "BLK": "blk",
       "TO": "tov"
     }
+  },
+  "fanscout": {
+    "import_dir": "data/imports/fanscout",
+    "files": {
+      "draft": "fanscout_draft_*.csv",
+      "ros": "fanscout_ros_*.csv"
+    },
+    "stat_mode": "auto",
+    "percent_scale": 1,
+    "player_column": "Player Name",
+    "team_column": "NBA Team",
+    "positions_column": "Yahoo position",
+    "columns": {
+      "Games Played": "gp",
+      "Total Minutes": "min",
+      "Minutes": "min",
+      "PTS": "pts",
+      "TPM": "fg3m",
+      "REB": "reb",
+      "AST": "ast",
+      "STL": "stl",
+      "BLK": "blk",
+      "TOV": "tov",
+      "FG%": "fgp",
+      "FGA": "fga",
+      "FT%": "ftp",
+      "FTA": "fta",
+      "Yahoo average draft position": "adp",
+      "Yahoo avg. auction cost": "auction_cost"
+    }
   }
 }

@@ -3,7 +3,8 @@
   "active_stage": "draft",
   "sources": {
     "cbs": true,
-    "fantasypros": true
+    "fantasypros": true,
+    "fanscout": true
   },
   "http": {
     "timeout": 30,
