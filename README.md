@@ -44,6 +44,7 @@ python -m scripts.tools.build_aliases alias.csv   # CSV -> config/player_aliases
 | CBS | web | automatique, une page par poste |
 | FantasyPros | web | automatique |
 | FanScout | fichier CSV | export manuel depuis [fanscout.pro/projections](https://fanscout.pro/projections), déposé dans `data/imports/fanscout/` sous le nom `fanscout_<étape>_AAAA-MM-JJ.csv` |
+| LineupExperts | export navigateur | protégé par Cloudflare : favori `tools/lineupexperts_export.js` (voir `tools/README.md`) qui télécharge `lineupexperts_<étape>_AAAA-MM-JJ.csv`, à déposer dans `data/imports/lineupexperts/` |
 | DraftKick | fichier CSV | export manuel, déposé dans `data/imports/draftkick/` sous le nom `draftkick_<étape>_AAAA-MM-JJ.csv` |
 
 Pour les sources CSV, l'import prend le fichier le plus récent de l'étape active
@@ -64,6 +65,8 @@ scripts/sources/cbs.py       CBS Sports (une page par poste)
 scripts/sources/fantasypros.py
 scripts/sources/fanscout.py  FanScout (CSV)
 scripts/sources/draftkick.py DraftKick (CSV)
+scripts/sources/lineupexperts.py LineupExperts (CSV exporté depuis le navigateur)
+tools/                       outils navigateur (export LineupExperts)
 data/imports/<source>/       dépôt des exports CSV
 scripts/player_linker.py     table players et rapprochement entre sources
 scripts/tools/build_aliases.py

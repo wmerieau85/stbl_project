@@ -109,5 +109,35 @@
       "ADP": "adp",
       "$": "auction_value"
     }
+  },
+  "lineupexperts": {
+    "import_dir": "data/imports/lineupexperts",
+    "files": {
+      "draft": "lineupexperts_draft_*.csv",
+      "ros": "lineupexperts_ros_*.csv"
+    },
+    "stat_mode": "auto",
+    "percent_scale": 1,
+    "player_column": "Player",
+    "team_column": "Team",
+    "positions_column": "Position",
+    "columns": {
+      "GP": "gp",
+      "Min": "min",
+      "FG": "fgm",
+      "FGA": "fga",
+      "FG%": "fgp",
+      "FG3": "fg3m",
+      "FT": "ftm",
+      "FTA": "fta",
+      "FT%": "ftp",
+      "PTS": "pts",
+      "RB": "reb",
+      "AST": "ast",
+      "STL": "stl",
+      "BLK": "blk",
+      "TO": "tov",
+      "ADP": "adp"
+    }
   }
 }
