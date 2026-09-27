@@ -23,6 +23,7 @@ python main.py --sources fantasypros    # une seule source
 python main.py --skip-link -v           # sans rapprochement, logs détaillés
 python main.py --skip-import            # recalcule seulement les projections finales
 python -m scripts.weighting --phase draft   # pondération d'une phase
+python -m scripts.exports               # réexporte seulement les projections brutes
 
 python main.py --file fanscout=C:\chemin\table.csv   # fichier CSV précis
 python -m scripts.sources.cbs           # une source seule
@@ -72,6 +73,7 @@ scripts/sources/lineupexperts.py LineupExperts (CSV exporté depuis le navigateu
 tools/                       outils navigateur (export LineupExperts)
 data/imports/<source>/       dépôt des exports CSV
 scripts/player_linker.py     table players et rapprochement entre sources
+scripts/exports.py           exports CSV (projections brutes, format commun)
 scripts/weighting/weights.py lecture et validation des grilles de pondération
 scripts/weighting/engine.py  calcul des projections finales et export CSV
 scripts/weighting/zscores.py z-scores des 9 catégories (AVG et TOT), sommes et rangs
@@ -102,6 +104,8 @@ puis un bloc dans `sources.json` et une ligne dans `scripts/sources/__init__.py`
 - Toutes les stats sont des **totaux sur la saison** ; les pourcentages sont en **décimal (0.485)**.
 - `players` : référentiel, un joueur par `name_key`.
 - Vue `v_projections` : projections + nom canonique, prête pour l'export.
+  Exportée à chaque lancement dans `exports/raw_<étape>_<saison>.csv` (toutes les sources,
+  une ligne par joueur et par source, triée par joueur puis source).
 - `final_projections` : projections finales pondérées, une ligne par phase, saison et joueur,
   avec `n_sources`, `sources`, `gp_coverage`, `min_coverage`, `stats_coverage` et
   `fga_estimated`, et les z-scores : `z_<cat>_avg` / `z_<cat>_tot` pour FG%, 3PM, FT%, REB,

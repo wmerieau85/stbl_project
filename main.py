@@ -14,6 +14,7 @@ import sys
 
 from scripts.config import load_settings
 from scripts.db import init_db
+from scripts.exports import export_raw_projections
 from scripts.http_client import HttpClient
 from scripts.player_linker import link_players
 from scripts.sources import SOURCES
@@ -76,6 +77,8 @@ def run_pipeline(args):
 
     if not args.skip_link:
         link_players(season=settings["active_season"], stage=settings["active_stage"])
+
+    export_raw_projections(settings=settings)
 
     if not args.skip_weighting and not run_phases(settings):
         results["pondération"] = False
