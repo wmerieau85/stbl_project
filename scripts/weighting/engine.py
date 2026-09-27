@@ -27,9 +27,10 @@ import os
 from datetime import datetime
 from statistics import median
 
-from scripts.config import EXPORTS_DIR, load_settings
+from scripts.config import EXPORTS_DIR, load_league, load_settings
 from scripts.db import get_connection
 from scripts.weighting.weights import load_grid
+from scripts.weighting.zscores import add_zscores, zscore_columns
 
 log = logging.getLogger(__name__)
 
@@ -42,9 +43,11 @@ FINAL_COLUMNS = [
     "gp", "mpg", "min", "pts", "reb", "ast", "stl", "blk", "tov",
     "fg3m", "fg3a", "fg3p", "fgm", "fga", "fgp", "ftm", "fta", "ftp",
     "adp", "auction_cost", "auction_value",
+] + zscore_columns() + [
     "n_sources", "sources", "gp_coverage", "min_coverage", "stats_coverage", "fga_estimated",
     "weights_hash", "computed_at",
 ]
+RANK_COLUMNS = {"rank_avg", "rank_tot"}
 TEXT_COLUMNS = {"phase", "season", "player", "team", "positions", "sources", "weights_hash", "computed_at"}
 
 
@@ -53,7 +56,7 @@ def ensure_table(conn):
     for col in FINAL_COLUMNS:
         if col in TEXT_COLUMNS:
             cols.append(f"{col} TEXT")
-        elif col in ("player_id", "n_sources", "fga_estimated"):
+        elif col in ("player_id", "n_sources", "fga_estimated") or col in RANK_COLUMNS:
             cols.append(f"{col} INTEGER")
         else:
             cols.append(f"{col} REAL")
@@ -227,6 +230,7 @@ def compute_phase(phase, settings=None, grid_path=None):
         results.append(result)
 
     _finalize_shooting(results)
+    add_zscores(results, load_league())
     computed_at = datetime.now().isoformat(timespec="seconds")
     rows = []
     for r in results:
@@ -235,7 +239,9 @@ def compute_phase(phase, settings=None, grid_path=None):
         for col in FINAL_COLUMNS:
             if col in ("fgp", "ftp", "fg3p", "gp_coverage", "min_coverage", "stats_coverage"):
                 r[col] = _round(r.get(col), 4)
-            elif col not in TEXT_COLUMNS and col not in ("player_id", "n_sources", "fga_estimated"):
+            elif col.startswith("z_"):
+                r[col] = _round(r.get(col), 3)
+            elif col not in TEXT_COLUMNS and col not in RANK_COLUMNS and col not in ("player_id", "n_sources", "fga_estimated"):
                 r[col] = _round(r.get(col), 2)
         rows.append(tuple(r.get(col) for col in FINAL_COLUMNS))
 
@@ -264,10 +270,12 @@ def export_csv(phase, season, settings=None):
     os.makedirs(EXPORTS_DIR, exist_ok=True)
     path = os.path.join(EXPORTS_DIR, f"final_{phase}_{season}.csv")
     columns = [c for c in FINAL_COLUMNS if c not in ("weights_hash", "computed_at")]
+    # tri selon le format de la ligue : H2H -> rang AVG, Rotisserie -> rang TOT
+    order = "rank_tot" if str(load_league().get("format", "h2h")).lower() == "roto" else "rank_avg"
     with get_connection() as conn:
         rows = conn.execute(
             f"SELECT {', '.join(columns)} FROM final_projections WHERE phase=? AND season=? "
-            "ORDER BY pts * 1.0 / gp DESC", (phase, season),
+            f"ORDER BY {order}", (phase, season),
         ).fetchall()
 
     def fmt(value):

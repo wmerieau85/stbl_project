@@ -19,7 +19,7 @@ class CbsSource(ProjectionSource):
         template = self.url_template()
         return [
             (template.format(position=pos, year=year), pos)
-            for pos in self.mapping.get("positions", ["PG", "SG", "SF", "PF", "C"])
+            for pos in self.source_config.get("positions", ["PG", "SG", "SF", "PF", "C"])
         ]
 
     @staticmethod

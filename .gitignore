@@ -6,10 +6,10 @@ service_account*.json
 
 # JSON ignorés par défaut, sauf la configuration partagée
 *.json
-!config/mappings.json
-!config/settings.example.json
+!config/sources.json
+!config/settings.json
 !config/player_aliases.json
-# config/settings.json reste local : copier settings.example.json
+!config/league.json
 
 # Base de données locale
 *.sqlite

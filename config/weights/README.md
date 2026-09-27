@@ -33,7 +33,7 @@ STATS;20,00%;20,00%;20,00%;20,00%;20,00%
 | `fp.l30` | FantasyPros, fenêtre 30 derniers jours (quand la source sera importée) |
 | `draft` | projections finales de la phase draft (utilisable dans `lt` / `st`) |
 
-Codes des sites (clé `code` dans `mappings.json`) : `cbs`, `fp` (FantasyPros),
+Codes des sites (clé `code` dans `sources.json`) : `cbs`, `fp` (FantasyPros),
 `fs` (FanScout), `dk` (DraftKick), `le` (LineupExperts).
 
 ## Calcul

@@ -1,0 +1,27 @@
+{
+  "format": "h2h",
+  "teams": 15,
+  "roster": {
+    "G": 2,
+    "F": 2,
+    "C": 1,
+    "UTIL": 3,
+    "BN": 4,
+    "IL": 2
+  },
+  "categories": {
+    "fgp": 1,
+    "fg3m": 1,
+    "ftp": 1,
+    "reb": 1,
+    "ast": 1,
+    "stl": 1,
+    "blk": 1,
+    "tov": 1,
+    "pts": 1
+  },
+  "zscore": {
+    "min_gp": 0,
+    "iterations": 3
+  }
+}

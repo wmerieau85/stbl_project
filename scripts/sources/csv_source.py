@@ -1,6 +1,6 @@
 """Base des sources alimentées par un fichier CSV déposé manuellement.
 
-Le fichier est cherché dans le dossier `import_dir` défini dans mappings.json,
+Le fichier est cherché dans le dossier `import_dir` défini dans sources.json,
 selon le motif propre à l'étape (`files.draft`, `files.ros`...). Si plusieurs
 fichiers correspondent, le plus récent (d'après le nom, puis la date de
 modification) est utilisé. Un chemin précis peut aussi être imposé.
@@ -43,7 +43,7 @@ def detect_delimiter(text):
 
 
 class CsvProjectionSource(ProjectionSource):
-    """Source CSV générique : tout se paramètre dans mappings.json."""
+    """Source CSV générique : tout se paramètre dans sources.json."""
 
     def __init__(self, settings=None, http=None, file_path=None):
         super().__init__(settings, http)
@@ -51,14 +51,14 @@ class CsvProjectionSource(ProjectionSource):
 
     # --- recherche du fichier ------------------------------------------------
     def import_dir(self):
-        return os.path.join(BASE_DIR, self.mapping.get("import_dir", os.path.join("data", "imports", self.name)))
+        return os.path.join(BASE_DIR, self.source_config.get("import_dir", os.path.join("data", "imports", self.name)))
 
     def resolve_file(self):
         if self.file_path:
             return self.file_path if os.path.exists(self.file_path) else None
-        pattern = self.mapping.get("files", {}).get(self.stage)
+        pattern = self.source_config.get("files", {}).get(self.stage)
         if not pattern:
-            log.error("[%s] Aucun motif de fichier pour l'étape '%s' dans mappings.json.", self.label, self.stage)
+            log.error("[%s] Aucun motif de fichier pour l'étape '%s' dans sources.json.", self.label, self.stage)
             return None
         candidates = glob.glob(os.path.join(self.import_dir(), pattern))
         if not candidates:
@@ -79,10 +79,10 @@ class CsvProjectionSource(ProjectionSource):
 
     # --- lecture du CSV ------------------------------------------------------
     def _detect_per_game(self, rows):
-        mode = self.mapping.get("stat_mode", "auto")
+        mode = self.source_config.get("stat_mode", "auto")
         if mode in ("totals", "per_game"):
             return mode == "per_game"
-        pts_col = next((src for src, std in self.mapping["columns"].items() if std == "pts"), None)
+        pts_col = next((src for src, std in self.source_config["columns"].items() if std == "pts"), None)
         values = [parse_number(r.get(pts_col)) for r in rows] if pts_col else []
         values = [v for v in values if v is not None]
         per_game = bool(values) and max(values) < PER_GAME_MAX_PTS
@@ -101,16 +101,16 @@ class CsvProjectionSource(ProjectionSource):
 
     def _clean_values(self, row):
         """Applique les valeurs sentinelles (ex. ADP 999 = non drafté) et les cases vides."""
-        empty_as_zero = self.mapping.get("empty_as_zero", False)
+        empty_as_zero = self.source_config.get("empty_as_zero", False)
         sentinels = {
             col: {str(v) for v in values}
-            for col, values in self.mapping.get("missing_values", {}).items()
+            for col, values in self.source_config.get("missing_values", {}).items()
         }
         for col, value in row.items():
             if value in sentinels.get(col, ()):
                 row[col] = ""
-            elif value == "" and empty_as_zero and col in self.mapping["columns"] \
-                    and self.mapping["columns"][col] in COUNTING_COLUMNS:
+            elif value == "" and empty_as_zero and col in self.source_config["columns"] \
+                    and self.source_config["columns"][col] in COUNTING_COLUMNS:
                 row[col] = "0"
         return row
 
@@ -128,19 +128,19 @@ class CsvProjectionSource(ProjectionSource):
         if not rows:
             return []
 
-        player_col = self.mapping.get("player_column", "Player")
-        team_col = self.mapping.get("team_column")
-        pos_col = self.mapping.get("positions_column")
+        player_col = self.source_config.get("player_column", "Player")
+        team_col = self.source_config.get("team_column")
+        pos_col = self.source_config.get("positions_column")
         missing = [c for c in [player_col, team_col, pos_col] if c and c not in rows[0]]
         if missing:
-            log.error("[%s] Colonnes absentes du CSV : %s (vérifier mappings.json).", self.label, ", ".join(missing))
+            log.error("[%s] Colonnes absentes du CSV : %s (vérifier sources.json).", self.label, ", ".join(missing))
             return []
-        unknown = sorted(set(rows[0]) - set(self.mapping["columns"]) - {player_col, team_col, pos_col})
+        unknown = sorted(set(rows[0]) - set(self.source_config["columns"]) - {player_col, team_col, pos_col})
         if unknown:
             log.debug("[%s] Colonnes ignorées : %s", self.label, ", ".join(unknown))
 
         # Lignes parasites propres à une source (ex. "Unknown Player" chez DraftKick)
-        skipped = {name.lower() for name in self.mapping.get("skip_players", [])}
+        skipped = {name.lower() for name in self.source_config.get("skip_players", [])}
         rows = [row for row in rows if row.get(player_col, "").lower() not in skipped]
 
         self.per_game = self._detect_per_game(rows)
