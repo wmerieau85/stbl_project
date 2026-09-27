@@ -23,12 +23,12 @@ sont renormalisés ; les colonnes *_coverage indiquent la part du poids réellem
 import hashlib
 import json
 import logging
-import os
 from datetime import datetime
 from statistics import median
 
-from scripts.config import EXPORTS_DIR, load_league, load_settings
+from scripts.config import load_league, load_settings
 from scripts.db import get_connection
+from scripts.exports import write_csv
 from scripts.weighting.weights import load_grid
 from scripts.weighting.zscores import add_zscores, zscore_columns
 
@@ -263,12 +263,6 @@ def compute_phase(phase, settings=None, grid_path=None):
 
 def export_csv(phase, season, settings=None):
     """Écrit exports/final_<phase>_<saison>.csv (séparateur et décimale de settings.json)."""
-    settings = settings or load_settings()
-    export = settings.get("export", {})
-    delimiter = export.get("delimiter", ";")
-    decimal = export.get("decimal", ",")
-    os.makedirs(EXPORTS_DIR, exist_ok=True)
-    path = os.path.join(EXPORTS_DIR, f"final_{phase}_{season}.csv")
     columns = [c for c in FINAL_COLUMNS if c not in ("weights_hash", "computed_at")]
     # tri selon le format de la ligue : H2H -> rang AVG, Rotisserie -> rang TOT
     order = "rank_tot" if str(load_league().get("format", "h2h")).lower() == "roto" else "rank_avg"
@@ -277,20 +271,7 @@ def export_csv(phase, season, settings=None):
             f"SELECT {', '.join(columns)} FROM final_projections WHERE phase=? AND season=? "
             f"ORDER BY {order}", (phase, season),
         ).fetchall()
-
-    def fmt(value):
-        if value is None:
-            return ""
-        if isinstance(value, float):
-            text = repr(value)
-            return text.replace(".", decimal) if decimal != "." else text
-        text = str(value)
-        return f'"{text}"' if delimiter in text or '"' in text else text
-
-    with open(path, "w", encoding="utf-8-sig", newline="") as f:
-        f.write(delimiter.join(columns) + "\r\n")
-        for row in rows:
-            f.write(delimiter.join(fmt(v) for v in row) + "\r\n")
+    path = write_csv(f"final_{phase}_{season}.csv", columns, rows, settings)
     log.info("[Pondération %s] Export : %s", phase, path)
     return path
 
