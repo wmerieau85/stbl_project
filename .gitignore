@@ -30,3 +30,6 @@ __pycache__/
 *.pyc
 .idea/
 .vscode/
+
+# Projections finales exportées
+exports/

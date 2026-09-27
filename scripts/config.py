@@ -10,6 +10,8 @@ DB_PATH = os.path.join(BASE_DIR, "database.sqlite")
 SETTINGS_PATH = os.path.join(CONFIG_DIR, "settings.json")
 MAPPINGS_PATH = os.path.join(CONFIG_DIR, "mappings.json")
 ALIASES_PATH = os.path.join(CONFIG_DIR, "player_aliases.json")
+WEIGHTS_DIR = os.path.join(CONFIG_DIR, "weights")
+EXPORTS_DIR = os.path.join(BASE_DIR, "exports")
 
 # Valeurs par défaut : complétées/écrasées par config/settings.json s'il existe.
 DEFAULT_SETTINGS = {
@@ -17,6 +19,10 @@ DEFAULT_SETTINGS = {
     "active_stage": "draft",  # "draft" ou "ros"
     "sources": {"cbs": True, "fantasypros": True, "fanscout": True, "draftkick": True, "lineupexperts": True},
     "http": {"timeout": 30, "retries": 2, "pause_seconds": 1.5},
+    # Phases de pondération calculées selon l'étape active (grilles dans config/weights/)
+    "phases": {"draft": ["draft"], "ros": ["lt", "st"]},
+    # Export CSV des projections finales (format Excel / Google Sheets FR par défaut)
+    "export": {"delimiter": ";", "decimal": ","},
 }
 
 
@@ -49,6 +55,10 @@ def load_source_mapping(source_name):
     if source_name not in mappings:
         raise KeyError(f"Source '{source_name}' absente de config/mappings.json")
     return mappings[source_name]
+
+
+def load_all_mappings():
+    return _read_json(MAPPINGS_PATH)
 
 
 def load_aliases():

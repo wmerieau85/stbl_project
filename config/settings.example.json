@@ -8,6 +8,14 @@
     "draftkick": true,
     "lineupexperts": true
   },
+  "phases": {
+    "draft": ["draft"],
+    "ros": ["lt", "st"]
+  },
+  "export": {
+    "delimiter": ";",
+    "decimal": ","
+  },
   "http": {
     "timeout": 30,
     "retries": 2,
