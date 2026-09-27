@@ -1,5 +1,6 @@
 {
   "cbs": {
+    "code": "cbs",
     "urls": {
       "draft": "https://www.cbssports.com/fantasy/basketball/stats/{position}/{year}/season/projections/",
       "ros": "https://www.cbssports.com/fantasy/basketball/stats/{position}/{year}/restofseason/projections/"
@@ -30,6 +31,7 @@
     }
   },
   "fantasypros": {
+    "code": "fp",
     "urls": {
       "draft": "https://www.fantasypros.com/nba/projections/overall.php",
       "ros": "https://www.fantasypros.com/nba/projections/ros-overall.php"
@@ -50,6 +52,7 @@
     }
   },
   "fanscout": {
+    "code": "fs",
     "import_dir": "data/imports/fanscout",
     "files": {
       "draft": "fanscout_draft_*.csv",
@@ -80,6 +83,7 @@
     }
   },
   "draftkick": {
+    "code": "dk",
     "import_dir": "data/imports/draftkick",
     "files": {
       "draft": "draftkick_draft_*.csv",
@@ -111,6 +115,7 @@
     }
   },
   "lineupexperts": {
+    "code": "le",
     "import_dir": "data/imports/lineupexperts",
     "files": {
       "draft": "lineupexperts_draft_*.csv",

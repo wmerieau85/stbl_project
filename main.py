@@ -1,10 +1,11 @@
-"""Pipeline STBL : import des projections puis rapprochement des joueurs.
+"""Pipeline STBL : import des projections, rapprochement des joueurs, puis pondération.
 
 Exemples :
     python main.py                        # sources et étape définies dans config/settings.json
     python main.py --stage ros            # force les projections "rest of season"
     python main.py --sources cbs          # une seule source
     python main.py --file fanscout=C:/chemin/table.csv   # fichier CSV précis
+    python main.py --skip-import          # recalcule seulement la pondération
 """
 
 import argparse
@@ -17,6 +18,7 @@ from scripts.http_client import HttpClient
 from scripts.player_linker import link_players
 from scripts.sources import SOURCES
 from scripts.sources.csv_source import CsvProjectionSource
+from scripts.weighting import run_phases
 
 log = logging.getLogger("stbl")
 
@@ -30,7 +32,9 @@ def parse_args():
         "--file", action="append", default=[], metavar="SOURCE=CHEMIN",
         help="fichier à utiliser pour une source CSV (sinon le plus récent du dossier d'import)",
     )
+    parser.add_argument("--skip-import", action="store_true", help="ne pas réimporter les sources")
     parser.add_argument("--skip-link", action="store_true", help="ne pas lancer le rapprochement des joueurs")
+    parser.add_argument("--skip-weighting", action="store_true", help="ne pas calculer les projections finales")
     parser.add_argument("-v", "--verbose", action="store_true", help="logs détaillés")
     return parser.parse_args()
 
@@ -60,7 +64,7 @@ def run_pipeline(args):
 
     http = HttpClient.from_settings(settings)
     results = {}
-    for name in selected:
+    for name in ([] if args.skip_import else selected):
         if name not in SOURCES:
             continue
         source_cls = SOURCES[name]
@@ -72,6 +76,9 @@ def run_pipeline(args):
 
     if not args.skip_link:
         link_players(season=settings["active_season"], stage=settings["active_stage"])
+
+    if not args.skip_weighting and not run_phases(settings):
+        results["pondération"] = False
 
     failed = [name for name, ok in results.items() if not ok]
     if failed:

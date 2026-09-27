@@ -22,6 +22,8 @@ python main.py                          # réglages de config/settings.json
 python main.py --stage ros              # projections "rest of season"
 python main.py --sources fantasypros    # une seule source
 python main.py --skip-link -v           # sans rapprochement, logs détaillés
+python main.py --skip-import            # recalcule seulement les projections finales
+python -m scripts.weighting --phase draft   # pondération d'une phase
 
 python main.py --file fanscout=C:\chemin\table.csv   # fichier CSV précis
 python -m scripts.sources.cbs           # une source seule
@@ -35,6 +37,7 @@ python -m scripts.tools.build_aliases alias.csv   # CSV -> config/player_aliases
 |---|---|---|
 | `config/settings.json` | non | Saison active, étape (`draft`/`ros`), sources activées, réglages HTTP. Modèle : `settings.example.json`. |
 | `config/mappings.json` | oui | URL de chaque source, échelle des pourcentages, correspondance colonnes source -> colonnes standard. |
+| `config/weights/<phase>.csv` | oui | Grilles de pondération des sources (GP / MIN / STATS), au format de la grille Google Sheets. Voir `config/weights/README.md`. |
 | `config/player_aliases.json` | oui | `{"nom dans une source": "nom canonique"}` pour les joueurs que la normalisation ne suffit pas à relier (ex. `"Nic Claxton": "Nicolas Claxton"`). |
 
 ## Sources
@@ -69,6 +72,8 @@ scripts/sources/lineupexperts.py LineupExperts (CSV exporté depuis le navigateu
 tools/                       outils navigateur (export LineupExperts)
 data/imports/<source>/       dépôt des exports CSV
 scripts/player_linker.py     table players et rapprochement entre sources
+scripts/weighting/weights.py lecture et validation des grilles de pondération
+scripts/weighting/engine.py  calcul des projections finales et export CSV
 scripts/tools/build_aliases.py
 ```
 
@@ -96,6 +101,10 @@ puis un bloc dans `mappings.json` et une ligne dans `scripts/sources/__init__.py
 - Toutes les stats sont des **totaux sur la saison** ; les pourcentages sont en **décimal (0.485)**.
 - `players` : référentiel, un joueur par `name_key`.
 - Vue `v_projections` : projections + nom canonique, prête pour l'export.
+- `final_projections` : projections finales pondérées, une ligne par phase, saison et joueur,
+  avec `n_sources`, `sources`, `gp_coverage`, `min_coverage`, `stats_coverage` et
+  `fga_estimated`. Exportées dans `exports/final_<phase>_<saison>.csv` (`;` et virgule
+  décimale par défaut, réglable dans `settings.json` > `export`).
 
 ## Limites connues
 
