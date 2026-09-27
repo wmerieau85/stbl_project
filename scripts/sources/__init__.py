@@ -2,7 +2,7 @@
 
 Pour ajouter une source : créer une classe héritant de ProjectionSource
 (page web) ou de CsvProjectionSource (fichier CSV),
-ajouter son bloc dans config/mappings.json puis l'enregistrer ici.
+ajouter son bloc dans config/sources.json puis l'enregistrer ici.
 """
 
 from scripts.sources.cbs import CbsSource

@@ -8,7 +8,7 @@ pourcentages, stats dérivées, enregistrement) est partagé.
 
 import logging
 
-from scripts.config import load_settings, load_source_mapping
+from scripts.config import load_settings, load_source_config
 from scripts.db import NUMERIC_COLUMNS, PERCENT_COLUMNS, replace_projections
 from scripts.http_client import HttpClient
 from scripts.names import clean_display_name, name_key
@@ -55,7 +55,7 @@ COUNTING_COLUMNS = {
 
 
 def standardize_stats(raw_stats, columns_map, percent_scale):
-    """Renomme les colonnes selon mappings.json et convertit les valeurs."""
+    """Renomme les colonnes selon sources.json et convertit les valeurs."""
     stats = {}
     for source_col, value in raw_stats.items():
         std_col = columns_map.get(source_col.strip().lower())
@@ -108,17 +108,17 @@ def complete_stats(stats, per_game=False):
 class ProjectionSource:
     """Classe de base d'une source de projections."""
 
-    name = ""  # clé dans config/mappings.json
+    name = ""  # clé dans config/sources.json
     label = ""  # valeur enregistrée dans la colonne `source`
 
     def __init__(self, settings=None, http=None):
         self.settings = settings or load_settings()
-        self.mapping = load_source_mapping(self.name)
+        self.source_config = load_source_config(self.name)
         self.http = http or HttpClient.from_settings(self.settings)
         self.season = self.settings["active_season"]
         self.stage = self.settings["active_stage"]
-        self.columns_map = {k.strip().lower(): v for k, v in self.mapping["columns"].items()}
-        self.percent_scale = self.mapping.get("percent_scale", 1)
+        self.columns_map = {k.strip().lower(): v for k, v in self.source_config["columns"].items()}
+        self.percent_scale = self.source_config.get("percent_scale", 1)
 
     per_game = False  # True si la source fournit des moyennes par match
 
@@ -145,9 +145,9 @@ class ProjectionSource:
 
     # --- logique commune ---------------------------------------------------
     def url_template(self):
-        template = self.mapping.get("urls", {}).get(self.stage)
+        template = self.source_config.get("urls", {}).get(self.stage)
         if not template:
-            raise ValueError(f"[{self.label}] Aucune URL pour l'étape '{self.stage}' dans mappings.json")
+            raise ValueError(f"[{self.label}] Aucune URL pour l'étape '{self.stage}' dans sources.json")
         return template
 
     def fetch(self):

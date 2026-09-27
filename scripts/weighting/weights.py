@@ -22,7 +22,7 @@ import logging
 import os
 import re
 
-from scripts.config import WEIGHTS_DIR, load_all_mappings
+from scripts.config import WEIGHTS_DIR, load_sources_config
 
 log = logging.getLogger(__name__)
 
@@ -57,13 +57,13 @@ def season_from_year(yy):
 
 
 def source_codes():
-    """{code: libellé enregistré en base}, depuis config/mappings.json."""
+    """{code: libellé enregistré en base}, depuis config/sources.json."""
     from scripts.sources import SOURCES
 
-    mappings = load_all_mappings()
+    sources_config = load_sources_config()
     codes = {}
     for name, cls in SOURCES.items():
-        code = mappings.get(name, {}).get("code")
+        code = sources_config.get(name, {}).get("code")
         if code:
             codes[code] = cls.label
     return codes

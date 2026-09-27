@@ -8,13 +8,13 @@ BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CONFIG_DIR = os.path.join(BASE_DIR, "config")
 DB_PATH = os.path.join(BASE_DIR, "database.sqlite")
 SETTINGS_PATH = os.path.join(CONFIG_DIR, "settings.json")
-MAPPINGS_PATH = os.path.join(CONFIG_DIR, "mappings.json")
+SOURCES_PATH = os.path.join(CONFIG_DIR, "sources.json")
 ALIASES_PATH = os.path.join(CONFIG_DIR, "player_aliases.json")
 LEAGUE_PATH = os.path.join(CONFIG_DIR, "league.json")
 WEIGHTS_DIR = os.path.join(CONFIG_DIR, "weights")
 EXPORTS_DIR = os.path.join(BASE_DIR, "exports")
 
-# Valeurs par défaut : complétées/écrasées par config/settings.json s'il existe.
+# Valeurs de secours si une clé manque dans config/settings.json.
 DEFAULT_SETTINGS = {
     "active_season": "2026-27",
     "active_stage": "draft",  # "draft" ou "ros"
@@ -50,12 +50,12 @@ def load_settings():
     return copy.deepcopy(DEFAULT_SETTINGS)
 
 
-def load_source_mapping(source_name):
-    """Retourne le bloc de config/mappings.json propre à une source."""
-    mappings = _read_json(MAPPINGS_PATH)
-    if source_name not in mappings:
-        raise KeyError(f"Source '{source_name}' absente de config/mappings.json")
-    return mappings[source_name]
+def load_source_config(source_name):
+    """Retourne le bloc de config/sources.json propre à une source."""
+    sources = _read_json(SOURCES_PATH)
+    if source_name not in sources:
+        raise KeyError(f"Source '{source_name}' absente de config/sources.json")
+    return sources[source_name]
 
 
 DEFAULT_LEAGUE = {
@@ -80,8 +80,8 @@ def load_league():
     return merged
 
 
-def load_all_mappings():
-    return _read_json(MAPPINGS_PATH)
+def load_sources_config():
+    return _read_json(SOURCES_PATH)
 
 
 def load_aliases():
