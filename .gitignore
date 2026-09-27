@@ -9,6 +9,7 @@ service_account*.json
 !config/mappings.json
 !config/settings.example.json
 !config/player_aliases.json
+!config/league.json
 # config/settings.json reste local : copier settings.example.json
 
 # Base de données locale

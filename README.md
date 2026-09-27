@@ -37,6 +37,7 @@ python -m scripts.tools.build_aliases alias.csv   # CSV -> config/player_aliases
 |---|---|---|
 | `config/settings.json` | non | Saison active, étape (`draft`/`ros`), sources activées, réglages HTTP. Modèle : `settings.example.json`. |
 | `config/mappings.json` | oui | URL de chaque source, échelle des pourcentages, correspondance colonnes source -> colonnes standard. |
+| `config/league.json` | oui | Paramètres de la ligue pour les z-scores : `format` (`h2h` / `roto`), `teams`, `roster` (joueurs par poste, IL et BN compris), `categories` (poids de chaque catégorie, 0 = ignorée), `zscore.min_gp`, `zscore.iterations`. |
 | `config/weights/<phase>.csv` | oui | Grilles de pondération des sources (GP / MIN / STATS), au format de la grille Google Sheets. Voir `config/weights/README.md`. |
 | `config/player_aliases.json` | oui | `{"nom dans une source": "nom canonique"}` pour les joueurs que la normalisation ne suffit pas à relier (ex. `"Nic Claxton": "Nicolas Claxton"`). |
 
@@ -74,6 +75,7 @@ data/imports/<source>/       dépôt des exports CSV
 scripts/player_linker.py     table players et rapprochement entre sources
 scripts/weighting/weights.py lecture et validation des grilles de pondération
 scripts/weighting/engine.py  calcul des projections finales et export CSV
+scripts/weighting/zscores.py z-scores des 9 catégories (AVG et TOT), sommes et rangs
 scripts/tools/build_aliases.py
 ```
 
@@ -103,8 +105,20 @@ puis un bloc dans `mappings.json` et une ligne dans `scripts/sources/__init__.py
 - Vue `v_projections` : projections + nom canonique, prête pour l'export.
 - `final_projections` : projections finales pondérées, une ligne par phase, saison et joueur,
   avec `n_sources`, `sources`, `gp_coverage`, `min_coverage`, `stats_coverage` et
-  `fga_estimated`. Exportées dans `exports/final_<phase>_<saison>.csv` (`;` et virgule
+  `fga_estimated`, et les z-scores : `z_<cat>_avg` / `z_<cat>_tot` pour FG%, 3PM, FT%, REB,
+  AST, STL, BLK, TO, PTS, leur somme pondérée `z_sum_avg` / `z_sum_tot` et le rang
+  `rank_avg` / `rank_tot`. Exportées (triées par `rank_avg` en H2H, `rank_tot` en Roto) dans `exports/final_<phase>_<saison>.csv` (`;` et virgule
   décimale par défaut, réglable dans `settings.json` > `export`).
+
+## Z-scores
+
+- Groupe de référence = `teams` × taille du roster (15 × 14 = 210 joueurs) : moyenne et
+  écart-type sont calculés sur les joueurs réellement draftés, en 3 passes (tous les
+  joueurs, puis les 210 meilleurs, etc.).
+- AVG = moyennes par match (utile en H2H), TOT = totaux sur la saison (Roto, intègre les matchs joués).
+- FG% / FT% : z-score de l'impact `(pourcentage - pourcentage du groupe) × tentatives`.
+- TO : signe inversé. Somme = Σ poids × z ; rang 1 = meilleure somme.
+- Pas encore de rareté par poste (la répartition G/F/C sert seulement à la taille du groupe).
 
 ## Limites connues
 

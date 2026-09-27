@@ -10,6 +10,7 @@ DB_PATH = os.path.join(BASE_DIR, "database.sqlite")
 SETTINGS_PATH = os.path.join(CONFIG_DIR, "settings.json")
 MAPPINGS_PATH = os.path.join(CONFIG_DIR, "mappings.json")
 ALIASES_PATH = os.path.join(CONFIG_DIR, "player_aliases.json")
+LEAGUE_PATH = os.path.join(CONFIG_DIR, "league.json")
 WEIGHTS_DIR = os.path.join(CONFIG_DIR, "weights")
 EXPORTS_DIR = os.path.join(BASE_DIR, "exports")
 
@@ -55,6 +56,28 @@ def load_source_mapping(source_name):
     if source_name not in mappings:
         raise KeyError(f"Source '{source_name}' absente de config/mappings.json")
     return mappings[source_name]
+
+
+DEFAULT_LEAGUE = {
+    "format": "h2h",
+    "teams": 12,
+    "roster": {"PG": 1, "SG": 1, "G": 1, "SF": 1, "PF": 1, "F": 1, "C": 2, "UTIL": 2, "BN": 3},
+    "categories": {"fgp": 1, "fg3m": 1, "ftp": 1, "reb": 1, "ast": 1, "stl": 1, "blk": 1, "tov": 1, "pts": 1},
+    "zscore": {"min_gp": 0, "iterations": 3},
+}
+
+
+def load_league():
+    """Paramètres de la ligue (config/league.json) complétés par les valeurs par défaut."""
+    if not os.path.exists(LEAGUE_PATH):
+        return copy.deepcopy(DEFAULT_LEAGUE)
+    league = _read_json(LEAGUE_PATH)
+    merged = _deep_merge(DEFAULT_LEAGUE, league)
+    # roster et catégories : la liste du fichier remplace entièrement celle par défaut
+    for key in ("roster", "categories"):
+        if key in league:
+            merged[key] = league[key]
+    return merged
 
 
 def load_all_mappings():
