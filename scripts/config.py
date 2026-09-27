@@ -19,6 +19,7 @@ DEFAULT_SETTINGS = {
     "active_season": "2026-27",
     "active_stage": "draft",  # "draft" ou "ros"
     "sources": {"cbs": True, "fantasypros": True, "fanscout": True, "draftkick": True, "lineupexperts": True},
+    "google": {"service_account_file": "credentials/service_account.json"},
     "http": {"timeout": 30, "retries": 2, "pause_seconds": 1.5},
     # Phases de pondération calculées selon l'étape active (grilles dans config/weights/)
     "phases": {"draft": ["draft"], "ros": ["lt", "st"]},
@@ -64,7 +65,21 @@ DEFAULT_LEAGUE = {
     "roster": {"PG": 1, "SG": 1, "G": 1, "SF": 1, "PF": 1, "F": 1, "C": 2, "UTIL": 2, "BN": 3},
     "categories": {"fgp": 1, "fg3m": 1, "ftp": 1, "reb": 1, "ast": 1, "stl": 1, "blk": 1, "tov": 1, "pts": 1},
     "zscore": {"min_gp": 0, "iterations": 3},
+    "platform": "yahoo",
+    "games": {"per_slot": 82, "lineup": "daily"},
+    "draft": {
+        "type": "snake", "rounds": 12, "my_team": "", "order": [], "keepers": {},
+        "candidates": 40, "simulations": 40, "adp_noise": 0.15,
+    },
+    "google_sheets": {
+        "draft_spreadsheet_id": "", "picks_tab": "draft_res", "picks_range": "A2:D",
+        "reco_tab": "reco", "projections_spreadsheet_id": "", "projections_tab": "export",
+        "poll_seconds": 10,
+    },
 }
+
+# Postes qui ne comptent pas dans le plafond de matchs (banc, blessés)
+NON_STARTING_SLOTS = ("BN", "IL", "IL+")
 
 
 def load_league():
@@ -89,3 +104,13 @@ def load_aliases():
     if os.path.exists(ALIASES_PATH):
         return _read_json(ALIASES_PATH)
     return {}
+
+
+def starting_slots(league):
+    """Nombre de postes titulaires (hors banc / IL) : 2 G + 2 F + 1 C + 3 UTIL = 8."""
+    return sum(int(n) for pos, n in league["roster"].items() if pos.upper() not in NON_STARTING_SLOTS)
+
+
+def games_cap(league):
+    """Plafond de matchs comptabilisés par équipe sur la saison : 82 x 8 = 656."""
+    return int(league.get("games", {}).get("per_slot", 82)) * starting_slots(league)

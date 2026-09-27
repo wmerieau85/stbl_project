@@ -37,7 +37,7 @@ python -m scripts.tools.build_aliases alias.csv   # CSV -> config/player_aliases
 |---|---|---|
 | `config/settings.json` | oui | Réglages d'exécution : saison active, étape (`draft`/`ros`), sources activées, phases de pondération, format d'export, réglages HTTP. |
 | `config/sources.json` | oui | Description de chaque source : code court (grilles de pondération), URL ou dossier/fichiers d'import, échelle des pourcentages, correspondance colonnes source -> colonnes standard. |
-| `config/league.json` | oui | Paramètres de la ligue pour les z-scores : `format` (`h2h` / `roto`), `teams`, `roster` (joueurs par poste, IL et BN compris), `categories` (poids de chaque catégorie, 0 = ignorée), `zscore.min_gp`, `zscore.iterations`. |
+| `config/league.json` | oui | Paramètres de la ligue, à adapter chaque saison : `format` (`h2h` / `roto`), `platform`, `teams`, `roster` (joueurs par poste, IL et BN compris), `categories` (poids, 0 = ignorée), `zscore`, `games` (matchs par poste titulaire, alignements quotidiens), `draft` (snake, tours, ordre, mon équipe, keepers, réglages des simulations) et `google_sheets` (classeurs et onglets). |
 | `config/weights/<phase>.csv` | oui | Grilles de pondération des sources (GP / MIN / STATS), au format de la grille Google Sheets. Voir `config/weights/README.md`. |
 | `config/player_aliases.json` | oui | `{"nom dans une source": "nom canonique"}` pour les joueurs que la normalisation ne suffit pas à relier (ex. `"Nic Claxton": "Nicolas Claxton"`). |
 
@@ -122,6 +122,48 @@ puis un bloc dans `sources.json` et une ligne dans `scripts/sources/__init__.py`
 - FG% / FT% : z-score de l'impact `(pourcentage - pourcentage du groupe) × tentatives`.
 - TO : signe inversé. Somme = Σ poids × z ; rang 1 = meilleure somme.
 - Pas encore de rareté par poste (la répartition G/F/C sert seulement à la taille du groupe).
+
+## Assistant de draft (Rotisserie)
+
+Le classeur Google Sheets reste l'interface : on saisit les choix dans `draft_res`
+(colonne D), le script lit l'état de la draft et écrit ses recommandations dans l'onglet `reco`.
+
+```bash
+python -m scripts.draft push-projections   # projections finales -> onglet "export" (format lu par draft_bdd)
+python -m scripts.draft watch              # veille pendant la draft : recalcul à chaque choix saisi
+python -m scripts.draft reco               # un seul calcul
+python -m scripts.draft reco --xlsx draft2627.xlsx --until 40 --no-sheet   # test hors ligne / mock draft
+```
+
+Mise en place (une fois) :
+1. Copier le JSON du compte de service dans `credentials/service_account.json` (ignoré par git),
+   ou modifier `google.service_account_file` dans `config/settings.json`.
+2. Partager le classeur de draft (et celui des projections s'il est distinct) avec l'adresse
+   `client_email` du compte de service, en Éditeur.
+3. Renseigner dans `config/league.json` : `google_sheets.draft_spreadsheet_id` (l'identifiant
+   dans l'URL `docs.google.com/spreadsheets/d/<ID>/edit`), `projections_spreadsheet_id` si
+   l'onglet `export` est dans un autre classeur, `draft.order` (ordre du 1er tour, issu du
+   tirage), `draft.my_team` et `draft.keepers` (2 joueurs par manager).
+
+Calcul :
+- tour et manager déduits de l'ordre snake de `draft.order` (tour impair : ordre normal,
+  tour pair : ordre inversé) ;
+- effectif de chaque équipe = keepers + choix saisis ; les totaux saison respectent le plafond
+  `games.per_slot` × postes titulaires (82 × 8 = 656) : les meilleurs joueurs par match
+  (z AVG) jouent en priorité ;
+- pour chaque candidat, `draft.simulations` tirages de la suite de la draft : les autres
+  managers suivent l'ADP (bruit `draft.adp_noise`, joueurs sans ADP placés d'après leur rang
+  TOT), nos choix suivants prennent le meilleur z TOT compatible avec les postes G / F / C ;
+- chaque tirage donne un classement roto projeté (points espérés par catégorie, FG% et FT%
+  recalculés sur les tirs de l'équipe) ; la recommandation classe les candidats selon les
+  points roto espérés de notre équipe, avec la probabilité qu'ils soient encore disponibles
+  à notre choix et au choix suivant (pour savoir si l'on peut attendre).
+
+L'onglet `reco` contient : l'état de la draft, les 20 meilleurs candidats (points espérés, écart
+avec le n°1, disponibilité, points par catégorie), le classement roto projeté, le classement
+des effectifs actuels avec leurs totaux, et mon équipe. Même contenu dans `exports/reco_<saison>.csv`.
+Les noms saisis sont reconnus sans tenir compte des accents, de la casse ni des suffixes ; sinon
+ajouter un alias dans `config/player_aliases.json`.
 
 ## Limites connues
 

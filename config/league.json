@@ -1,5 +1,6 @@
 {
-  "format": "h2h",
+  "format": "roto",
+  "platform": "yahoo",
   "teams": 15,
   "roster": {
     "G": 2,
@@ -23,5 +24,60 @@
   "zscore": {
     "min_gp": 0,
     "iterations": 3
+  },
+  "games": {
+    "per_slot": 82,
+    "lineup": "daily"
+  },
+  "draft": {
+    "type": "snake",
+    "rounds": 12,
+    "my_team": "Commish",
+    "order": [
+      "Starkos",
+      "Pierre",
+      "Arno",
+      "Gilbert",
+      "Lucas",
+      "Stef",
+      "Cliffy",
+      "Tof",
+      "Edern",
+      "Toto",
+      "Véto",
+      "Commish",
+      "Joris",
+      "Colo",
+      "Thomas"
+    ],
+    "keepers": {
+      "Thomas": [],
+      "Joris": [],
+      "Colo": [],
+      "Commish": [],
+      "Véto": [],
+      "Toto": [],
+      "Edern": [],
+      "Tof": [],
+      "Cliffy": [],
+      "Stef": [],
+      "Lucas": [],
+      "Gilbert": [],
+      "Arno": [],
+      "Pierre": [],
+      "Starkos": []
+    },
+    "candidates": 40,
+    "simulations": 40,
+    "adp_noise": 0.15
+  },
+  "google_sheets": {
+    "draft_spreadsheet_id": "",
+    "picks_tab": "draft_res",
+    "picks_range": "A2:D",
+    "reco_tab": "reco",
+    "projections_spreadsheet_id": "",
+    "projections_tab": "export",
+    "poll_seconds": 10
   }
 }

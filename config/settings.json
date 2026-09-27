@@ -9,12 +9,20 @@
     "lineupexperts": true
   },
   "phases": {
-    "draft": ["draft"],
-    "ros": ["lt", "st"]
+    "draft": [
+      "draft"
+    ],
+    "ros": [
+      "lt",
+      "st"
+    ]
   },
   "export": {
     "delimiter": ";",
     "decimal": ","
+  },
+  "google": {
+    "service_account_file": "credentials/service_account.json"
   },
   "http": {
     "timeout": 30,
