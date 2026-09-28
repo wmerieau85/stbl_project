@@ -3,14 +3,17 @@
 Commandes :
     python -m scripts.draft reco                  # une recommandation (choix lus dans Google Sheets)
     python -m scripts.draft watch                 # veille : recalcule à chaque nouveau choix saisi
-    python -m scripts.draft push-projections      # écrit l'onglet "export" (format draft_bdd)
+    python -m scripts.draft push-projections      # projections finales -> onglet draft_bdd (colonnes A:BH)
+    python -m scripts.draft config-push           # league.json -> onglet "config" du classeur
+    python -m scripts.draft config-pull           # onglet "config" -> league.json
 
 Hors ligne (tests, mock draft) :
     python -m scripts.draft reco --xlsx draft2627.xlsx --until 40
     python -m scripts.draft reco --csv picks.csv  # colonnes round;pick;player
 
 Options communes : --season, --phase, --sims N, --no-sheet (n'écrit pas dans le classeur).
-Les paramètres (ordre de draft, keepers, mon équipe, classeur...) sont dans config/league.json.
+Les paramètres (ordre de draft, keepers, mon équipe...) sont dans l'onglet "config" du classeur,
+recopié dans config/league.json au lancement de reco / watch (sauf --no-sync-config).
 """
 
 import argparse
@@ -23,19 +26,19 @@ import sys
 import time
 
 from scripts.config import EXPORTS_DIR, load_league, load_settings
-from scripts.draft import report
+from scripts.draft import config_sheet, report
 from scripts.draft.engine import Simulator
 from scripts.draft.pool import load_pool
 from scripts.draft.projections_tab import build_rows as projection_rows
 from scripts.draft.state import build_state, picks_from_csv, picks_from_sheet_rows, picks_from_xlsx
-from scripts.sheets import SheetsError, open_spreadsheet, read_range, write_tab
+from scripts.sheets import SheetsError, open_spreadsheet, read_range, write_block, write_tab
 
 log = logging.getLogger("stbl.draft")
 
 
 def parse_args(argv=None):
     parser = argparse.ArgumentParser(description="Assistant de draft STBL (roto)")
-    parser.add_argument("command", choices=["reco", "watch", "push-projections"])
+    parser.add_argument("command", choices=["reco", "watch", "push-projections", "config-push", "config-pull"])
     parser.add_argument("--season")
     parser.add_argument("--phase", help="phase des projections finales (défaut : active_stage)")
     parser.add_argument("--xlsx", help="lire les choix dans un export Excel (onglet draft_res)")
@@ -43,6 +46,7 @@ def parse_args(argv=None):
     parser.add_argument("--until", type=int, help="ne garder que les N premiers choix (mock draft)")
     parser.add_argument("--sims", type=int, help="nombre de simulations (défaut : league.json)")
     parser.add_argument("--no-sheet", action="store_true", help="ne rien écrire dans Google Sheets")
+    parser.add_argument("--no-sync-config", action="store_true", help="ne pas relire l'onglet config")
     parser.add_argument("-v", "--verbose", action="store_true")
     return parser.parse_args(argv)
 
@@ -51,12 +55,23 @@ class Session:
     def __init__(self, args):
         self.args = args
         self.settings = load_settings()
+        self._book = None
         self.league = load_league()
+        self.gs = self.league.get("google_sheets", {})
+        if (args.command in ("reco", "watch") and not self.offline and not args.no_sync_config
+                and self.gs.get("config_tab")):
+            config_sheet.pull(self.book(), self.gs["config_tab"])
+            self.league = load_league()
+            self.gs = self.league.get("google_sheets", {})
         if args.sims:
             self.league["draft"]["simulations"] = args.sims
-        self.gs = self.league.get("google_sheets", {})
-        self.pool = load_pool(args.season, args.phase)
-        self._book = None
+        self._pool = None
+
+    @property
+    def pool(self):
+        if self._pool is None:
+            self._pool = load_pool(self.args.season, self.args.phase)
+        return self._pool
 
     @property
     def offline(self):
@@ -128,12 +143,20 @@ def watch(session):
         time.sleep(poll)
 
 
-def push_projections(session):
-    rows = projection_rows(session.args.season, session.args.phase)
-    book = open_spreadsheet(session.gs.get("projections_spreadsheet_id") or session.gs.get("draft_spreadsheet_id"),
-                            session.settings)
-    write_tab(book, session.gs.get("projections_tab", "export"), rows)
-    print(f"{len(rows) - 1} joueurs écrits dans l'onglet '{session.gs.get('projections_tab', 'export')}'.")
+def push_projections(session=None, season=None, phase=None):
+    """Écrit les projections finales dans l'onglet cible (draft_bdd, colonnes A:BH par défaut),
+    sans toucher aux colonnes de formules situées à droite."""
+    if session is None:
+        league, settings = load_league(), load_settings()
+    else:
+        league, settings = session.league, session.settings
+        season, phase = session.args.season, session.args.phase
+    gs = league.get("google_sheets", {})
+    rows = projection_rows(season, phase)
+    book = open_spreadsheet(gs.get("projections_spreadsheet_id") or gs.get("draft_spreadsheet_id"), settings)
+    tab = gs.get("projections_tab", "draft_bdd")
+    write_block(book, tab, rows, first_col=gs.get("projections_start_col", "A") or "A")
+    print(f"{len(rows) - 1} joueurs écrits dans l'onglet '{tab}'.")
 
 
 def main(argv=None):
@@ -144,6 +167,12 @@ def main(argv=None):
         session = Session(args)
         if args.command == "push-projections":
             push_projections(session)
+        elif args.command == "config-push":
+            config_sheet.push(session.book(), session.gs.get("config_tab") or "config", session.league)
+            print(f"Onglet '{session.gs.get('config_tab') or 'config'}' écrit à partir de league.json.")
+        elif args.command == "config-pull":
+            config_sheet.pull(session.book(), session.gs.get("config_tab") or "config")
+            print("config/league.json mis à jour.")
         elif args.command == "watch":
             watch(session)
         else:

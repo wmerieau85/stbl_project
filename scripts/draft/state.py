@@ -98,6 +98,7 @@ def build_state(league, pool, pick_rows):
             keepers.setdefault(team, []).append(player)
 
     state = DraftState(order=order, rounds=int(draft.get("rounds", 12)), my_team=my_team, keepers=keepers)
+    keeper_team = {p.idx: team for team, players in keepers.items() for p in players}
     for rnd, pick, name in pick_rows:
         name = (name or "").strip()
         if not name:
@@ -112,17 +113,35 @@ def build_state(league, pool, pick_rows):
         player = pool.find(name)
         if player is None:
             unknown.append(f"{name} (tour {rnd}, choix {pick})")
+        elif player.idx in keeper_team and keeper_team[player.idx] == state.team_at(overall):
+            # keeper saisi dans draft_res par son manager : compté comme ce choix, pas en double
+            state.keepers[keeper_team.pop(player.idx)].remove(player)
         elif player.idx in seen:
             duplicates.append(player.name)
         else:
             seen.add(player.idx)
         state.picks[overall] = Pick(overall, rnd, pick, state.team_at(overall), name, player)
+    _fill_keeper_rounds(state, draft.get("keeper_rounds") or [])
     state.unknown, state.duplicates = unknown, duplicates
     for label in unknown:
         log.warning("Nom non reconnu : %s (ajoutez un alias dans config/player_aliases.json)", label)
     for name in duplicates:
         log.warning("Joueur saisi deux fois : %s", name)
     return state
+
+
+def _fill_keeper_rounds(state, keeper_rounds):
+    """Si les keepers occupent des tours de la draft (ex. [1, 2]), on les place d'office
+    sur le choix de leur manager dans ces tours (sauf si le choix est déjà saisi)."""
+    if not keeper_rounds:
+        return
+    for team, players in state.keepers.items():
+        slots = [o for o in range(state.total_picks)
+                 if state.team_at(o) == team and (o // state.teams) + 1 in keeper_rounds and o not in state.picks]
+        for overall, player in zip(slots, list(players)):
+            rnd, pick = state.slot(overall)
+            state.picks[overall] = Pick(overall, rnd, pick, team, player.name, player)
+            players.remove(player)
 
 
 # --- Lecture des choix hors ligne (tests, mock drafts) ------------------------------------

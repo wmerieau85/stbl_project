@@ -129,7 +129,10 @@ Le classeur Google Sheets reste l'interface : on saisit les choix dans `draft_re
 (colonne D), le script lit l'état de la draft et écrit ses recommandations dans l'onglet `reco`.
 
 ```bash
-python -m scripts.draft push-projections   # projections finales -> onglet "export" (format lu par draft_bdd)
+python main.py --push-sheet                # pipeline complet puis projections -> draft_bdd (A:BH)
+python -m scripts.draft push-projections   # seulement l'envoi des projections vers draft_bdd
+python -m scripts.draft config-push        # league.json -> onglet "config" (à faire une fois)
+python -m scripts.draft config-pull        # onglet "config" -> league.json
 python -m scripts.draft watch              # veille pendant la draft : recalcul à chaque choix saisi
 python -m scripts.draft reco               # un seul calcul
 python -m scripts.draft reco --xlsx draft2627.xlsx --until 40 --no-sheet   # test hors ligne / mock draft
@@ -138,12 +141,23 @@ python -m scripts.draft reco --xlsx draft2627.xlsx --until 40 --no-sheet   # tes
 Mise en place (une fois) :
 1. Copier le JSON du compte de service dans `credentials/service_account.json` (ignoré par git),
    ou modifier `google.service_account_file` dans `config/settings.json`.
-2. Partager le classeur de draft (et celui des projections s'il est distinct) avec l'adresse
-   `client_email` du compte de service, en Éditeur.
-3. Renseigner dans `config/league.json` : `google_sheets.draft_spreadsheet_id` (l'identifiant
-   dans l'URL `docs.google.com/spreadsheets/d/<ID>/edit`), `projections_spreadsheet_id` si
-   l'onglet `export` est dans un autre classeur, `draft.order` (ordre du 1er tour, issu du
-   tirage), `draft.my_team` et `draft.keepers` (2 joueurs par manager).
+2. Partager le classeur de draft avec l'adresse `client_email` du compte de service, en Éditeur.
+3. `google_sheets.draft_spreadsheet_id` dans `config/league.json` : l'identifiant dans l'URL
+   `docs.google.com/spreadsheets/d/<ID>/edit` (seul réglage à laisser dans le JSON).
+4. `python -m scripts.draft config-push` crée l'onglet `config` : paramètres de la ligue
+   (section / paramètre / valeur / aide) puis le tableau `Ordre | Manager | Keeper 1 | Keeper 2`
+   (ordre du 1er tour). Ensuite on modifie l'onglet, plus le JSON : `reco` et `watch` relisent
+   l'onglet à chaque lancement et mettent `league.json` à jour (`--no-sync-config` pour l'éviter).
+
+Projections : `push-projections` écrit directement dans `draft_bdd`, colonnes A à BH (même
+disposition que l'ancien onglet `export`), sans toucher aux formules des colonnes BJ et
+suivantes. La formule IMPORTRANGE de A1 est remplacée par les valeurs. Onglet et colonne de
+départ réglables (`projections_tab`, `projections_start_col`, `projections_spreadsheet_id`
+si l'onglet est dans un autre classeur).
+
+Keepers : `draft.keeper_rounds` = tours occupés par les keepers (`[1, 2]` : le 1er keeper
+prend le choix du manager au tour 1, le 2e au tour 2) ; vide si les keepers s'ajoutent aux
+tours. Un keeper saisi dans `draft_res` par son propre manager n'est jamais compté deux fois.
 
 Calcul :
 - tour et manager déduits de l'ordre snake de `draft.order` (tour impair : ordre normal,
