@@ -68,7 +68,7 @@ DEFAULT_LEAGUE = {
     "platform": "yahoo",
     "games": {"per_slot": 82, "lineup": "daily"},
     "draft": {
-        "type": "snake", "rounds": 12, "my_team": "", "order": [], "keepers": {},
+        "type": "snake", "rounds": 12, "my_team": "", "order": [], "keepers": {}, "keeper_rounds": [],
         "candidates": 40, "simulations": 40, "adp_noise": 0.15,
     },
     "google_sheets": {

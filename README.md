@@ -143,7 +143,9 @@ Mise en place (une fois) :
 3. Renseigner dans `config/league.json` : `google_sheets.draft_spreadsheet_id` (l'identifiant
    dans l'URL `docs.google.com/spreadsheets/d/<ID>/edit`), `projections_spreadsheet_id` si
    l'onglet `export` est dans un autre classeur, `draft.order` (ordre du 1er tour, issu du
-   tirage), `draft.my_team` et `draft.keepers` (2 joueurs par manager).
+   tirage), `draft.my_team` et `draft.keepers` (2 joueurs par manager). `draft.keeper_rounds` : tours occupés par les keepers
+   (ex. `[1, 2]`) ; vide si les keepers s'ajoutent aux tours de draft. Un keeper saisi dans
+   `draft_res` par son propre manager n'est jamais compté deux fois.
 
 Calcul :
 - tour et manager déduits de l'ordre snake de `draft.order` (tour impair : ordre normal,

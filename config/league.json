@@ -34,49 +34,95 @@
     "rounds": 12,
     "my_team": "Commish",
     "order": [
-      "Starkos",
+      "Edern",
       "Pierre",
-      "Arno",
-      "Gilbert",
-      "Lucas",
       "Stef",
       "Cliffy",
+      "Lucas",
       "Tof",
-      "Edern",
-      "Toto",
+      "Starkos",
+      "Arno",
       "Véto",
+      "Gilbert",
+      "Toto",
       "Commish",
       "Joris",
       "Colo",
       "Thomas"
     ],
     "keepers": {
-      "Thomas": [],
-      "Joris": [],
-      "Colo": [],
-      "Commish": [],
-      "Véto": [],
-      "Toto": [],
-      "Edern": [],
-      "Tof": [],
-      "Cliffy": [],
-      "Stef": [],
-      "Lucas": [],
-      "Gilbert": [],
-      "Arno": [],
-      "Pierre": [],
-      "Starkos": []
+      "Edern": [
+        "Donovan Mitchell",
+        "Lauri Markkanen"
+      ],
+      "Pierre": [
+        "Giannis Antetokounmpo",
+        "Karl-Anthony Towns"
+      ],
+      "Stef": [
+        "Jamal Murray",
+        "Jalen Williams"
+      ],
+      "Cliffy": [
+        "Austin Reaves",
+        "Donovan Clingan"
+      ],
+      "Lucas": [
+        "Scottie Barnes",
+        "Anthony Edwards"
+      ],
+      "Tof": [
+        "Nikola Jokic",
+        "Bam Adebayo"
+      ],
+      "Starkos": [
+        "Devin Booker",
+        "Jaren Jackson Jr."
+      ],
+      "Arno": [
+        "Dyson Daniels",
+        "Onyeka Okongwu"
+      ],
+      "Véto": [
+        "Tyrese Maxey",
+        "Jalen Duren"
+      ],
+      "Gilbert": [
+        "Luka Doncic",
+        "Keyonte George"
+      ],
+      "Toto": [
+        "Cade Cunningham",
+        "Cooper Flagg"
+      ],
+      "Commish": [
+        "Trey Murphy III",
+        "Chet Holmgren"
+      ],
+      "Joris": [
+        "Tyrese Haliburton",
+        "Jalen Johnson"
+      ],
+      "Colo": [
+        "Victor Wembanyama",
+        "Jayson Tatum"
+      ],
+      "Thomas": [
+        "Shai Gilgeous-Alexander",
+        "Amen Thompson"
+      ]
     },
+    "keeper_rounds": [],
     "candidates": 40,
     "simulations": 40,
     "adp_noise": 0.15
   },
   "google_sheets": {
-    "draft_spreadsheet_id": "",
+    "draft_spreadsheet_id": "1vLuP0XS4sPpfgx4anXB1icjLfQXkyHc7QMdaGsVpcao",
     "picks_tab": "draft_res",
     "picks_range": "A2:D",
     "reco_tab": "reco",
-    "projections_spreadsheet_id": "",
+    "projections_spreadsheet_id": "1u6nEwIxWs-oKTAcM0LpZ7i9a1ajnYLBqy6v8R6F7VDo",
     "projections_tab": "export",
     "poll_seconds": 10
   }
