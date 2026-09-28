@@ -70,3 +70,28 @@ def _cell(value):
     if isinstance(value, float):
         return round(value, 6)
     return value
+
+
+def write_block(spreadsheet, tab, rows, first_col="A", last_col=None):
+    """Écrit un bloc de colonnes (ex. A:BH) sans toucher aux autres colonnes de l'onglet.
+
+    Le bloc est vidé sur toute sa hauteur avant l'écriture ; les formules situées à droite
+    (ou à gauche) du bloc sont conservées.
+    """
+    from gspread.utils import a1_to_rowcol, rowcol_to_a1
+
+    width = max((len(r) for r in rows), default=1)
+    rows = [[_cell(v) for v in list(r) + [""] * (width - len(r))] for r in rows]
+    ws = spreadsheet.worksheet(tab)
+    start_col = a1_to_rowcol(f"{first_col}1")[1]
+    end_col = start_col + width - 1
+    if last_col:
+        end_col = max(end_col, a1_to_rowcol(f"{last_col}1")[1])
+    if ws.row_count < len(rows) or ws.col_count < end_col:
+        ws.resize(rows=max(ws.row_count, len(rows)), cols=max(ws.col_count, end_col))
+    last = rowcol_to_a1(ws.row_count, end_col)
+    ws.batch_clear([f"{first_col}1:{last}"])
+    ws.update(values=rows, range_name=f"{first_col}1", value_input_option="RAW")
+    log.info("[Sheets] Onglet '%s', colonnes %s:%s mises à jour (%d lignes).", tab, first_col,
+             rowcol_to_a1(1, end_col).rstrip("1"), len(rows))
+    return ws

@@ -6,6 +6,7 @@ Exemples :
     python main.py --sources cbs          # une seule source
     python main.py --file fanscout=C:/chemin/table.csv   # fichier CSV précis
     python main.py --skip-import          # recalcule seulement la pondération
+    python main.py --push-sheet           # ... puis envoie les projections dans l'onglet draft_bdd
 """
 
 import argparse
@@ -36,6 +37,8 @@ def parse_args():
     parser.add_argument("--skip-import", action="store_true", help="ne pas réimporter les sources")
     parser.add_argument("--skip-link", action="store_true", help="ne pas lancer le rapprochement des joueurs")
     parser.add_argument("--skip-weighting", action="store_true", help="ne pas calculer les projections finales")
+    parser.add_argument("--push-sheet", action="store_true",
+                        help="écrire les projections finales dans Google Sheets (onglet draft_bdd)")
     parser.add_argument("-v", "--verbose", action="store_true", help="logs détaillés")
     return parser.parse_args()
 
@@ -82,6 +85,15 @@ def run_pipeline(args):
 
     if not args.skip_weighting and not run_phases(settings):
         results["pondération"] = False
+
+    if args.push_sheet and results.get("pondération", True):
+        from scripts.draft.__main__ import push_projections
+        from scripts.sheets import SheetsError
+        try:
+            push_projections(season=settings["active_season"], phase=settings["active_stage"])
+        except (SheetsError, OSError, ValueError) as exc:
+            log.error("Envoi vers Google Sheets impossible : %s", exc)
+            results["google sheets"] = False
 
     failed = [name for name, ok in results.items() if not ok]
     if failed:

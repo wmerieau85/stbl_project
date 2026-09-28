@@ -72,9 +72,9 @@ DEFAULT_LEAGUE = {
         "candidates": 40, "simulations": 40, "adp_noise": 0.15,
     },
     "google_sheets": {
-        "draft_spreadsheet_id": "", "picks_tab": "draft_res", "picks_range": "A2:D",
-        "reco_tab": "reco", "projections_spreadsheet_id": "", "projections_tab": "export",
-        "poll_seconds": 10,
+        "draft_spreadsheet_id": "", "config_tab": "config", "picks_tab": "draft_res", "picks_range": "A2:D",
+        "reco_tab": "reco", "projections_spreadsheet_id": "", "projections_tab": "draft_bdd",
+        "projections_start_col": "A", "poll_seconds": 10,
     },
 }
 

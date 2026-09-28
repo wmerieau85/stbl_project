@@ -112,18 +112,23 @@
         "Amen Thompson"
       ]
     },
-    "keeper_rounds": [],
+    "keeper_rounds": [
+      1,
+      2
+    ],
     "candidates": 40,
     "simulations": 40,
     "adp_noise": 0.15
   },
   "google_sheets": {
     "draft_spreadsheet_id": "1vLuP0XS4sPpfgx4anXB1icjLfQXkyHc7QMdaGsVpcao",
+    "config_tab": "config",
     "picks_tab": "draft_res",
     "picks_range": "A2:D",
     "reco_tab": "reco",
-    "projections_spreadsheet_id": "1u6nEwIxWs-oKTAcM0LpZ7i9a1ajnYLBqy6v8R6F7VDo",
-    "projections_tab": "export",
+    "projections_spreadsheet_id": "",
+    "projections_tab": "draft_bdd",
+    "projections_start_col": "A",
     "poll_seconds": 10
   }
 }
