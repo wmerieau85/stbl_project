@@ -1,4 +1,5 @@
 # Clés et identifiants (Google Sheets, etc.)
+credentials/
 credentials.json
 token.json
 service_account*.json
