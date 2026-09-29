@@ -151,6 +151,14 @@
     "projections_tab": "draft_bdd",
     "projections_start_col": "A",
     "poll_seconds": 10,
-    "write_picks_to_sheet": true
+    "write_picks_to_sheet": true,
+    "season_tab": "season",
+    "rosters_tab": "yahoo_rosters"
+  },
+  "season": {
+    "st_days": 15,
+    "lt_phase": "lt",
+    "st_phase": "st",
+    "simulations": 2000
   }
 }

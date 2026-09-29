@@ -206,6 +206,26 @@ directement dans Yahoo, les recopie dans la colonne D de `draft_res` (réglable)
 écart entre l'ordre Yahoo et l'ordre de la config. Si Yahoo ne répond pas, lecture de
 `draft_res` à la place : la saisie manuelle reste possible.
 
+## Module saison
+
+```
+python main.py --stage ros                 # projections ROS (lt) + stats par période (st)
+python -m scripts.season update            # onglets season et yahoo_rosters
+python -m scripts.season update --no-sheet # console + exports/season_<saison>.csv
+```
+
+Projection de fin de saison de chaque équipe = stats réelles (classement Yahoo) + 15 prochains
+jours en phase st + reste de la saison en phase lt, avec le calendrier NBA (NBA.com, sinon
+fixturedownload.com) et les plafonds de matchs restants par poste (G, F, C, Util) lus sur la page
+de chaque équipe. Onglet season : classement projeté (points espérés, chances de titre et de
+podium), mes catégories (ce qu'il faut pour gagner un point, marge avant d'en perdre un), mes
+matchs par poste, stats projetées de toutes les équipes. Sans projections lt, la phase draft
+est utilisée.
+
+Limites : les tentatives de tirs réelles (FGA, FTA) ne sont pas publiées par Yahoo et sont
+estimées ; l'alignement jour par jour (plus de joueurs que de postes certains soirs) sera traité
+par le module rotation.
+
 ## Limites connues
 
 - CBS n'affiche que les 100 premiers joueurs par poste (500 au total) et un seul poste par joueur.

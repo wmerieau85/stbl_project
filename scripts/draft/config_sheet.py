@@ -60,6 +60,9 @@ PARAMS = [
     ("Sheets", "Onglet des recommandations", "google_sheets.reco_tab", "str", ""),
     ("Sheets", "Onglet des projections", "google_sheets.projections_tab", "str", "écrit par push-projections"),
     ("Sheets", "Colonne de début des projections", "google_sheets.projections_start_col", "str", ""),
+    ("Saison", "Horizon court terme (jours)", "season.st_days", "int", "jours projetés avec la phase st, ensuite lt"),
+    ("Sheets", "Onglet saison", "google_sheets.season_tab", "str", "classement réel et projeté"),
+    ("Sheets", "Onglet effectifs Yahoo", "google_sheets.rosters_tab", "str", "effectifs lus dans Yahoo (écrasé à chaque mise à jour)"),
     ("Sheets", "Veille (secondes)", "google_sheets.poll_seconds", "int", "fréquence de lecture des choix"),
     ("Sheets", "Recopier les choix Yahoo dans draft_res", "google_sheets.write_picks_to_sheet", "bool", "oui / non"),
 ]
