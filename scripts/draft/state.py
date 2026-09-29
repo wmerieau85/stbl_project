@@ -26,6 +26,7 @@ class DraftState:
     picks: dict = field(default_factory=dict)   # overall -> Pick
     unknown: list = field(default_factory=list)  # noms non reconnus
     duplicates: list = field(default_factory=list)
+    owners: list = None                   # ordre réel choix par choix (Yahoo), sinon snake
 
     @property
     def teams(self):
@@ -36,6 +37,8 @@ class DraftState:
         return self.teams * self.rounds
 
     def team_at(self, overall):
+        if self.owners and overall < len(self.owners) and self.owners[overall]:
+            return self.owners[overall]
         rnd, pos = divmod(overall, self.teams)
         return self.order[pos] if rnd % 2 == 0 else self.order[self.teams - 1 - pos]
 
@@ -68,7 +71,7 @@ class DraftState:
         return ids
 
 
-def build_state(league, pool, pick_rows):
+def build_state(league, pool, pick_rows, owners=None):
     """pick_rows : [(tour, choix_dans_le_tour, nom)] tels que saisis dans le classeur."""
     draft = league["draft"]
     order = list(draft.get("order") or [])
@@ -97,7 +100,8 @@ def build_state(league, pool, pick_rows):
             seen.add(player.idx)
             keepers.setdefault(team, []).append(player)
 
-    state = DraftState(order=order, rounds=int(draft.get("rounds", 12)), my_team=my_team, keepers=keepers)
+    state = DraftState(order=order, rounds=int(draft.get("rounds", 12)), my_team=my_team, keepers=keepers,
+                       owners=list(owners) if owners else None)
     keeper_team = {p.idx: team for team, players in keepers.items() for p in players}
     for rnd, pick, name in pick_rows:
         name = (name or "").strip()

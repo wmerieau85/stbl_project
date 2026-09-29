@@ -2,7 +2,24 @@
   "format": "roto",
   "platform": "yahoo",
   "yahoo": {
-    "league_id": ""
+    "league_id": "4205",
+    "teams": {
+      "Edern": "the Pat's heirs",
+      "Pierre": "Prosper's Cartel",
+      "Stef": "The Houblonners",
+      "Cliffy": "Les Mousquetons",
+      "Lucas": "Sactown",
+      "Tof": "La Bifle Bordel !",
+      "Starkos": "Starkos",
+      "Arno": "The King of Flop",
+      "Véto": "Angers Vets",
+      "Gilbert": "Gennevilliers ground beef",
+      "Toto": "The Raides Fish",
+      "Commish": "SAC Commodores",
+      "Joris": "Uncoachable Crew",
+      "Colo": "Les Coupes Colonels",
+      "Thomas": "Vernon Unbelievers"
+    }
   },
   "teams": 15,
   "roster": {

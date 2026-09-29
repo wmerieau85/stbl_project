@@ -112,22 +112,23 @@ def teams(client, key):
 
 
 def draft_results(client, key, cache=None):
-    """[{pick, round, team_key, player_key, player, positions, nba_team}] triés par pick."""
+    """[{pick, round, team_key, player_key, player, positions, nba_team}] triés par pick,
+    y compris les choix pas encore faits (player vide) : ils donnent l'ordre réel de la draft."""
     _, rest = _league_parts(client.get(f"league/{key}/draftresults"))
     picks = []
     for item in _collection(rest.get("draft_results", {}), "draft_result"):
         d = _merge(item)
-        if not d.get("player_key"):
-            continue  # choix pas encore effectué
+        if not d.get("pick"):
+            continue
         picks.append({"pick": int(d["pick"]), "round": int(d["round"]), "team_key": d.get("team_key"),
-                      "player_key": d["player_key"]})
+                      "player_key": d.get("player_key") or ""})
     cache = {} if cache is None else cache
-    missing = [p["player_key"] for p in picks if p["player_key"] not in cache]
+    missing = [p["player_key"] for p in picks if p["player_key"] and p["player_key"] not in cache]
     if missing:
         cache.update(player_names(client, key, missing))
-    players = cache
+    empty = {"player": "", "positions": "", "nba_team": ""}
     for p in picks:
-        p.update(players.get(p["player_key"], {"player": "", "positions": "", "nba_team": ""}))
+        p.update(cache.get(p["player_key"], empty) if p["player_key"] else empty)
     return sorted(picks, key=lambda p: p["pick"])
 
 

@@ -194,6 +194,13 @@ Lecture seule, via l'application déclarée sur developer.yahoo.com (redirect UR
 4. `python -m scripts.yahoo check` : réglages, équipes et managers, nombre de choix de draft.
    `python -m scripts.yahoo draft` : choix effectués (+ `exports/yahoo_draft_<saison>.csv`).
 
+Tant que Yahoo n'a pas validé l'accès à l'API (erreur 403), la ligue étant publique, les choix
+sont lus sur la page `basketball.fantasysports.yahoo.com/nba/<ID>/draftresults` : aucun réglage
+à faire, le programme bascule tout seul. La colonne « Équipe Yahoo » de l'onglet config relie
+chaque équipe Yahoo à un manager ; l'ordre réel de Yahoo (choix par choix) remplace alors l'ordre
+snake de la config, avec une alerte en cas d'écart et si un choix des tours keepers ne correspond
+pas aux keepers déclarés.
+
 Pendant la draft (`Source des choix` = `yahoo` dans l'onglet config), `watch` lit les choix
 directement dans Yahoo, les recopie dans la colonne D de `draft_res` (réglable) et signale tout
 écart entre l'ordre Yahoo et l'ordre de la config. Si Yahoo ne répond pas, lecture de

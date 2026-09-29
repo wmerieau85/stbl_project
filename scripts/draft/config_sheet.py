@@ -19,6 +19,7 @@ from scripts.config import LEAGUE_PATH, _read_json
 
 log = logging.getLogger(__name__)
 
+YAHOO_TEAM_HEADER = "Équipe Yahoo"
 MANAGERS_HEADER = "Ordre"
 
 # (section, libellé, chemin dans league.json, type, aide)
@@ -123,10 +124,11 @@ def build_rows(league):
     draft = league.get("draft", {})
     keepers = draft.get("keepers", {}) or {}
     n_keep = max([2] + [len(v or []) for v in keepers.values()])
-    rows.append([MANAGERS_HEADER, "Manager"] + [f"Keeper {i}" for i in range(1, n_keep + 1)])
+    yahoo_teams = (league.get("yahoo", {}) or {}).get("teams", {}) or {}
+    rows.append([MANAGERS_HEADER, "Manager", YAHOO_TEAM_HEADER] + [f"Keeper {i}" for i in range(1, n_keep + 1)])
     for i, team in enumerate(draft.get("order", []), 1):
         names = list(keepers.get(team, []) or [])
-        rows.append([i, team] + names + [""] * (n_keep - len(names)))
+        rows.append([i, team, yahoo_teams.get(team, "")] + names + [""] * (n_keep - len(names)))
     return rows
 
 
@@ -147,19 +149,27 @@ def parse_rows(rows, league):
     if managers_start is None:
         raise ValueError(f"Onglet config : ligne d'en-tête « {MANAGERS_HEADER} | Manager | Keeper 1... » introuvable.")
 
-    order, keepers = [], {}
+    header = [str(c).strip().lower() for c in rows[managers_start - 1]]
+    yahoo_col = header.index(YAHOO_TEAM_HEADER.lower()) if YAHOO_TEAM_HEADER.lower() in header else None
+    keeper_cols = [j for j, h in enumerate(header) if h.startswith("keeper")] or None
+    order, keepers, yahoo_teams = [], {}, {}
     for r in rows[managers_start:]:
-        r = [str(c).strip() if c is not None else "" for c in r] + ["", ""]
+        r = [str(c).strip() if c is not None else "" for c in r] + [""] * (len(header) + 2)
         if not r[1]:
             continue
         team = r[1]
         order.append((float(r[0].replace(",", ".")) if r[0] else len(order) + 1, team))
-        keepers[team] = [name for name in r[2:] if name]
+        cols = keeper_cols or range(2, len(r))
+        keepers[team] = [r[j] for j in cols if r[j]]
+        if yahoo_col is not None and r[yahoo_col]:
+            yahoo_teams[team] = r[yahoo_col]
     order = [team for _, team in sorted(order, key=lambda x: x[0])]
     if len(order) != int(updated["teams"]):
         raise ValueError(f"Onglet config : {len(order)} managers pour {updated['teams']} équipes.")
     updated["draft"]["order"] = order
     updated["draft"]["keepers"] = keepers
+    if yahoo_col is not None:
+        updated.setdefault("yahoo", {})["teams"] = yahoo_teams
     if updated["draft"].get("my_team") not in order:
         raise ValueError(f"Onglet config : « Mon équipe » ({updated['draft'].get('my_team')}) absente des managers.")
     return updated
