@@ -263,15 +263,22 @@ class Session:
         if digest == self._copied:
             return
         tab = self.gs.get("picks_tab", "draft_res")
-        existing = read_range(self.book(), tab, "A2:B")
-        names = {(int(r[0]), int(r[1])): n for r0, r1, n in rows for r in [(r0, r1)]}
-        column = []
+        existing = read_range(self.book(), tab, "A2:D")
+        names = {(int(r0), int(r1)): n for r0, r1, n in rows}
+        column, changed = [], False
         for r in existing:
+            r = list(r) + [""] * (4 - len(r))
+            current = str(r[3] or "")
             try:
-                column.append([names.get((int(float(r[0])), int(float(r[1]))), "")])
-            except (TypeError, ValueError, IndexError):
-                column.append([""])
-        if column:
+                key = (int(float(r[0])), int(float(r[1])))
+            except (TypeError, ValueError):
+                column.append([current])
+                continue
+            # seuls les choix faits dans Yahoo sont recopiés : la saisie manuelle des autres est conservée
+            value = names.get(key, current)
+            changed |= value != current
+            column.append([value])
+        if column and changed:
             self.book().worksheet(tab).update(values=column, range_name=f"D2:D{len(column) + 1}",
                                               value_input_option="RAW")
             log.info("[Yahoo] Choix recopiés dans %s (colonne D).", tab)
@@ -292,6 +299,10 @@ def watch(session):
     """Relit les choix toutes les poll_seconds secondes et recalcule dès qu'ils changent."""
     poll = max(3, int(session.gs.get("poll_seconds", 10)))
     last = None
+    source = str(session.league["draft"].get("picks_source", "sheet")).lower()
+    tab = session.gs.get("picks_tab", "draft_res")
+    print(f"Source des choix : {'Yahoo (les saisies de ' + tab + ' sont ignorées)' if source == 'yahoo' else 'onglet ' + tab}"
+          f" ; recommandation écrite dans l'onglet {session.gs.get('reco_tab', 'reco')}.")
     print(f"Veille active (toutes les {poll} s). Ctrl+C pour arrêter.")
     while True:
         try:
