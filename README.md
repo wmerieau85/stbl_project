@@ -28,7 +28,6 @@ python -m scripts.exports               # réexporte seulement les projections b
 python main.py --file fanscout=C:\chemin\table.csv   # fichier CSV précis
 python -m scripts.sources.cbs           # une source seule
 python -m scripts.player_linker         # relancer le rapprochement
-python -m scripts.tools.build_aliases alias.csv   # CSV -> config/player_aliases.json
 ```
 
 ## Configuration
@@ -77,7 +76,6 @@ scripts/exports.py           exports CSV (projections brutes, format commun)
 scripts/weighting/weights.py lecture et validation des grilles de pondération
 scripts/weighting/engine.py  calcul des projections finales et export CSV
 scripts/weighting/zscores.py z-scores des 9 catégories (AVG et TOT), sommes et rangs
-scripts/tools/build_aliases.py
 ```
 
 Ajouter une source :
