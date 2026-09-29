@@ -33,5 +33,13 @@
     "timeout": 30,
     "retries": 2,
     "pause_seconds": 1.5
+  },
+  "stats_windows": {
+    "fantasypros": [
+      "sea",
+      "l30",
+      "l15",
+      "l07"
+    ]
   }
 }

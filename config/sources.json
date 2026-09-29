@@ -5,7 +5,13 @@
       "draft": "https://www.cbssports.com/fantasy/basketball/stats/{position}/{year}/season/projections/",
       "ros": "https://www.cbssports.com/fantasy/basketball/stats/{position}/{year}/restofseason/projections/"
     },
-    "positions": ["PG", "SG", "SF", "PF", "C"],
+    "positions": [
+      "PG",
+      "SG",
+      "SF",
+      "PF",
+      "C"
+    ],
     "percent_scale": 100,
     "columns": {
       "gp": "gp",
@@ -34,7 +40,11 @@
     "code": "fp",
     "urls": {
       "draft": "https://www.fantasypros.com/nba/projections/overall.php",
-      "ros": "https://www.fantasypros.com/nba/projections/ros-overall.php"
+      "ros": "https://www.fantasypros.com/nba/projections/ros-overall.php",
+      "sea": "https://www.fantasypros.com/nba/stats/overall.php",
+      "l30": "https://www.fantasypros.com/nba/stats/overall.php?days=30",
+      "l15": "https://www.fantasypros.com/nba/stats/overall.php?days=15",
+      "l07": "https://www.fantasypros.com/nba/stats/overall.php?days=7"
     },
     "percent_scale": 1,
     "columns": {
@@ -48,7 +58,9 @@
       "AST": "ast",
       "STL": "stl",
       "BLK": "blk",
-      "TO": "tov"
+      "TO": "tov",
+      "FTM": "ftm",
+      "FGM": "fgm"
     }
   },
   "fanscout": {
@@ -93,9 +105,13 @@
     "percent_scale": 1,
     "empty_as_zero": true,
     "missing_values": {
-      "ADP": [999]
+      "ADP": [
+        999
+      ]
     },
-    "skip_players": ["Unknown Player"],
+    "skip_players": [
+      "Unknown Player"
+    ],
     "player_column": "Name",
     "team_column": "Team_2",
     "positions_column": "Position",

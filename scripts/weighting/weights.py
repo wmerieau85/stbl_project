@@ -44,6 +44,9 @@ CATEGORY_ALIASES = {
     "fg%": "fgp", "fgp": "fgp", "ft%": "ftp", "ftp": "ftp",
 }
 
+# Phases calculées, dans l'ordre : une grille peut reprendre le résultat d'une phase précédente
+FINAL_PHASES = ("draft", "lt", "st")
+
 CODE_RE = re.compile(r"^([a-z]+)(\d{2})?(?:\.([a-z0-9]+))?$")
 
 
@@ -77,12 +80,14 @@ def parse_code(code, phase, active_season):
     - fp26.ros  -> FantasyPros, saison 2026-27, étape ros
     - fp.l30    -> FantasyPros, saison active, fenêtre l30 (quand la source existera)
     - draft     -> projections finales de la phase draft (utilisable en lt / st)
+    - lt        -> projections finales de la phase lt (utilisable en st)
     """
     code = code.strip().lower()
-    if code == "draft":
-        if phase == "draft":
-            raise WeightsError("Le code 'draft' ne peut pas être utilisé dans la grille draft.")
-        return {"code": code, "source": "draft", "season": active_season, "stage": "draft", "final": True}
+    if code in FINAL_PHASES:
+        if FINAL_PHASES.index(code) >= FINAL_PHASES.index(phase) if phase in FINAL_PHASES else False:
+            raise WeightsError(f"Le code '{code}' ne peut pas être utilisé dans la grille {phase} "
+                               f"(seulement une phase calculée avant : {', '.join(FINAL_PHASES[:FINAL_PHASES.index(phase)]) or 'aucune'}).")
+        return {"code": code, "source": code, "season": active_season, "stage": code, "final": True}
     match = CODE_RE.match(code)
     if not match:
         raise WeightsError(f"Code source illisible : '{code}' (ex. fs26, fp.ros, fp.l30, draft)")

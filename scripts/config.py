@@ -18,6 +18,8 @@ EXPORTS_DIR = os.path.join(BASE_DIR, "exports")
 DEFAULT_SETTINGS = {
     "active_season": "2026-27",
     "active_stage": "draft",  # "draft" ou "ros"
+    # stats réelles par période, importées avec l'étape ros (codes fp.sea, fp.l30... des grilles)
+    "stats_windows": {"fantasypros": ["sea", "l30", "l15", "l07"]},
     "sources": {"cbs": True, "fantasypros": True, "fanscout": True, "draftkick": True, "lineupexperts": True},
     "google": {"service_account_file": "credentials/service_account.json"},
     "yahoo": {"app_file": "credentials/yahoo_app.json", "token_file": "credentials/yahoo_token.json",

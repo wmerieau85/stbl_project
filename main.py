@@ -2,7 +2,7 @@
 
 Exemples :
     python main.py                        # sources et étape définies dans config/settings.json
-    python main.py --stage ros            # force les projections "rest of season"
+    python main.py --stage ros            # projections "rest of season" + stats par période (lt, st)
     python main.py --sources cbs          # une seule source
     python main.py --file fanscout=C:/chemin/table.csv   # fichier CSV précis
     python main.py --skip-import          # recalcule seulement la pondération
@@ -77,6 +77,12 @@ def run_pipeline(args):
         else:
             source = source_cls(settings, http=http)
         results[name] = source.run()
+        if settings["active_stage"] == "ros":
+            for window in settings.get("stats_windows", {}).get(name, []):
+                window_settings = dict(settings, active_stage=window)
+                if not source_cls(window_settings, http=http).run():
+                    # stats par période : absentes hors saison ou en tout début de saison, non bloquant
+                    log.warning("[%s] Stats '%s' non mises à jour (données précédentes conservées).", name, window)
 
     if not args.skip_link:
         link_players(season=settings["active_season"], stage=settings["active_stage"])
