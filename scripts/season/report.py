@@ -83,14 +83,18 @@ def _contribution(totals, cat):
 def my_roster_rows(team, cats):
     """Bloc « Mon effectif » : matchs et apport de chaque joueur d'ici la fin de la saison."""
     labels = [CATEGORY_LABELS.get(c, c) for c in cats]
-    rows = [[f"Mon effectif ({team.manager}) : matchs et apport d'ici la fin de la saison"],
+    rows = [[f"Mon effectif ({team.manager}) : matchs et apport d'ici la fin de la saison",
+             "écart st - lt > 0 : forme récente au-dessus du long terme (rôle en hausse ou risque de "
+             "régression) ; < 0 : en dessous"],
             ["Joueur", "Postes", "NBA", "Poste Yahoo", "Matchs au calendrier", "Matchs attendus", "Matchs retenus",
-             "Perdus (plafonds)", "Valeur/match"] + labels]
+             "Perdus (plafonds)", "Valeur/match (lt)", "Valeur/match (st)", "Écart st - lt"] + labels]
     for p in sorted(team.players, key=lambda x: -x.value):
         lost = max(0.0, p.games_expected - p.games_used)
         rows.append([p.display or p.name, p.positions, p.nba_team, p.slot, p.games_sched,
                      round(p.games_expected, 1), round(p.games_used, 1), round(lost, 1),
-                     round(p.value, 2) if p.found else "sans projection"]
+                     round(p.value, 2) if p.found else "sans projection",
+                     round(p.value_st, 2) if p.value_st is not None else "",
+                     round(p.value_st - p.value, 2) if p.value_st is not None and p.found else ""]
                     + [_contribution(p.totals, c) for c in cats])
     return rows
 

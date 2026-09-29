@@ -240,3 +240,13 @@ par le module rotation.
 - CBS n'affiche que les 100 premiers joueurs par poste (500 au total) et un seul poste par joueur.
 - FantasyPros ne publie les projections `ros` qu'une fois la saison commencée ; en attendant l'import est annulé sans toucher aux données existantes.
 - Un import dont une page échoue est entièrement annulé, pour ne jamais remplacer des données complètes par des données partielles.
+
+## Tests
+
+```bash
+pip install -r requirements-dev.txt
+python -m pytest -q
+```
+
+Couvrent les noms (accents, caractères perdus, alias), les grilles de pondération, les points
+roto, l'allocation des matchs sous plafonds et l'aller-retour de l'onglet config.

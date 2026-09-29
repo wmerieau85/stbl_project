@@ -18,7 +18,7 @@ from datetime import date, datetime
 from scripts.config import EXPORTS_DIR, load_league, load_settings
 from scripts.draft.pool import load_pool
 from scripts.season import report
-from scripts.season.engine import CATEGORY_ORDER, project_team, standings_projection
+from scripts.season.engine import CATEGORY_ORDER, project_team, standings_projection, gp_inconsistencies
 from scripts.season.schedule import load_games
 from scripts.yahoo import public
 
@@ -27,11 +27,15 @@ log = logging.getLogger("stbl.season")
 
 def _pool(season, phase, fallback=None):
     try:
-        return load_pool(season=season, phase=phase)
+        pool = load_pool(season=season, phase=phase)
+        pool.phase = phase
+        return pool
     except RuntimeError:
         if fallback:
             log.warning("Pas de projections %s : utilisation de %s.", phase, fallback)
-            return load_pool(season=season, phase=fallback)
+            pool = load_pool(season=season, phase=fallback)
+            pool.phase = fallback
+            return pool
         log.warning("Pas de projections %s.", phase)
         return None
 
@@ -122,7 +126,13 @@ def compute(settings, league, today=None, book=None, roster_source=None):
             manager = names.get(t["name"], t["name"])
             teams.append(project_team(manager, t["name"], roster, standings.get(t["name"]), lt_pool, st_pool,
                                       games, today, horizon, league))
-    unknown = sorted({p.name for t in teams for p in t.players if not p.found})
+    if getattr(lt_pool, "phase", None) != "draft":   # les projections de draft sont sur la saison entière
+        bad = gp_inconsistencies(teams)
+        if bad:
+            log.warning("%d joueur(s) avec plus de matchs projetés (lt) que de matchs restants au calendrier : "
+                        "une source ROS donne peut-être des totaux sur la saison entière. Ex. : %s", len(bad),
+                        ", ".join(f"{n} ({g:.0f} pour {s} restants)" for n, g, s in bad[:5]))
+    unknown = sorted({p.display or p.name for t in teams for p in t.players if not p.found})
     if unknown:
         log.warning("%d joueur(s) sans projection (ignorés) : %s", len(unknown), ", ".join(unknown[:15]))
     cats = [c for c in CATEGORY_ORDER if float(league["categories"].get(c, 0) or 0) > 0]
