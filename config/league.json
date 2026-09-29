@@ -1,6 +1,9 @@
 {
   "format": "roto",
   "platform": "yahoo",
+  "yahoo": {
+    "league_id": ""
+  },
   "teams": 15,
   "roster": {
     "G": 2,
@@ -118,7 +121,8 @@
     ],
     "candidates": 40,
     "simulations": 40,
-    "adp_noise": 0.15
+    "adp_noise": 0.15,
+    "picks_source": "yahoo"
   },
   "google_sheets": {
     "draft_spreadsheet_id": "1vLuP0XS4sPpfgx4anXB1icjLfQXkyHc7QMdaGsVpcao",
@@ -129,6 +133,7 @@
     "projections_spreadsheet_id": "",
     "projections_tab": "draft_bdd",
     "projections_start_col": "A",
-    "poll_seconds": 10
+    "poll_seconds": 10,
+    "write_picks_to_sheet": true
   }
 }

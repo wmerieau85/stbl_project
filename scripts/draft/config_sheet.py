@@ -26,6 +26,7 @@ PARAMS = [
     ("Ligue", "Format", "format", "choice:roto,h2h", "roto ou h2h"),
     ("Ligue", "Plateforme", "platform", "str", "yahoo (positions Yahoo)"),
     ("Ligue", "Nombre d'équipes", "teams", "int", "doit correspondre au nombre de managers ci-dessous"),
+    ("Ligue", "ID de la ligue Yahoo", "yahoo.league_id", "optstr", "basketball.fantasysports.yahoo.com/nba/<ID> (change chaque saison)"),
     ("Roster", "G", "roster.G", "int", "postes titulaires Guard"),
     ("Roster", "F", "roster.F", "int", "postes titulaires Forward"),
     ("Roster", "C", "roster.C", "int", "postes titulaires Center"),
@@ -49,6 +50,7 @@ PARAMS = [
     ("Draft", "Nombre de tours", "draft.rounds", "int", "tours de keepers compris"),
     ("Draft", "Tours des keepers", "draft.keeper_rounds", "intlist", "ex. 1, 2 (vide = keepers en plus des tours)"),
     ("Draft", "Mon équipe", "draft.my_team", "str", "nom du manager, identique à la liste ci-dessous"),
+    ("Draft", "Source des choix", "draft.picks_source", "choice:yahoo,sheet", "yahoo (lecture en direct) ou sheet (saisie dans draft_res)"),
     ("Draft", "Candidats évalués", "draft.candidates", "int", "joueurs testés à chaque recalcul"),
     ("Draft", "Simulations", "draft.simulations", "int", "tirages de la suite de la draft par candidat"),
     ("Draft", "Bruit ADP", "draft.adp_noise", "float", "0,15 = les managers s'écartent de ~15 % de l'ADP"),
@@ -58,6 +60,7 @@ PARAMS = [
     ("Sheets", "Onglet des projections", "google_sheets.projections_tab", "str", "écrit par push-projections"),
     ("Sheets", "Colonne de début des projections", "google_sheets.projections_start_col", "str", ""),
     ("Sheets", "Veille (secondes)", "google_sheets.poll_seconds", "int", "fréquence de lecture des choix"),
+    ("Sheets", "Recopier les choix Yahoo dans draft_res", "google_sheets.write_picks_to_sheet", "bool", "oui / non"),
 ]
 
 
@@ -81,6 +84,8 @@ def _display(value, kind):
         return ""
     if kind == "intlist":
         return ", ".join(str(v) for v in value)
+    if kind == "bool":
+        return "oui" if value else "non"
     return value
 
 
@@ -88,6 +93,14 @@ def _parse(raw, kind, label):
     text = str(raw).strip() if raw is not None else ""
     if kind == "intlist":
         return [int(float(v)) for v in text.replace(";", ",").split(",") if v.strip()]
+    if kind == "optstr":
+        return text
+    if kind == "bool":
+        if text.lower() in ("oui", "o", "yes", "true", "vrai", "1"):
+            return True
+        if text.lower() in ("non", "n", "no", "false", "faux", "0"):
+            return False
+        raise ValueError(f"Onglet config : « {label} » = '{text}', attendu : oui ou non.")
     if text == "":
         raise ValueError(f"Onglet config : valeur vide pour « {label} ».")
     if kind == "int":

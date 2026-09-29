@@ -20,6 +20,8 @@ DEFAULT_SETTINGS = {
     "active_stage": "draft",  # "draft" ou "ros"
     "sources": {"cbs": True, "fantasypros": True, "fanscout": True, "draftkick": True, "lineupexperts": True},
     "google": {"service_account_file": "credentials/service_account.json"},
+    "yahoo": {"app_file": "credentials/yahoo_app.json", "token_file": "credentials/yahoo_token.json",
+              "redirect_uri": "https://localhost:8080"},
     "http": {"timeout": 30, "retries": 2, "pause_seconds": 1.5},
     # Phases de pondération calculées selon l'étape active (grilles dans config/weights/)
     "phases": {"draft": ["draft"], "ros": ["lt", "st"]},
@@ -66,15 +68,16 @@ DEFAULT_LEAGUE = {
     "categories": {"fgp": 1, "fg3m": 1, "ftp": 1, "reb": 1, "ast": 1, "stl": 1, "blk": 1, "tov": 1, "pts": 1},
     "zscore": {"min_gp": 0, "iterations": 3},
     "platform": "yahoo",
+    "yahoo": {"league_id": ""},
     "games": {"per_slot": 82, "lineup": "daily"},
     "draft": {
-        "type": "snake", "rounds": 12, "my_team": "", "order": [], "keepers": {}, "keeper_rounds": [],
+        "type": "snake", "rounds": 12, "my_team": "", "order": [], "keepers": {}, "keeper_rounds": [], "picks_source": "sheet",
         "candidates": 40, "simulations": 40, "adp_noise": 0.15,
     },
     "google_sheets": {
         "draft_spreadsheet_id": "", "config_tab": "config", "picks_tab": "draft_res", "picks_range": "A2:D",
         "reco_tab": "reco", "projections_spreadsheet_id": "", "projections_tab": "draft_bdd",
-        "projections_start_col": "A", "poll_seconds": 10,
+        "projections_start_col": "A", "poll_seconds": 10, "write_picks_to_sheet": True,
     },
 }
 
