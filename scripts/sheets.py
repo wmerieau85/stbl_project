@@ -38,8 +38,51 @@ def open_spreadsheet(spreadsheet_id, settings=None):
         import gspread
     except ImportError as exc:  # pragma: no cover
         raise SheetsError("Module gspread absent : pip install -r requirements.txt") from exc
-    client = gspread.service_account(filename=_service_account_path(settings))
-    return client.open_by_key(spreadsheet_id)
+    key_file = _service_account_path(settings)
+    email = _client_email(key_file)
+    client = gspread.service_account(filename=key_file)
+    try:
+        return client.open_by_key(spreadsheet_id)
+    except PermissionError as exc:
+        detail = _api_message(exc.__cause__)
+        if "has not been used" in detail or "is disabled" in detail:
+            raise SheetsError(
+                "L'API Google Sheets n'est pas activée pour le projet du compte de service. "
+                "Activez « Google Sheets API » et « Google Drive API » dans la console Google Cloud "
+                f"(API et services > Bibliothèque), puis relancez. Détail : {detail}"
+            ) from exc
+        raise SheetsError(
+            f"Accès refusé au classeur {spreadsheet_id}. Partagez-le (bouton Partager, rôle Éditeur) "
+            f"avec le compte de service : {email}"
+        ) from exc
+    except gspread.SpreadsheetNotFound as exc:
+        raise SheetsError(
+            f"Classeur {spreadsheet_id} introuvable : vérifiez google_sheets.draft_spreadsheet_id "
+            f"et qu'il est partagé avec {email}"
+        ) from exc
+    except gspread.exceptions.APIError as exc:
+        raise SheetsError(f"Erreur de l'API Google Sheets : {_api_message(exc)}") from exc
+
+
+def _client_email(key_file):
+    import json
+
+    try:
+        with open(key_file, encoding="utf-8") as fh:
+            return json.load(fh).get("client_email") or "(client_email absent du fichier)"
+    except (OSError, ValueError):
+        return "(fichier du compte de service illisible)"
+
+
+def _api_message(exc):
+    try:
+        return exc.response.json()["error"]["message"]
+    except Exception:
+        return str(exc or "")
+
+
+def service_account_email(settings=None):
+    return _client_email(_service_account_path(settings))
 
 
 def read_range(spreadsheet, tab, cell_range):

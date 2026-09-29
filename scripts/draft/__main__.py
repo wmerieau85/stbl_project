@@ -6,6 +6,7 @@ Commandes :
     python -m scripts.draft push-projections      # projections finales -> onglet draft_bdd (colonnes A:BH)
     python -m scripts.draft config-push           # league.json -> onglet "config" du classeur
     python -m scripts.draft config-pull           # onglet "config" -> league.json
+    python -m scripts.draft check                 # vérifie l'accès au classeur (compte de service)
 
 Hors ligne (tests, mock draft) :
     python -m scripts.draft reco --xlsx draft2627.xlsx --until 40
@@ -31,14 +32,16 @@ from scripts.draft.engine import Simulator
 from scripts.draft.pool import load_pool
 from scripts.draft.projections_tab import build_rows as projection_rows
 from scripts.draft.state import build_state, picks_from_csv, picks_from_sheet_rows, picks_from_xlsx
-from scripts.sheets import SheetsError, open_spreadsheet, read_range, write_block, write_tab
+from scripts.sheets import (SheetsError, open_spreadsheet, read_range, service_account_email, write_block,
+                            write_tab)
 
 log = logging.getLogger("stbl.draft")
 
 
 def parse_args(argv=None):
     parser = argparse.ArgumentParser(description="Assistant de draft STBL (roto)")
-    parser.add_argument("command", choices=["reco", "watch", "push-projections", "config-push", "config-pull"])
+    parser.add_argument("command", choices=["reco", "watch", "push-projections", "config-push", "config-pull",
+                                            "check"])
     parser.add_argument("--season")
     parser.add_argument("--phase", help="phase des projections finales (défaut : active_stage)")
     parser.add_argument("--xlsx", help="lire les choix dans un export Excel (onglet draft_res)")
@@ -165,7 +168,11 @@ def main(argv=None):
                         format="%(asctime)s %(levelname)s %(message)s", datefmt="%H:%M:%S")
     try:
         session = Session(args)
-        if args.command == "push-projections":
+        if args.command == "check":
+            print(f"Compte de service : {service_account_email(session.settings)}")
+            book = session.book()
+            print(f"Classeur ouvert : {book.title} (onglets : {', '.join(ws.title for ws in book.worksheets())})")
+        elif args.command == "push-projections":
             push_projections(session)
         elif args.command == "config-push":
             config_sheet.push(session.book(), session.gs.get("config_tab") or "config", session.league)
