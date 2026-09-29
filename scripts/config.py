@@ -71,7 +71,8 @@ DEFAULT_LEAGUE = {
     "zscore": {"min_gp": 0, "iterations": 3},
     "platform": "yahoo",
     "yahoo": {"league_id": ""},
-    "season": {"st_days": 15, "lt_phase": "lt", "st_phase": "st", "simulations": 2000},
+    "season": {"st_days": 15, "lt_phase": "lt", "st_phase": "st", "simulations": 2000,
+               "roster_source": "yahoo", "roster_tab": "rosters"},
     "games": {"per_slot": 82, "lineup": "daily"},
     "draft": {
         "type": "snake", "rounds": 12, "my_team": "", "order": [], "keepers": {}, "keeper_rounds": [], "picks_source": "sheet",
