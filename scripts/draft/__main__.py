@@ -211,22 +211,27 @@ class Session:
         return mapping
 
     def _check_keepers(self, picks, owners):
-        """Signale les choix des tours keepers qui ne correspondent pas aux keepers déclarés dans la config."""
+        """Keepers : Yahoo fait foi. Les choix des tours keepers remplacent les keepers de la config
+        (équipe par équipe) ; les écarts sont signalés une fois pour mettre l'onglet config à jour."""
         if not owners:
             return
         draft = self.league["draft"]
         rounds = set(draft.get("keeper_rounds") or [])
         declared = draft.get("keepers") or {}
+        from_yahoo = {}
         for p in picks:
-            if p["round"] not in rounds or not p["player"]:
-                continue
-            team = owners[p["pick"] - 1]
-            found = self.pool.find(p["player"])
-            mine = [self.pool.find(n) for n in declared.get(team, [])]
-            if found is not None and all(k is None or k.idx != found.idx for k in mine):
-                self._warn_once(f"keeper{p['pick']}", "Choix n°%d (%s) : Yahoo indique %s, qui n'est pas un keeper "
-                                "déclaré dans la config (%s). Corrigez l'onglet config ou Yahoo.",
-                                p["pick"], team, p["player"], ", ".join(declared.get(team, [])) or "aucun")
+            if p["round"] in rounds and p["player"]:
+                from_yahoo.setdefault(owners[p["pick"] - 1], []).append(p["player"])
+        for team, names in from_yahoo.items():
+            old = declared.get(team, [])
+            found = {getattr(self.pool.find(n), "idx", n) for n in names}
+            known = {getattr(self.pool.find(n), "idx", n) for n in old}
+            if found != known:
+                self._warn_once(f"keepers-{team}", "Keepers de %s : Yahoo = %s, config = %s. Yahoo fait foi "
+                                "(pensez à mettre l'onglet config à jour).", team, ", ".join(names),
+                                ", ".join(old) or "aucun")
+            declared[team] = names
+        draft["keepers"] = declared
 
     def _report_order_differences(self, owners):
         order = self.league["draft"].get("order") or []
