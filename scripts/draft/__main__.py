@@ -71,6 +71,8 @@ class Session:
             self.league["draft"]["simulations"] = args.sims
         self._pool = None
         self._yahoo = None
+        self._yahoo_mode = None
+        self.owners = None
         self._copied = None
         self._order_warned = set()
 
@@ -115,7 +117,7 @@ class Session:
         return rows
 
     def run_once(self, rows):
-        state = build_state(self.league, self.pool, rows)
+        state = build_state(self.league, self.pool, rows, owners=self.owners)
         started = time.time()
         reco = Simulator(self.league, self.pool, state).recommend()
         log.info("Recommandation calculée en %.1f s.", time.time() - started)
@@ -131,40 +133,118 @@ class Session:
         return picks_from_sheet_rows(raw)
 
     def _yahoo_picks(self):
-        """Choix lus en direct dans Yahoo ; recopiés dans draft_res si demandé."""
-        from scripts.yahoo.client import YahooClient
-        from scripts.yahoo.league import draft_results, league_key
+        """Choix lus dans Yahoo (API, sinon page publique de la ligue) ; recopiés dans draft_res si demandé.
 
-        if self._yahoo is None:
-            league_id = str(self.league.get("yahoo", {}).get("league_id") or "").strip()
-            if not league_id:
-                raise YahooError("ID de ligue Yahoo absent (onglet config > ID de la ligue Yahoo)")
-            client = YahooClient(self.settings)
-            self._yahoo = (client, league_key(client, league_id), {})
-        client, key, cache = self._yahoo
-        picks = draft_results(client, key, cache)
+        Yahoo donne aussi l'ordre réel choix par choix (y compris les choix pas encore faits) :
+        il remplace l'ordre snake calculé depuis la config.
+        """
+        league_id = str(self.league.get("yahoo", {}).get("league_id") or "").strip()
+        if not league_id:
+            raise YahooError("ID de ligue Yahoo absent (onglet config > ID de la ligue Yahoo)")
+        picks = self._yahoo_fetch(league_id)
         teams = int(self.league["teams"])
-        self._check_yahoo_order(picks, teams)
-        rows = [(p["round"], (p["pick"] - 1) % teams + 1, p["player"]) for p in picks]
-        log.info("[Yahoo] %d choix lus.", len(rows))
+        mapping = self._team_mapping(picks, teams)
+        total = teams * int(self.league["draft"].get("rounds", 12))
+        owners = [None] * total
+        unknown = set()
+        for p in picks:
+            if 1 <= p["pick"] <= total:
+                owners[p["pick"] - 1] = mapping.get(p["team"])
+                if p["team"] not in mapping:
+                    unknown.add(p["team"])
+        if unknown:
+            self._warn_once("unknown_teams", "Équipes Yahoo non reliées à un manager : %s. Renseignez la colonne "
+                            "« Équipe Yahoo » de l'onglet config. Ordre snake de la config utilisé.",
+                            ", ".join(sorted(unknown)))
+            self.owners = None
+        else:
+            self.owners = owners
+            self._report_order_differences(owners)
+        self._check_keepers(picks, owners if self.owners else None)
+        rows = [(p["round"], (p["pick"] - 1) % teams + 1, p["player"]) for p in picks if p["player"]]
+        log.info("[Yahoo %s] %d choix lus.", self._yahoo_mode, len(rows))
         if self.gs.get("write_picks_to_sheet") and not self.args.no_sheet:
             self._copy_to_sheet(rows)
         return rows
 
-    def _check_yahoo_order(self, picks, teams):
-        """Vérifie que l'ordre Yahoo correspond à l'ordre snake de la config (une alerte par écart)."""
+    def _yahoo_fetch(self, league_id):
+        """[{pick, round, team, player}] : API si elle répond, sinon page publique (mode retenu pour la session)."""
+        from scripts.yahoo import public
+        from scripts.yahoo.client import YahooClient
+        from scripts.yahoo.league import draft_results, league_key, teams as yahoo_teams
+
+        if self._yahoo_mode in (None, "API"):
+            try:
+                if self._yahoo is None:
+                    client = YahooClient(self.settings)
+                    key = league_key(client, league_id)
+                    names = {t["team_key"]: t["name"] for t in yahoo_teams(client, key)}
+                    self._yahoo = (client, key, names, {})
+                client, key, names, cache = self._yahoo
+                picks = draft_results(client, key, cache)
+                self._yahoo_mode = "API"
+                return [{"pick": p["pick"], "round": p["round"], "team": names.get(p["team_key"], p["team_key"]),
+                         "player": p["player"]} for p in picks]
+            except (YahooError, OSError) as exc:
+                if self._yahoo_mode == "API":
+                    raise
+                log.info("API Yahoo indisponible (%s) : lecture de la page publique de la ligue.", exc)
+                self._yahoo_mode = "page publique"
+        try:
+            return public.draft_results(league_id, timeout=self.settings.get("http", {}).get("timeout", 30))
+        except (public.PublicPageError, OSError) as exc:
+            raise YahooError(str(exc)) from exc
+
+    def _team_mapping(self, picks, teams):
+        """Nom d'équipe Yahoo -> manager : colonne « Équipe Yahoo » de la config, sinon déduit du 1er tour."""
+        explicit = (self.league.get("yahoo", {}) or {}).get("teams") or {}
+        if explicit:
+            return {v: k for k, v in explicit.items()}
         order = self.league["draft"].get("order") or []
-        first = {p["pick"]: p["team_key"] for p in picks if p["round"] == 1}
-        if len(first) < teams or len(order) != teams:
+        first = sorted((p for p in picks if p["round"] == 1), key=lambda p: p["pick"])
+        if len(first) != teams or len(order) != teams:
+            return {}
+        mapping = {p["team"]: order[i] for i, p in enumerate(first)}
+        self._warn_once("inferred", "Équipes Yahoo reliées aux managers d'après le 1er tour : %s. À confirmer "
+                        "dans la colonne « Équipe Yahoo » de l'onglet config.",
+                        ", ".join(f"{m} = {t}" for t, m in mapping.items()))
+        return mapping
+
+    def _check_keepers(self, picks, owners):
+        """Keepers : Yahoo fait foi. Les choix des tours keepers remplacent les keepers de la config
+        (équipe par équipe) ; les écarts sont signalés une fois pour mettre l'onglet config à jour."""
+        if not owners:
             return
-        manager_of = {first[i + 1]: order[i] for i in range(teams)}
+        draft = self.league["draft"]
+        rounds = set(draft.get("keeper_rounds") or [])
+        declared = draft.get("keepers") or {}
+        from_yahoo = {}
         for p in picks:
-            expected = self._state_team(p["pick"] - 1, order)
-            actual = manager_of.get(p["team_key"])
-            if actual and actual != expected and p["pick"] not in self._order_warned:
-                self._order_warned.add(p["pick"])
-                log.warning("Choix n°%d : Yahoo l'attribue à %s, l'ordre de la config à %s. Vérifiez l'onglet config.",
-                            p["pick"], actual, expected)
+            if p["round"] in rounds and p["player"]:
+                from_yahoo.setdefault(owners[p["pick"] - 1], []).append(p["player"])
+        for team, names in from_yahoo.items():
+            old = declared.get(team, [])
+            found = {getattr(self.pool.find(n), "idx", n) for n in names}
+            known = {getattr(self.pool.find(n), "idx", n) for n in old}
+            if found != known:
+                self._warn_once(f"keepers-{team}", "Keepers de %s : Yahoo = %s, config = %s. Yahoo fait foi "
+                                "(pensez à mettre l'onglet config à jour).", team, ", ".join(names),
+                                ", ".join(old) or "aucun")
+            declared[team] = names
+        draft["keepers"] = declared
+
+    def _report_order_differences(self, owners):
+        order = self.league["draft"].get("order") or []
+        diffs = [i for i, team in enumerate(owners) if team and team != self._state_team(i, order)]
+        if diffs:
+            self._warn_once("order", "L'ordre Yahoo diffère de l'ordre snake de la config sur %d choix (premier : "
+                            "n°%d). L'ordre Yahoo est utilisé ; vérifiez-le dans Yahoo (Draft Order).",
+                            len(diffs), diffs[0] + 1)
+
+    def _warn_once(self, key, message, *args):
+        if key not in self._order_warned:
+            self._order_warned.add(key)
+            log.warning(message, *args)
 
     @staticmethod
     def _state_team(overall, order):

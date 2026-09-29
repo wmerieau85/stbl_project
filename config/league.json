@@ -2,7 +2,24 @@
   "format": "roto",
   "platform": "yahoo",
   "yahoo": {
-    "league_id": ""
+    "league_id": "4205",
+    "teams": {
+      "Edern": "the Pat's heirs",
+      "Pierre": "Prosper's Cartel",
+      "Stef": "The Houblonners",
+      "Cliffy": "Les Mousquetons",
+      "Lucas": "Sactown",
+      "Tof": "La Bifle Bordel !",
+      "Starkos": "Starkos",
+      "Arno": "The King of Flop",
+      "Véto": "Angers Vets",
+      "Gilbert": "Gennevilliers ground beef",
+      "Toto": "The Raides Fish",
+      "Commish": "SAC Commodores",
+      "Joris": "Uncoachable Crew",
+      "Colo": "Les Coupes Colonels",
+      "Thomas": "Vernon Unbelievers"
+    }
   },
   "teams": 15,
   "roster": {
@@ -76,15 +93,15 @@
       ],
       "Tof": [
         "Nikola Jokic",
-        "Bam Adebayo"
+        "Jerami Grant"
       ],
       "Starkos": [
         "Devin Booker",
         "Jaren Jackson Jr."
       ],
       "Arno": [
-        "Dyson Daniels",
-        "Onyeka Okongwu"
+        "Domantas Sabonis",
+        "Dyson Daniels"
       ],
       "Véto": [
         "Tyrese Maxey",
@@ -112,7 +129,7 @@
       ],
       "Thomas": [
         "Shai Gilgeous-Alexander",
-        "Amen Thompson"
+        "Evan Mobley"
       ]
     },
     "keeper_rounds": [

@@ -81,11 +81,11 @@ def main(argv=None):
             for t in names.values():
                 print(f"  {t['name']} (manager : {t['manager']})")
             picks = draft_results(client, key)
-            print(f"\nChoix de draft déjà effectués : {len(picks)}")
+            print(f"\nChoix de draft déjà effectués : {sum(1 for p in picks if p['player'])} / {len(picks)}")
         elif args.command == "draft":
             key = _key(client, league)
             names = {t["team_key"]: t for t in teams(client, key)}
-            picks = draft_results(client, key)
+            picks = [p for p in draft_results(client, key) if p["player"]]
             os.makedirs(EXPORTS_DIR, exist_ok=True)
             path = os.path.join(EXPORTS_DIR, f"yahoo_draft_{settings['active_season']}.csv")
             with open(path, "w", encoding="utf-8-sig", newline="") as fh:
