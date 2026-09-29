@@ -2,6 +2,8 @@
 
 Chaque ligne de raw_projections porte une clé normalisée (player_key). Le linker :
 1. applique les alias de config/player_aliases.json (nom vu dans une source -> nom canonique) ;
+   sans alias, le nom canonique d'un nouveau joueur est le nom lu, sans accents (Nikola Jokić ->
+   Nikola Jokic), comme dans les onglets du classeur ;
 2. retrouve ou crée le joueur correspondant dans `players` ;
 3. renseigne raw_projections.player_id.
 """
@@ -10,7 +12,7 @@ import logging
 
 from scripts.config import load_aliases
 from scripts.db import get_connection
-from scripts.names import clean_display_name, name_key
+from scripts.names import clean_display_name, name_key, strip_accents
 
 log = logging.getLogger(__name__)
 
@@ -34,7 +36,7 @@ def link_players(relink_all=False, season=None, stage=None):
         created = 0
 
         for raw_key, display_name in unlinked:
-            canonical = aliases.get(raw_key, display_name)
+            canonical = aliases.get(raw_key) or strip_accents(clean_display_name(display_name))
             canonical_key = name_key(canonical)
             player_id = known.get(canonical_key)
             if player_id is None:
