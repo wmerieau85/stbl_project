@@ -17,11 +17,27 @@ from scripts.yahoo.client import YahooClient, YahooError
 from scripts.yahoo.league import draft_results, league_key, league_settings, my_leagues, teams
 
 
+def _sync_config(settings, league):
+    """Relit l'onglet config du classeur (s'il est accessible) pour récupérer l'ID de ligue à jour."""
+    gs = league.get("google_sheets", {})
+    if not (gs.get("draft_spreadsheet_id") and gs.get("config_tab")):
+        return league
+    try:
+        from scripts.draft import config_sheet
+        from scripts.sheets import SheetsError, open_spreadsheet
+
+        config_sheet.pull(open_spreadsheet(gs["draft_spreadsheet_id"], settings), gs["config_tab"])
+        return load_league()
+    except Exception as exc:  # classeur inaccessible : on garde league.json tel quel
+        logging.warning("Onglet config non relu (%s) : utilisation de league.json.", exc)
+        return league
+
+
 def _key(client, league):
     league_id = str(league.get("yahoo", {}).get("league_id") or "").strip()
     if not league_id:
-        raise YahooError("ID de ligue Yahoo absent : renseignez yahoo.league_id dans league.json "
-                         "(ou « ID de la ligue » dans l'onglet config). python -m scripts.yahoo leagues l'affiche.")
+        raise YahooError("ID de ligue Yahoo absent. Lancez python -m scripts.yahoo leagues pour le connaître, puis "
+                         "renseignez « ID de la ligue Yahoo » dans l'onglet config (ou utilisez --league <ID>).")
     return league_key(client, league_id)
 
 
@@ -29,12 +45,17 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description="API Yahoo Fantasy")
     parser.add_argument("command", choices=["auth", "leagues", "check", "draft"])
     parser.add_argument("--no-browser", action="store_true", help="ne pas ouvrir le navigateur (auth)")
+    parser.add_argument("--league", help="ID de la ligue Yahoo (sinon onglet config / league.json)")
     parser.add_argument("-v", "--verbose", action="store_true")
     args = parser.parse_args(argv)
     logging.basicConfig(level=logging.DEBUG if args.verbose else logging.INFO,
                         format="%(asctime)s %(levelname)s %(message)s", datefmt="%H:%M:%S")
     settings, league = load_settings(), load_league()
     client = YahooClient(settings)
+    if args.command in ("check", "draft"):
+        league = _sync_config(settings, league) if not args.league else league
+        if args.league:
+            league.setdefault("yahoo", {})["league_id"] = args.league
     try:
         if args.command == "auth":
             client.authorize(open_browser=not args.no_browser)
