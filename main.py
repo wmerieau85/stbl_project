@@ -6,7 +6,7 @@ Exemples :
     python main.py --sources cbs          # une seule source
     python main.py --file fanscout=C:/chemin/table.csv   # fichier CSV précis
     python main.py --skip-import          # recalcule seulement la pondération
-    python main.py --push-sheet           # ... puis envoie les projections dans l'onglet draft_bdd
+    python main.py --push-sheet           # ... puis envoie les projections (toutes phases) dans l'onglet proj
 """
 
 import argparse
@@ -38,12 +38,34 @@ def parse_args():
     parser.add_argument("--skip-link", action="store_true", help="ne pas lancer le rapprochement des joueurs")
     parser.add_argument("--skip-weighting", action="store_true", help="ne pas calculer les projections finales")
     parser.add_argument("--push-sheet", action="store_true",
-                        help="écrire les projections finales dans Google Sheets (onglet draft_bdd)")
+                        help="écrire les projections finales (toutes phases) dans Google Sheets (onglet proj)")
+    parser.add_argument("--no-sync-config", action="store_true",
+                        help="ne pas relire l'onglet config du classeur (fichiers config/ utilisés tels quels)")
     parser.add_argument("-v", "--verbose", action="store_true", help="logs détaillés")
     return parser.parse_args()
 
 
+def sync_config():
+    """Relit l'onglet config (paramètres, sources, grilles, alias) avant le calcul, si le classeur est accessible."""
+    from scripts.config import load_league
+
+    gs = load_league().get("google_sheets", {})
+    if not (gs.get("draft_spreadsheet_id") and gs.get("config_tab")):
+        return
+    try:
+        from scripts import config_sheet
+        from scripts.sheets import open_spreadsheet
+
+        config_sheet.pull(open_spreadsheet(gs["draft_spreadsheet_id"], load_settings()), gs["config_tab"])
+    except ValueError as exc:  # contenu de l'onglet incohérent : on s'arrête, pour ne pas calculer à tort
+        raise SystemExit(f"Onglet config : {exc}") from None
+    except Exception as exc:  # classeur inaccessible : fichiers locaux
+        log.warning("Onglet config non relu (%s) : fichiers de config/ utilisés tels quels.", exc)
+
+
 def run_pipeline(args):
+    if not args.no_sync_config:
+        sync_config()
     settings = load_settings()
     if args.season:
         settings["active_season"] = args.season
@@ -96,7 +118,7 @@ def run_pipeline(args):
         from scripts.draft.__main__ import push_projections
         from scripts.sheets import SheetsError
         try:
-            push_projections(season=settings["active_season"], phase=settings["active_stage"])
+            push_projections(season=settings["active_season"])
         except (SheetsError, OSError, ValueError) as exc:
             log.error("Envoi vers Google Sheets impossible : %s", exc)
             results["google sheets"] = False

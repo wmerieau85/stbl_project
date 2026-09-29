@@ -23,7 +23,7 @@ def _sync_config(settings, league):
     if not (gs.get("draft_spreadsheet_id") and gs.get("config_tab")):
         return league
     try:
-        from scripts.draft import config_sheet
+        from scripts import config_sheet
         from scripts.sheets import SheetsError, open_spreadsheet
 
         config_sheet.pull(open_spreadsheet(gs["draft_spreadsheet_id"], settings), gs["config_tab"])

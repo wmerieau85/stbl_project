@@ -80,8 +80,9 @@ DEFAULT_LEAGUE = {
     },
     "google_sheets": {
         "draft_spreadsheet_id": "", "config_tab": "config", "picks_tab": "draft_res", "picks_range": "A2:D",
-        "reco_tab": "reco", "projections_spreadsheet_id": "", "projections_tab": "draft_bdd",
-        "projections_start_col": "A", "poll_seconds": 10, "write_picks_to_sheet": True, "season_tab": "season", "rosters_tab": "yahoo_rosters",
+        "reco_tab": "draft_reco", "projections_spreadsheet_id": "", "projections_tab": "proj",
+        "projections_start_col": "A", "poll_seconds": 10, "write_picks_to_sheet": True, "season_tab": "season",
+        "alias_tab": "config_alias",
     },
 }
 

@@ -1,6 +1,10 @@
 """Projections finales au format de l'onglet « export » lu par draft_bdd (IMPORTRANGE A1:BH).
 
-Colonnes : A-R stats par match, T-AD z-scores AVG + EFF + RANG, AF-AT totaux,
+build_rows : une phase, colonnes A-BH (disposition historique).
+build_all_rows : toutes les phases de la saison dans un seul bloc (onglet proj), colonne A = phase
+(draft, lt, st), puis la disposition historique décalée d'une colonne (joueur en B, A:BI).
+
+Colonnes (disposition historique) : A-R stats par match, T-AD z-scores AVG + EFF + RANG, AF-AT totaux,
 AV-BF z-scores TOT + EFF + RANG, BH rang Yahoo (ordre ADP, puis rang TOT sans ADP).
 EFF = somme pondérée des z-scores / somme des poids (moyenne des 9 catégories).
 """
@@ -54,3 +58,21 @@ def build_rows(season=None, phase=None):
         rows.append([p["player"], p["positions"], p["team"]] + per_game + [""] + z_avg + [""]
                     + totals + [""] + z_tot + [""] + [yahoo[p["player_id"]]])
     return rows
+
+
+def phases_available(season):
+    from scripts.weighting.weights import FINAL_PHASES
+
+    with get_connection() as conn:
+        found = [r[0] for r in conn.execute("SELECT DISTINCT phase FROM final_projections WHERE season=?", (season,))]
+    return [p for p in FINAL_PHASES if p in found] + sorted(p for p in found if p not in FINAL_PHASES)
+
+
+def build_all_rows(season=None, phases=None):
+    """Toutes les phases dans un seul bloc : [Phase] + disposition historique."""
+    season = season or load_settings()["active_season"]
+    phases = phases or phases_available(season)
+    rows = [["Phase"] + HEADER]
+    for phase in phases:
+        rows += [[phase] + r for r in build_rows(season, phase)[1:]]
+    return rows, phases

@@ -1,4 +1,4 @@
-"""Mise en forme du module saison : onglet season, onglet yahoo_rosters, résumé console."""
+"""Mise en forme du module saison : onglet season, détail des effectifs (CSV), résumé console."""
 
 from scripts.draft.engine import S, category_values
 from scripts.draft.pool import CATEGORY_LABELS
@@ -24,8 +24,16 @@ def season_rows(result, league):
     teams, cats, proj = result["teams"], result["categories"], result["projection"]
     labels = [CATEGORY_LABELS.get(c, c) for c in cats]
     order = sorted(range(len(teams)), key=lambda i: -proj["expected"][i])
-    rows = [[f"Saison - projection au {result['today'].isoformat()}",
-             "stats réelles + st (15 jours) + lt (reste de la saison), plafonds de matchs par poste"], []]
+    conf = league.get("season", {})
+    st_days = int(conf.get("st_days", 15))
+    rows = [[f"Saison - projection au {result['today'].isoformat()}"],
+            ["Calcul", f"stats réelles + phase {conf.get('st_phase', 'st')} sur {st_days} jours + phase "
+                       f"{conf.get('lt_phase', 'lt')} sur le reste de la saison"],
+            ["Hypothèses", "chaque match joué est compté en priorité pour les meilleurs joueurs (valeur par match), "
+                           "dans la limite des plafonds G / F / C / Util ; effectifs figés à la date du calcul"],
+            ["Ce n'est pas", "une optimisation de l'alignement quotidien ni des ajouts / retraits de joueurs "
+                             "(modules rotation et waivers, à venir)"],
+            []]
 
     rows.append(["Classement projeté"])
     rows.append(["Rang", "Manager", "Équipe Yahoo", "Pts projetés", "Chances 1er", "Chances top 3",
@@ -53,12 +61,37 @@ def season_rows(result, league):
         for b in BUCKETS:
             rows.append([b, round(t.caps[b], 1), round(t.used[b], 1), round(t.caps[b] - t.used[b], 1)])
         rows.append([])
+        rows += my_roster_rows(teams[me], cats)
+        rows.append([])
 
     rows.append(["Stats projetées en fin de saison"])
     rows.append(["Manager", "GP réels"] + labels)
     for i in order:
         rows.append([teams[i].manager, teams[i].actual_gp or ""] +
                     [_fmt(c, proj["values"][i, j]) for j, c in enumerate(cats)])
+    return rows
+
+
+def _contribution(totals, cat):
+    if cat == "fgp":
+        return round(totals[S["fgm"]] / totals[S["fga"]], 3) if totals[S["fga"]] else ""
+    if cat == "ftp":
+        return round(totals[S["ftm"]] / totals[S["fta"]], 3) if totals[S["fta"]] else ""
+    return round(float(totals[S[cat]]), 1)
+
+
+def my_roster_rows(team, cats):
+    """Bloc « Mon effectif » : matchs et apport de chaque joueur d'ici la fin de la saison."""
+    labels = [CATEGORY_LABELS.get(c, c) for c in cats]
+    rows = [[f"Mon effectif ({team.manager}) : matchs et apport d'ici la fin de la saison"],
+            ["Joueur", "Postes", "NBA", "Poste Yahoo", "Matchs au calendrier", "Matchs attendus", "Matchs retenus",
+             "Perdus (plafonds)", "Valeur/match"] + labels]
+    for p in sorted(team.players, key=lambda x: -x.value):
+        lost = max(0.0, p.games_expected - p.games_used)
+        rows.append([p.display or p.name, p.positions, p.nba_team, p.slot, p.games_sched,
+                     round(p.games_expected, 1), round(p.games_used, 1), round(lost, 1),
+                     round(p.value, 2) if p.found else "sans projection"]
+                    + [_contribution(p.totals, c) for c in cats])
     return rows
 
 

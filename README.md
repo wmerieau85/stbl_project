@@ -126,13 +126,13 @@ puis un bloc dans `sources.json` et une ligne dans `scripts/sources/__init__.py`
 ## Assistant de draft (Rotisserie)
 
 Le classeur Google Sheets reste l'interface : on saisit les choix dans `draft_res`
-(colonne D), le script lit l'état de la draft et écrit ses recommandations dans l'onglet `reco`.
+(colonne D), le script lit l'état de la draft et écrit ses recommandations dans l'onglet `draft_reco`.
 
 ```bash
-python main.py --push-sheet                # pipeline complet puis projections -> draft_bdd (A:BH)
-python -m scripts.draft push-projections   # seulement l'envoi des projections vers draft_bdd
-python -m scripts.draft config-push        # league.json -> onglet "config" (à faire une fois)
-python -m scripts.draft config-pull        # onglet "config" -> league.json
+python main.py --push-sheet                # pipeline complet puis projections (toutes phases) -> proj
+python -m scripts.draft push-projections   # seulement l'envoi des projections vers proj
+python -m scripts.draft config-push        # fichiers de config/ -> onglets "config" et "config_alias"
+python -m scripts.draft config-pull        # onglets -> fichiers de config/
 python -m scripts.draft watch              # veille pendant la draft : recalcul à chaque choix saisi
 python -m scripts.draft reco               # un seul calcul
 python -m scripts.draft reco --xlsx draft2627.xlsx --until 40 --no-sheet   # test hors ligne / mock draft
@@ -144,16 +144,24 @@ Mise en place (une fois) :
 2. Partager le classeur de draft avec l'adresse `client_email` du compte de service, en Éditeur.
 3. `google_sheets.draft_spreadsheet_id` dans `config/league.json` : l'identifiant dans l'URL
    `docs.google.com/spreadsheets/d/<ID>/edit` (seul réglage à laisser dans le JSON).
-4. `python -m scripts.draft config-push` crée l'onglet `config` : paramètres de la ligue
-   (section / paramètre / valeur / aide) puis le tableau `Ordre | Manager | Keeper 1 | Keeper 2`
-   (ordre du 1er tour). Ensuite on modifie l'onglet, plus le JSON : `reco` et `watch` relisent
-   l'onglet à chaque lancement et mettent `league.json` à jour (`--no-sync-config` pour l'éviter).
+4. `python -m scripts.draft config-push` crée l'onglet `config`, en blocs repérés par leur
+   1re cellule (un bloc se termine à la 1re ligne vide, ordre libre) :
+   - paramètres `Section | Paramètre | Valeur | Aide`, rangés par module (Général, Ligue,
+     Roster, Catégories, Matchs, Valorisation, Projections, Draft, Saison, Import, Export) ->
+     `league.json` et `settings.json` ;
+   - `Ordre | Manager | Équipe Yahoo | Keeper 1 | Keeper 2...` (ordre du 1er tour) ;
+   - `Source | Code | Activée | Étape | URL ou fichier | Dossier d'import` -> `sources.json`
+     (les étapes autres que draft et ros d'une source web sont ses fenêtres de stats) ;
+   - `Grille draft`, `Grille lt`, `Grille st` -> `config/weights/<phase>.csv` (même disposition,
+     contrôlée avant d'écraser le fichier).
+   Les alias de joueurs sont dans l'onglet `config_alias`. Ensuite on modifie les onglets, plus
+   les fichiers : `main.py`, `reco`, `watch` et `season update` les relisent à chaque lancement
+   (`--no-sync-config` pour l'éviter). Les anciens libellés restent reconnus.
 
-Projections : `push-projections` écrit directement dans `draft_bdd`, colonnes A à BH (même
-disposition que l'ancien onglet `export`), sans toucher aux formules des colonnes BJ et
-suivantes. La formule IMPORTRANGE de A1 est remplacée par les valeurs. Onglet et colonne de
-départ réglables (`projections_tab`, `projections_start_col`, `projections_spreadsheet_id`
-si l'onglet est dans un autre classeur).
+Projections : `push-projections` écrit toutes les phases de la saison (draft, lt, st) dans un
+seul onglet `proj`, colonnes A à BI : A = phase, puis la disposition de l'ancien onglet `export`
+(joueur en B). Les colonnes à droite (formules) ne sont pas touchées. Pour une seule phase :
+`--phase lt`. Onglet et colonne de départ réglables dans l'onglet config (section Projections).
 
 Keepers : `draft.keeper_rounds` = tours occupés par les keepers (`[1, 2]` : le 1er keeper
 prend le choix du manager au tour 1, le 2e au tour 2) ; vide si les keepers s'ajoutent aux
@@ -210,7 +218,7 @@ directement dans Yahoo, les recopie dans la colonne D de `draft_res` (réglable)
 
 ```
 python main.py --stage ros                 # projections ROS (lt) + stats par période (st)
-python -m scripts.season update            # onglets season et yahoo_rosters
+python -m scripts.season update            # onglet season (+ exports/season_rosters_<saison>.csv)
 python -m scripts.season update --no-sheet # console + exports/season_<saison>.csv
 python -m scripts.season update --rosters sheet  # effectifs de l'onglet rosters (simulation de draft)
 ```
