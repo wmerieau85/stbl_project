@@ -159,6 +159,8 @@
     "st_days": 15,
     "lt_phase": "lt",
     "st_phase": "st",
-    "simulations": 2000
+    "simulations": 2000,
+    "roster_source": "yahoo",
+    "roster_tab": "rosters"
   }
 }

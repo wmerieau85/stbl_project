@@ -212,6 +212,7 @@ directement dans Yahoo, les recopie dans la colonne D de `draft_res` (réglable)
 python main.py --stage ros                 # projections ROS (lt) + stats par période (st)
 python -m scripts.season update            # onglets season et yahoo_rosters
 python -m scripts.season update --no-sheet # console + exports/season_<saison>.csv
+python -m scripts.season update --rosters sheet  # effectifs de l'onglet rosters (simulation de draft)
 ```
 
 Projection de fin de saison de chaque équipe = stats réelles (classement Yahoo) + 15 prochains
@@ -220,7 +221,9 @@ fixturedownload.com) et les plafonds de matchs restants par poste (G, F, C, Util
 de chaque équipe. Onglet season : classement projeté (points espérés, chances de titre et de
 podium), mes catégories (ce qu'il faut pour gagner un point, marge avant d'en perdre un), mes
 matchs par poste, stats projetées de toutes les équipes. Sans projections lt, la phase draft
-est utilisée.
+est utilisée. Effectifs : Yahoo par défaut, ou un onglet du classeur (« Source des effectifs » =
+`sheet` dans l'onglet config, colonnes Player et Team repérées par leur en-tête) ; les plafonds de
+matchs sont alors ceux de la saison complète (82 x postes).
 
 Limites : les tentatives de tirs réelles (FGA, FTA) ne sont pas publiées par Yahoo et sont
 estimées ; l'alignement jour par jour (plus de joueurs que de postes certains soirs) sera traité
