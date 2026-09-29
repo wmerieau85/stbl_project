@@ -31,6 +31,7 @@ from scripts.draft import config_sheet, report
 from scripts.draft.engine import Simulator
 from scripts.draft.pool import load_pool
 from scripts.draft.projections_tab import build_rows as projection_rows
+from scripts.yahoo.client import YahooError
 from scripts.draft.state import build_state, picks_from_csv, picks_from_sheet_rows, picks_from_xlsx
 from scripts.sheets import (SheetsError, open_spreadsheet, read_range, service_account_email, write_block,
                             write_tab)
@@ -69,6 +70,9 @@ class Session:
         if args.sims:
             self.league["draft"]["simulations"] = args.sims
         self._pool = None
+        self._yahoo = None
+        self._copied = None
+        self._order_warned = set()
 
     @property
     def pool(self):
@@ -90,9 +94,15 @@ class Session:
             rows = picks_from_xlsx(self.args.xlsx, self.gs.get("picks_tab", "draft_res"))
         elif self.args.csv:
             rows = picks_from_csv(self.args.csv)
+        elif str(self.league["draft"].get("picks_source", "sheet")).lower() == "yahoo":
+            try:
+                rows = self._yahoo_picks()
+            except (YahooError, OSError) as exc:
+                log.warning("Lecture Yahoo impossible (%s) : lecture de l'onglet %s à la place.", exc,
+                            self.gs.get("picks_tab", "draft_res"))
+                rows = self._sheet_picks()
         else:
-            raw = read_range(self.book(), self.gs.get("picks_tab", "draft_res"), self.gs.get("picks_range", "A2:D"))
-            rows = picks_from_sheet_rows(raw)
+            rows = self._sheet_picks()
         if self.args.until is not None:
             teams = int(self.league["teams"])
 
@@ -115,6 +125,70 @@ class Session:
             write_tab(self.book(), self.gs.get("reco_tab", "reco"), sheet_rows)
         print(report.console_summary(reco, state))
         return reco
+
+    def _sheet_picks(self):
+        raw = read_range(self.book(), self.gs.get("picks_tab", "draft_res"), self.gs.get("picks_range", "A2:D"))
+        return picks_from_sheet_rows(raw)
+
+    def _yahoo_picks(self):
+        """Choix lus en direct dans Yahoo ; recopiés dans draft_res si demandé."""
+        from scripts.yahoo.client import YahooClient
+        from scripts.yahoo.league import draft_results, league_key
+
+        if self._yahoo is None:
+            league_id = str(self.league.get("yahoo", {}).get("league_id") or "").strip()
+            if not league_id:
+                raise YahooError("ID de ligue Yahoo absent (onglet config > ID de la ligue Yahoo)")
+            client = YahooClient(self.settings)
+            self._yahoo = (client, league_key(client, league_id), {})
+        client, key, cache = self._yahoo
+        picks = draft_results(client, key, cache)
+        teams = int(self.league["teams"])
+        self._check_yahoo_order(picks, teams)
+        rows = [(p["round"], (p["pick"] - 1) % teams + 1, p["player"]) for p in picks]
+        log.info("[Yahoo] %d choix lus.", len(rows))
+        if self.gs.get("write_picks_to_sheet") and not self.args.no_sheet:
+            self._copy_to_sheet(rows)
+        return rows
+
+    def _check_yahoo_order(self, picks, teams):
+        """Vérifie que l'ordre Yahoo correspond à l'ordre snake de la config (une alerte par écart)."""
+        order = self.league["draft"].get("order") or []
+        first = {p["pick"]: p["team_key"] for p in picks if p["round"] == 1}
+        if len(first) < teams or len(order) != teams:
+            return
+        manager_of = {first[i + 1]: order[i] for i in range(teams)}
+        for p in picks:
+            expected = self._state_team(p["pick"] - 1, order)
+            actual = manager_of.get(p["team_key"])
+            if actual and actual != expected and p["pick"] not in self._order_warned:
+                self._order_warned.add(p["pick"])
+                log.warning("Choix n°%d : Yahoo l'attribue à %s, l'ordre de la config à %s. Vérifiez l'onglet config.",
+                            p["pick"], actual, expected)
+
+    @staticmethod
+    def _state_team(overall, order):
+        rnd, pos = divmod(overall, len(order))
+        return order[pos] if rnd % 2 == 0 else order[len(order) - 1 - pos]
+
+    def _copy_to_sheet(self, rows):
+        digest = hashlib.sha1(json.dumps(rows, default=str).encode()).hexdigest()
+        if digest == self._copied:
+            return
+        tab = self.gs.get("picks_tab", "draft_res")
+        existing = read_range(self.book(), tab, "A2:B")
+        names = {(int(r[0]), int(r[1])): n for r0, r1, n in rows for r in [(r0, r1)]}
+        column = []
+        for r in existing:
+            try:
+                column.append([names.get((int(float(r[0])), int(float(r[1]))), "")])
+            except (TypeError, ValueError, IndexError):
+                column.append([""])
+        if column:
+            self.book().worksheet(tab).update(values=column, range_name=f"D2:D{len(column) + 1}",
+                                              value_input_option="RAW")
+            log.info("[Yahoo] Choix recopiés dans %s (colonne D).", tab)
+        self._copied = digest
 
     def _write_csv(self, rows):
         os.makedirs(EXPORTS_DIR, exist_ok=True)

@@ -1,0 +1,86 @@
+"""Connexion à l'API Yahoo Fantasy.
+
+    python -m scripts.yahoo auth      # autorisation (une seule fois)
+    python -m scripts.yahoo leagues   # mes ligues NBA de la saison, avec leur ID
+    python -m scripts.yahoo check     # réglages, équipes et ordre de draft de la ligue configurée
+    python -m scripts.yahoo draft     # choix de draft effectués (+ exports/yahoo_draft_<saison>.csv)
+"""
+
+import argparse
+import csv
+import logging
+import os
+import sys
+
+from scripts.config import EXPORTS_DIR, load_league, load_settings
+from scripts.yahoo.client import YahooClient, YahooError
+from scripts.yahoo.league import draft_results, league_key, league_settings, my_leagues, teams
+
+
+def _key(client, league):
+    league_id = str(league.get("yahoo", {}).get("league_id") or "").strip()
+    if not league_id:
+        raise YahooError("ID de ligue Yahoo absent : renseignez yahoo.league_id dans league.json "
+                         "(ou « ID de la ligue » dans l'onglet config). python -m scripts.yahoo leagues l'affiche.")
+    return league_key(client, league_id)
+
+
+def main(argv=None):
+    parser = argparse.ArgumentParser(description="API Yahoo Fantasy")
+    parser.add_argument("command", choices=["auth", "leagues", "check", "draft"])
+    parser.add_argument("--no-browser", action="store_true", help="ne pas ouvrir le navigateur (auth)")
+    parser.add_argument("-v", "--verbose", action="store_true")
+    args = parser.parse_args(argv)
+    logging.basicConfig(level=logging.DEBUG if args.verbose else logging.INFO,
+                        format="%(asctime)s %(levelname)s %(message)s", datefmt="%H:%M:%S")
+    settings, league = load_settings(), load_league()
+    client = YahooClient(settings)
+    try:
+        if args.command == "auth":
+            client.authorize(open_browser=not args.no_browser)
+            args.command = "leagues"
+        if args.command == "leagues":
+            found = my_leagues(client)
+            if not found:
+                print("Aucune ligue NBA trouvée pour ce compte cette saison.")
+            for lg in found:
+                print(f"ID {lg['league_id']:>8} | {lg['name']} | saison {lg['season']} | {lg['num_teams']} équipes"
+                      f" | {lg['scoring_type']} | draft : {lg['draft_status']}")
+        elif args.command == "check":
+            key = _key(client, league)
+            s = league_settings(client, key)
+            print(f"Ligue {s['name']} ({key}), saison {s['season']}, {s['num_teams']} équipes, {s['scoring_type']}")
+            print(f"Draft : {s['draft_type']} ({s['draft_status']}), keepers : {s['uses_keepers']}")
+            print("Roster : " + ", ".join(f"{p} {n}" for p, n in s["roster"].items()))
+            print("Catégories : " + ", ".join(s["categories"]))
+            if s.get("max_games_played"):
+                print(f"Matchs max : {s['max_games_played']}")
+            names = {t["team_key"]: t for t in teams(client, key)}
+            print("\nÉquipes :")
+            for t in names.values():
+                print(f"  {t['name']} (manager : {t['manager']})")
+            picks = draft_results(client, key)
+            print(f"\nChoix de draft déjà effectués : {len(picks)}")
+        elif args.command == "draft":
+            key = _key(client, league)
+            names = {t["team_key"]: t for t in teams(client, key)}
+            picks = draft_results(client, key)
+            os.makedirs(EXPORTS_DIR, exist_ok=True)
+            path = os.path.join(EXPORTS_DIR, f"yahoo_draft_{settings['active_season']}.csv")
+            with open(path, "w", encoding="utf-8-sig", newline="") as fh:
+                w = csv.writer(fh, delimiter=";")
+                w.writerow(["pick", "round", "team", "manager", "player", "positions", "nba_team"])
+                for p in picks:
+                    t = names.get(p["team_key"], {})
+                    w.writerow([p["pick"], p["round"], t.get("name", p["team_key"]), t.get("manager", ""),
+                                p["player"], p["positions"], p["nba_team"]])
+                    print(f"{p['pick']:>3} (tour {p['round']:>2}) {t.get('name', p['team_key']):<28} {p['player']}")
+            print(f"{len(picks)} choix écrits dans {path}")
+    except YahooError as exc:
+        logging.error("%s", exc)
+        return 1
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

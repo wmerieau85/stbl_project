@@ -179,6 +179,26 @@ des effectifs actuels avec leurs totaux, et mon équipe. Même contenu dans `exp
 Les noms saisis sont reconnus sans tenir compte des accents, de la casse ni des suffixes ; sinon
 ajouter un alias dans `config/player_aliases.json`.
 
+## Yahoo Fantasy (API)
+
+Lecture seule, via l'application déclarée sur developer.yahoo.com (redirect URI `https://localhost:8080`).
+
+1. Créer `credentials/yahoo_app.json` (dossier ignoré par git) :
+   `{"client_id": "<Client ID>", "client_secret": "<Client Secret>"}`
+2. `python -m scripts.yahoo auth` : ouvre la page Yahoo ; après « Autoriser », le navigateur
+   arrive sur `https://localhost:8080/?code=...` (page qui ne s'affiche pas, c'est normal) :
+   coller l'adresse complète dans le terminal. Le jeton est enregistré dans
+   `credentials/yahoo_token.json` et renouvelé automatiquement.
+3. `python -m scripts.yahoo leagues` : liste mes ligues NBA avec leur ID, à reporter dans
+   l'onglet config (« ID de la ligue Yahoo »).
+4. `python -m scripts.yahoo check` : réglages, équipes et managers, nombre de choix de draft.
+   `python -m scripts.yahoo draft` : choix effectués (+ `exports/yahoo_draft_<saison>.csv`).
+
+Pendant la draft (`Source des choix` = `yahoo` dans l'onglet config), `watch` lit les choix
+directement dans Yahoo, les recopie dans la colonne D de `draft_res` (réglable) et signale tout
+écart entre l'ordre Yahoo et l'ordre de la config. Si Yahoo ne répond pas, lecture de
+`draft_res` à la place : la saisie manuelle reste possible.
+
 ## Limites connues
 
 - CBS n'affiche que les 100 premiers joueurs par poste (500 au total) et un seul poste par joueur.
