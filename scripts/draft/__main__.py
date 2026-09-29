@@ -3,7 +3,7 @@
 Commandes :
     python -m scripts.draft reco                  # une recommandation (choix lus dans Google Sheets)
     python -m scripts.draft watch                 # veille : recalcule à chaque nouveau choix saisi
-    python -m scripts.draft push-projections      # projections finales -> onglet draft_bdd (colonnes A:BH)
+    python -m scripts.draft push-projections      # projections finales, toutes phases -> onglet proj (A = phase)
     python -m scripts.draft config-push           # league.json -> onglet "config" du classeur
     python -m scripts.draft config-pull           # onglet "config" -> league.json
     python -m scripts.draft check                 # vérifie l'accès au classeur (compte de service)
@@ -27,10 +27,11 @@ import sys
 import time
 
 from scripts.config import EXPORTS_DIR, load_league, load_settings
-from scripts.draft import config_sheet, report
+from scripts import config_sheet
+from scripts.draft import report
 from scripts.draft.engine import Simulator
 from scripts.draft.pool import load_pool
-from scripts.draft.projections_tab import build_rows as projection_rows
+from scripts.draft.projections_tab import build_all_rows
 from scripts.names import strip_accents
 from scripts.yahoo.client import YahooError
 from scripts.draft.state import build_state, picks_from_csv, picks_from_sheet_rows, picks_from_xlsx
@@ -45,7 +46,7 @@ def parse_args(argv=None):
     parser.add_argument("command", choices=["reco", "watch", "push-projections", "config-push", "config-pull",
                                             "check"])
     parser.add_argument("--season")
-    parser.add_argument("--phase", help="phase des projections finales (défaut : active_stage)")
+    parser.add_argument("--phase", help="push-projections : n'écrire que cette phase (défaut : toutes)")
     parser.add_argument("--xlsx", help="lire les choix dans un export Excel (onglet draft_res)")
     parser.add_argument("--csv", help="lire les choix dans un CSV round;pick;player")
     parser.add_argument("--until", type=int, help="ne garder que les N premiers choix (mock draft)")
@@ -125,7 +126,7 @@ class Session:
         sheet_rows = report.build_rows(reco, state, self.league)
         self._write_csv(sheet_rows)
         if not self.args.no_sheet and not self.offline:
-            write_tab(self.book(), self.gs.get("reco_tab", "reco"), sheet_rows)
+            write_tab(self.book(), (self.gs.get("reco_tab") or "draft_reco"), sheet_rows)
         print(report.console_summary(reco, state))
         return reco
 
@@ -253,7 +254,7 @@ class Session:
         return order[pos] if rnd % 2 == 0 else order[len(order) - 1 - pos]
 
     def _sheet_name(self, name):
-        """Nom tel qu'il figure dans les projections (draft_bdd), pour que les formules du classeur
+        """Nom tel qu'il figure dans les projections (onglet proj), pour que les formules du classeur
         le retrouvent : « Nikola Jokić » (Yahoo) -> « Nikola Jokic ». Sinon, nom sans accents."""
         player = self.pool.find(name)
         return player.name if player is not None else strip_accents(name)
@@ -302,7 +303,7 @@ def watch(session):
     source = str(session.league["draft"].get("picks_source", "sheet")).lower()
     tab = session.gs.get("picks_tab", "draft_res")
     print(f"Source des choix : {'Yahoo (les saisies de ' + tab + ' sont ignorées)' if source == 'yahoo' else 'onglet ' + tab}"
-          f" ; recommandation écrite dans l'onglet {session.gs.get('reco_tab', 'reco')}.")
+          f" ; recommandation écrite dans l'onglet {session.gs.get('reco_tab') or 'draft_reco'}.")
     print(f"Veille active (toutes les {poll} s). Ctrl+C pour arrêter.")
     while True:
         try:
@@ -319,19 +320,22 @@ def watch(session):
 
 
 def push_projections(session=None, season=None, phase=None):
-    """Écrit les projections finales dans l'onglet cible (draft_bdd, colonnes A:BH par défaut),
-    sans toucher aux colonnes de formules situées à droite."""
+    """Écrit les projections finales de toutes les phases (draft, lt, st) dans l'onglet cible
+    (proj, colonnes A:BI par défaut, A = phase), sans toucher aux colonnes de formules à droite."""
     if session is None:
         league, settings = load_league(), load_settings()
     else:
         league, settings = session.league, session.settings
         season, phase = session.args.season, session.args.phase
     gs = league.get("google_sheets", {})
-    rows = projection_rows(season, phase)
+    season = season or settings["active_season"]
+    rows, phases = build_all_rows(season, [phase] if phase else None)
+    if len(rows) <= 1:
+        raise ValueError(f"Aucune projection finale pour {season} : lancez d'abord python main.py.")
     book = open_spreadsheet(gs.get("projections_spreadsheet_id") or gs.get("draft_spreadsheet_id"), settings)
-    tab = gs.get("projections_tab", "draft_bdd")
+    tab = gs.get("projections_tab") or "proj"
     write_block(book, tab, rows, first_col=gs.get("projections_start_col", "A") or "A")
-    print(f"{len(rows) - 1} joueurs écrits dans l'onglet '{tab}'.")
+    print(f"{len(rows) - 1} lignes écrites dans l'onglet '{tab}' (phases : {', '.join(phases)}).")
 
 
 def main(argv=None):

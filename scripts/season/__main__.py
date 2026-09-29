@@ -1,6 +1,6 @@
 """Module saison : classement réel et projeté en fin de saison.
 
-    python -m scripts.season update             # lit Yahoo, projette, écrit les onglets season et yahoo_rosters
+    python -m scripts.season update             # lit Yahoo, projette, écrit l'onglet season (détail des effectifs en CSV)
     python -m scripts.season update --no-sheet  # console + CSV seulement
     python -m scripts.season update --rosters sheet   # effectifs de l'onglet rosters (simulation de draft)
 
@@ -147,7 +147,7 @@ def main(argv=None):
     gs = league.get("google_sheets", {})
     book = None
     if not args.no_sheet and gs.get("draft_spreadsheet_id"):
-        from scripts.draft import config_sheet
+        from scripts import config_sheet
         from scripts.sheets import open_spreadsheet
         book = open_spreadsheet(gs["draft_spreadsheet_id"], settings)
         if gs.get("config_tab"):
@@ -161,14 +161,13 @@ def main(argv=None):
     season_rows = report.season_rows(result, league)
     roster_rows = report.roster_rows(result)
     os.makedirs(EXPORTS_DIR, exist_ok=True)
-    for name, rows in (("season", season_rows), ("rosters", roster_rows)):
+    for name, rows in (("season", season_rows), ("season_rosters", roster_rows)):
         path = os.path.join(EXPORTS_DIR, f"{name}_{settings['active_season']}.csv")
         with open(path, "w", encoding="utf-8-sig", newline="") as fh:
             csv.writer(fh, delimiter=";").writerows(rows)
     if book is not None:
         from scripts.sheets import write_tab
-        write_tab(book, gs.get("season_tab", "season"), season_rows)
-        write_tab(book, gs.get("rosters_tab", "yahoo_rosters"), roster_rows)
+        write_tab(book, gs.get("season_tab") or "season", season_rows)
     print(report.console(result))
     return 0
 

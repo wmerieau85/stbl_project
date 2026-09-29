@@ -125,7 +125,11 @@ def write_block(spreadsheet, tab, rows, first_col="A", last_col=None):
 
     width = max((len(r) for r in rows), default=1)
     rows = [[_cell(v) for v in list(r) + [""] * (width - len(r))] for r in rows]
-    ws = spreadsheet.worksheet(tab)
+    try:
+        ws = spreadsheet.worksheet(tab)
+    except Exception:  # onglet absent : créé
+        ws = spreadsheet.add_worksheet(title=tab, rows=max(len(rows), 100), cols=width + 2)
+        log.info("[Sheets] Onglet '%s' créé.", tab)
     start_col = a1_to_rowcol(f"{first_col}1")[1]
     end_col = start_col + width - 1
     if last_col:
