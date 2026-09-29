@@ -31,6 +31,7 @@ from scripts.draft import config_sheet, report
 from scripts.draft.engine import Simulator
 from scripts.draft.pool import load_pool
 from scripts.draft.projections_tab import build_rows as projection_rows
+from scripts.names import strip_accents
 from scripts.yahoo.client import YahooError
 from scripts.draft.state import build_state, picks_from_csv, picks_from_sheet_rows, picks_from_xlsx
 from scripts.sheets import (SheetsError, open_spreadsheet, read_range, service_account_email, write_block,
@@ -164,7 +165,7 @@ class Session:
         rows = [(p["round"], (p["pick"] - 1) % teams + 1, p["player"]) for p in picks if p["player"]]
         log.info("[Yahoo %s] %d choix lus.", self._yahoo_mode, len(rows))
         if self.gs.get("write_picks_to_sheet") and not self.args.no_sheet:
-            self._copy_to_sheet(rows)
+            self._copy_to_sheet([(r, k, self._sheet_name(n)) for r, k, n in rows])
         return rows
 
     def _yahoo_fetch(self, league_id):
@@ -251,20 +252,33 @@ class Session:
         rnd, pos = divmod(overall, len(order))
         return order[pos] if rnd % 2 == 0 else order[len(order) - 1 - pos]
 
+    def _sheet_name(self, name):
+        """Nom tel qu'il figure dans les projections (draft_bdd), pour que les formules du classeur
+        le retrouvent : « Nikola Jokić » (Yahoo) -> « Nikola Jokic ». Sinon, nom sans accents."""
+        player = self.pool.find(name)
+        return player.name if player is not None else strip_accents(name)
+
     def _copy_to_sheet(self, rows):
         digest = hashlib.sha1(json.dumps(rows, default=str).encode()).hexdigest()
         if digest == self._copied:
             return
         tab = self.gs.get("picks_tab", "draft_res")
-        existing = read_range(self.book(), tab, "A2:B")
-        names = {(int(r[0]), int(r[1])): n for r0, r1, n in rows for r in [(r0, r1)]}
-        column = []
+        existing = read_range(self.book(), tab, "A2:D")
+        names = {(int(r0), int(r1)): n for r0, r1, n in rows}
+        column, changed = [], False
         for r in existing:
+            r = list(r) + [""] * (4 - len(r))
+            current = str(r[3] or "")
             try:
-                column.append([names.get((int(float(r[0])), int(float(r[1]))), "")])
-            except (TypeError, ValueError, IndexError):
-                column.append([""])
-        if column:
+                key = (int(float(r[0])), int(float(r[1])))
+            except (TypeError, ValueError):
+                column.append([current])
+                continue
+            # seuls les choix faits dans Yahoo sont recopiés : la saisie manuelle des autres est conservée
+            value = names.get(key, current)
+            changed |= value != current
+            column.append([value])
+        if column and changed:
             self.book().worksheet(tab).update(values=column, range_name=f"D2:D{len(column) + 1}",
                                               value_input_option="RAW")
             log.info("[Yahoo] Choix recopiés dans %s (colonne D).", tab)
@@ -285,6 +299,10 @@ def watch(session):
     """Relit les choix toutes les poll_seconds secondes et recalcule dès qu'ils changent."""
     poll = max(3, int(session.gs.get("poll_seconds", 10)))
     last = None
+    source = str(session.league["draft"].get("picks_source", "sheet")).lower()
+    tab = session.gs.get("picks_tab", "draft_res")
+    print(f"Source des choix : {'Yahoo (les saisies de ' + tab + ' sont ignorées)' if source == 'yahoo' else 'onglet ' + tab}"
+          f" ; recommandation écrite dans l'onglet {session.gs.get('reco_tab', 'reco')}.")
     print(f"Veille active (toutes les {poll} s). Ctrl+C pour arrêter.")
     while True:
         try:
