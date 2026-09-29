@@ -1,7 +1,8 @@
 # Grilles de pondération
 
-Un fichier par phase : `draft.csv` (pré-saison), plus tard `lt.csv` (long terme, ROS)
-et `st.csv` (court terme, forme récente). Les phases calculées pour chaque étape sont
+Un fichier par phase : `draft.csv` (pré-saison), `lt.csv` (long terme : projections ROS des sites)
+et `st.csv` (court terme : forme récente, stats FantasyPros saison / 30 / 15 / 7 derniers jours).
+`python main.py --stage ros` importe les projections ROS et les stats par période, puis calcule lt et st. Les phases calculées pour chaque étape sont
 définies dans `settings.json` > `phases` (par défaut `draft` → `draft`, `ros` → `lt` et `st`).
 
 ## Format
@@ -30,8 +31,9 @@ STATS;20,00%;20,00%;20,00%;20,00%;20,00%
 | `fs26` | FanScout, saison 2026-27, projections de pré-saison (draft) |
 | `fp.ros` | FantasyPros, saison active, rest of season |
 | `fp26.ros` | FantasyPros, saison 2026-27, rest of season |
-| `fp.l30` | FantasyPros, fenêtre 30 derniers jours (quand la source sera importée) |
+| `fp.sea` / `fp.l30` / `fp.l15` / `fp.l07` | FantasyPros, stats réelles : saison, 30, 15, 7 derniers jours |
 | `draft` | projections finales de la phase draft (utilisable dans `lt` / `st`) |
+| `lt` | projections finales de la phase lt (utilisable dans `st`, ex. pour les GP) |
 
 Codes des sites (clé `code` dans `sources.json`) : `cbs`, `fp` (FantasyPros),
 `fs` (FanScout), `dk` (DraftKick), `le` (LineupExperts).

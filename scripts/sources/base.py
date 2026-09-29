@@ -98,6 +98,8 @@ def complete_stats(stats, per_game=False):
         stats["mpg"] = _ratio(stats.get("min"), gp, 2)
 
     for made, attempts, pct in (("fgm", "fga", "fgp"), ("ftm", "fta", "ftp"), ("fg3m", "fg3a", "fg3p")):
+        if stats.get(attempts) is None and stats.get(made) is not None and stats.get(pct):
+            stats[attempts] = round(stats[made] / stats[pct], 2)
         if stats.get(made) is None and stats.get(pct) is not None and stats.get(attempts) is not None:
             stats[made] = round(stats[pct] * stats[attempts], 2)
         if stats.get(pct) is None:
