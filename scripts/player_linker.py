@@ -6,13 +6,17 @@ Chaque ligne de raw_projections porte une clé normalisée (player_key). Le link
    Nikola Jokic), comme dans les onglets du classeur ;
 2. retrouve ou crée le joueur correspondant dans `players` ;
 3. renseigne raw_projections.player_id.
+
+Un nom dont un caractère a été perdu à l'encodage (« Nikola Joki? ») est rattaché au joueur
+connu qui correspond, s'il est unique. repair_players() corrige les joueurs déjà enregistrés :
+accents retirés des noms, doublons « à caractère perdu » fusionnés.
 """
 
 import logging
 
 from scripts.config import load_aliases
 from scripts.db import get_connection
-from scripts.names import clean_display_name, name_key, strip_accents
+from scripts.names import clean_display_name, has_lost_chars, match_lost_chars, name_key, strip_accents
 
 log = logging.getLogger(__name__)
 
@@ -39,6 +43,12 @@ def link_players(relink_all=False, season=None, stage=None):
             canonical = aliases.get(raw_key) or strip_accents(clean_display_name(display_name))
             canonical_key = name_key(canonical)
             player_id = known.get(canonical_key)
+            if player_id is None and has_lost_chars(canonical_key):
+                match = match_lost_chars(canonical_key, known)
+                if match:
+                    player_id = known[match]
+                else:
+                    log.warning("[Linker] Nom mal encodé sans correspondance : %s (ajoutez un alias).", display_name)
             if player_id is None:
                 cursor = conn.execute(
                     "INSERT INTO players (canonical_name, name_key) VALUES (?, ?)",
@@ -53,8 +63,33 @@ def link_players(relink_all=False, season=None, stage=None):
             )
 
     log.info("[Linker] %d clé(s) traitée(s), %d nouveau(x) joueur(s).", len(unlinked), created)
+    repair_players()
     if season and stage:
         report_coverage(season, stage)
+
+
+def repair_players():
+    """Noms enregistrés : accents retirés, doublons à caractère perdu fusionnés. Idempotent."""
+    renamed = merged = 0
+    with get_connection() as conn, conn:
+        players = conn.execute("SELECT player_id, canonical_name, name_key FROM players").fetchall()
+        keys = {key: pid for pid, _, key in players}
+        for pid, name, key in players:
+            if has_lost_chars(key):
+                match = match_lost_chars(key, keys)
+                if match:
+                    conn.execute("UPDATE raw_projections SET player_id = ? WHERE player_id = ?", (keys[match], pid))
+                    conn.execute("DELETE FROM players WHERE player_id = ?", (pid,))
+                    merged += 1
+                continue
+            plain = strip_accents(name)
+            if plain != name:
+                conn.execute("UPDATE players SET canonical_name = ? WHERE player_id = ?", (plain, pid))
+                renamed += 1
+    if renamed or merged:
+        log.info("[Linker] Noms corrigés : %d sans accents, %d doublon(s) mal encodé(s) fusionné(s). "
+                 "Relancez la pondération pour mettre à jour les projections finales.", renamed, merged)
+    return renamed, merged
 
 
 def report_coverage(season, stage):

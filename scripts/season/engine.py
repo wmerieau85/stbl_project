@@ -55,6 +55,8 @@ class PlayerProjection:
     games_expected: float = 0.0  # après probabilité de jouer
     games_used: float = 0.0      # après plafonds par poste
     value: float = 0.0
+    lt_gp: float = 0.0           # matchs projetés par la phase lt (doivent être des matchs restants)
+    value_st: float | None = None  # valeur/match en phase st (forme récente), si disponible
     totals: np.ndarray = field(default_factory=lambda: np.zeros(len(STATS)))
 
 
@@ -98,6 +100,9 @@ def project_team(manager, team_name, roster, standing, lt_pool, st_pool, games, 
             e_st, e_lt = g_st * p_play, g_lt * p_play
             pp.games_expected = e_st + e_lt
             pp.value = lt.value_avg
+            pp.lt_gp = lt.gp or 0.0
+            if st is not None:
+                pp.value_st = st.value_avg
             rate_st = _per_game(st if st is not None else lt)
             pp.totals = rate_st * e_st + _per_game(lt) * e_lt
         players.append(pp)
@@ -198,3 +203,11 @@ def category_gaps(values, categories, me):
                     "to_gain": (better[0] - mine) if better else None,
                     "margin": (mine - worse[0]) if worse else None})
     return out
+
+
+def gp_inconsistencies(teams, tolerance=2):
+    """Joueurs dont les matchs projetés en lt dépassent leurs matchs restants au calendrier :
+    signe qu'une source ROS donne un total sur la saison entière et non des matchs restants."""
+    return sorted(((p.display or p.name, p.lt_gp, p.games_sched) for t in teams for p in t.players
+                   if p.found and p.games_sched and p.lt_gp > p.games_sched + tolerance),
+                  key=lambda x: x[2] - x[1])

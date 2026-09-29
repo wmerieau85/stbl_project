@@ -7,7 +7,7 @@ import numpy as np
 
 from scripts.config import load_aliases, load_settings
 from scripts.db import get_connection
-from scripts.names import clean_display_name, name_key
+from scripts.names import clean_display_name, name_key, has_lost_chars, match_lost_chars
 
 log = logging.getLogger(__name__)
 
@@ -55,6 +55,9 @@ class Pool:
             return None
         key = self._aliases.get(key, key)
         player = self._by_key.get(key)
+        if player is None and has_lost_chars(key):  # « Nikola Joki? » (accent perdu)
+            match = match_lost_chars(key, self._by_key)
+            player = self._by_key.get(match) if match else None
         if player is None:  # dernier recours : "Nom Prénom" inversé ou initiale
             parts = key.split()
             if len(parts) >= 2:

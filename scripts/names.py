@@ -25,6 +25,24 @@ def clean_display_name(raw_name):
     return " ".join(text.split()).strip()
 
 
+LOST_CHARS = "?\ufffd"   # caractères perdus par un mauvais encodage (Jokić -> Joki?)
+
+
+def has_lost_chars(text):
+    return any(c in (text or "") for c in LOST_CHARS)
+
+
+def match_lost_chars(key, candidates):
+    """Clé contenant des caractères perdus (« nikola joki? ») -> clé candidate unique qui
+    correspond (« nikola jokic »), sinon None. Chaque caractère perdu vaut 1 ou 2 lettres."""
+    if not has_lost_chars(key):
+        return None
+    pattern = "".join(".{1,2}" if c in LOST_CHARS else re.escape(c) for c in key)
+    regex = re.compile(f"^{pattern}$")
+    found = [c for c in candidates if not has_lost_chars(c) and regex.match(c)]
+    return found[0] if len(found) == 1 else None
+
+
 def name_key(name):
     """Clé de rapprochement entre sources.
 
