@@ -24,6 +24,7 @@ import numpy as np
 
 from scripts.draft.engine import CATEGORY_ORDER, LOWER_IS_BETTER, UNCERTAINTY, S, category_values, roto_points
 from scripts.draft.pool import STATS
+from scripts.names import strip_accents
 from scripts.season.schedule import games_by_team, team_code
 
 log = logging.getLogger(__name__)
@@ -49,6 +50,7 @@ class PlayerProjection:
     positions: str
     slot: str
     found: bool
+    display: str = ""            # nom des projections (sans accents), sinon nom Yahoo sans accents
     games_sched: int = 0         # matchs restants au calendrier
     games_expected: float = 0.0  # après probabilité de jouer
     games_used: float = 0.0      # après plafonds par poste
@@ -89,7 +91,8 @@ def project_team(manager, team_name, roster, standing, lt_pool, st_pool, games, 
         nba = team_code(entry["nba_team"] or (lt.team if lt else ""))
         g_st, g_lt = sched_st.get(nba, 0), sched_lt.get(nba, 0)
         pp = PlayerProjection(entry["player"], nba, entry["positions"] or (lt.positions if lt else ""),
-                              entry["slot"], lt is not None, games_sched=g_st + g_lt)
+                              entry["slot"], lt is not None,
+                              display=lt.name if lt else strip_accents(entry["player"]), games_sched=g_st + g_lt)
         if lt is not None and pp.games_sched:
             p_play = min(1.0, lt.gp / pp.games_sched) if lt.gp else 0.0
             e_st, e_lt = g_st * p_play, g_lt * p_play

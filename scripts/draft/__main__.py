@@ -31,6 +31,7 @@ from scripts.draft import config_sheet, report
 from scripts.draft.engine import Simulator
 from scripts.draft.pool import load_pool
 from scripts.draft.projections_tab import build_rows as projection_rows
+from scripts.names import strip_accents
 from scripts.yahoo.client import YahooError
 from scripts.draft.state import build_state, picks_from_csv, picks_from_sheet_rows, picks_from_xlsx
 from scripts.sheets import (SheetsError, open_spreadsheet, read_range, service_account_email, write_block,
@@ -164,7 +165,7 @@ class Session:
         rows = [(p["round"], (p["pick"] - 1) % teams + 1, p["player"]) for p in picks if p["player"]]
         log.info("[Yahoo %s] %d choix lus.", self._yahoo_mode, len(rows))
         if self.gs.get("write_picks_to_sheet") and not self.args.no_sheet:
-            self._copy_to_sheet(rows)
+            self._copy_to_sheet([(r, k, self._sheet_name(n)) for r, k, n in rows])
         return rows
 
     def _yahoo_fetch(self, league_id):
@@ -250,6 +251,12 @@ class Session:
     def _state_team(overall, order):
         rnd, pos = divmod(overall, len(order))
         return order[pos] if rnd % 2 == 0 else order[len(order) - 1 - pos]
+
+    def _sheet_name(self, name):
+        """Nom tel qu'il figure dans les projections (draft_bdd), pour que les formules du classeur
+        le retrouvent : « Nikola Jokić » (Yahoo) -> « Nikola Jokic ». Sinon, nom sans accents."""
+        player = self.pool.find(name)
+        return player.name if player is not None else strip_accents(name)
 
     def _copy_to_sheet(self, rows):
         digest = hashlib.sha1(json.dumps(rows, default=str).encode()).hexdigest()

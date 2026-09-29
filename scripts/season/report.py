@@ -67,7 +67,7 @@ def roster_rows(result):
              "Matchs au calendrier", "Matchs attendus", "Matchs retenus", "Valeur/match (lt)"]]
     for t in result["teams"]:
         for p in sorted(t.players, key=lambda x: -x.value):
-            rows.append([t.manager, t.team_name, p.name, p.positions, p.nba_team, p.slot,
+            rows.append([t.manager, t.team_name, p.display, p.positions, p.nba_team, p.slot,
                          "oui" if p.found else "non", p.games_sched, round(p.games_expected, 1),
                          round(p.games_used, 1), round(p.value, 2)])
     return rows
