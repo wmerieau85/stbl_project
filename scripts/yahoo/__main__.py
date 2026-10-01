@@ -28,8 +28,8 @@ def _sync_config(settings, league):
 
         config_sheet.pull(open_spreadsheet(gs["draft_spreadsheet_id"], settings), gs["config_tab"])
         return load_league()
-    except Exception as exc:  # classeur inaccessible : on garde league.json tel quel
-        logging.warning("Onglet config non relu (%s) : utilisation de league.json.", exc)
+    except Exception as exc:  # classeur inaccessible : on garde la configuration locale
+        logging.warning("Onglet config non relu (%s) : utilisation de la configuration locale.", exc)
         return league
 
 
@@ -45,7 +45,7 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description="API Yahoo Fantasy")
     parser.add_argument("command", choices=["auth", "leagues", "check", "draft"])
     parser.add_argument("--no-browser", action="store_true", help="ne pas ouvrir le navigateur (auth)")
-    parser.add_argument("--league", help="ID de la ligue Yahoo (sinon onglet config / league.json)")
+    parser.add_argument("--league", help="ID de la ligue Yahoo (sinon onglet config)")
     parser.add_argument("-v", "--verbose", action="store_true")
     args = parser.parse_args(argv)
     logging.basicConfig(level=logging.DEBUG if args.verbose else logging.INFO,

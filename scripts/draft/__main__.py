@@ -4,8 +4,8 @@ Commandes :
     python -m scripts.draft reco                  # une recommandation (choix lus dans Google Sheets)
     python -m scripts.draft watch                 # veille : recalcule à chaque nouveau choix saisi
     python -m scripts.draft push-projections      # projections finales, toutes phases -> onglet proj (A = phase)
-    python -m scripts.draft config-push           # league.json -> onglet "config" du classeur
-    python -m scripts.draft config-pull           # onglet "config" -> league.json
+    python -m scripts.draft config-push           # configuration locale -> onglets "config" et alias (remise à plat)
+    python -m scripts.draft config-pull           # onglets "config" et alias -> config/config.json
     python -m scripts.draft check                 # vérifie l'accès au classeur (compte de service)
 
 Hors ligne (tests, mock draft) :
@@ -14,7 +14,7 @@ Hors ligne (tests, mock draft) :
 
 Options communes : --season, --phase, --sims N, --no-sheet (n'écrit pas dans le classeur).
 Les paramètres (ordre de draft, keepers, mon équipe...) sont dans l'onglet "config" du classeur,
-recopié dans config/league.json au lancement de reco / watch (sauf --no-sync-config).
+recopié dans config/config.json au lancement de reco / watch (sauf --no-sync-config).
 """
 
 import argparse
@@ -50,7 +50,7 @@ def parse_args(argv=None):
     parser.add_argument("--xlsx", help="lire les choix dans un export Excel (onglet draft_res)")
     parser.add_argument("--csv", help="lire les choix dans un CSV round;pick;player")
     parser.add_argument("--until", type=int, help="ne garder que les N premiers choix (mock draft)")
-    parser.add_argument("--sims", type=int, help="nombre de simulations (défaut : league.json)")
+    parser.add_argument("--sims", type=int, help="nombre de simulations (défaut : onglet config)")
     parser.add_argument("--no-sheet", action="store_true", help="ne rien écrire dans Google Sheets")
     parser.add_argument("--no-sync-config", action="store_true", help="ne pas relire l'onglet config")
     parser.add_argument("-v", "--verbose", action="store_true")
@@ -67,6 +67,7 @@ class Session:
         if (args.command in ("reco", "watch") and not self.offline and not args.no_sync_config
                 and self.gs.get("config_tab")):
             config_sheet.pull(self.book(), self.gs["config_tab"])
+            self.settings = load_settings()
             self.league = load_league()
             self.gs = self.league.get("google_sheets", {})
         if args.sims:
@@ -352,10 +353,10 @@ def main(argv=None):
             push_projections(session)
         elif args.command == "config-push":
             config_sheet.push(session.book(), session.gs.get("config_tab") or "config", session.league)
-            print(f"Onglet '{session.gs.get('config_tab') or 'config'}' écrit à partir de league.json.")
+            print(f"Onglet '{session.gs.get('config_tab') or 'config'}' réécrit à partir de la configuration locale.")
         elif args.command == "config-pull":
             config_sheet.pull(session.book(), session.gs.get("config_tab") or "config")
-            print("config/league.json mis à jour.")
+            print("config/config.json mis à jour.")
         elif args.command == "watch":
             watch(session)
         else:

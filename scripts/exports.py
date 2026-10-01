@@ -1,4 +1,4 @@
-"""Exports CSV (format réglé dans settings.json > export : séparateur et décimale).
+"""Exports CSV (format réglé dans l'onglet config, Pipeline | Export).
 
     python -m scripts.exports                 # projections brutes de la saison/étape actives
     python -m scripts.exports --stage ros     # autre étape

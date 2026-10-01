@@ -5,12 +5,11 @@ token.json
 service_account*.json
 .env
 
-# JSON ignorés par défaut, sauf la configuration partagée
+# JSON ignorés par défaut, sauf la configuration livrée.
+# config/config.json est la copie locale de l'onglet config (réécrite à chaque lancement) : non suivie.
 *.json
-!config/sources.json
-!config/settings.json
-!config/player_aliases.json
-!config/league.json
+!config/defaults.json
+!config/bootstrap.json
 
 # Base de données locale
 *.sqlite

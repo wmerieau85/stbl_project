@@ -262,7 +262,7 @@ def compute_phase(phase, settings=None, grid_path=None):
 
 
 def export_csv(phase, season, settings=None):
-    """Écrit exports/final_<phase>_<saison>.csv (séparateur et décimale de settings.json)."""
+    """Écrit exports/final_<phase>_<saison>.csv (séparateur et décimale : Pipeline | Export)."""
     columns = [c for c in FINAL_COLUMNS if c not in ("weights_hash", "computed_at")]
     # tri selon le format de la ligue : H2H -> rang AVG, Rotisserie -> rang TOT
     order = "rank_tot" if str(load_league().get("format", "h2h")).lower() == "roto" else "rank_avg"

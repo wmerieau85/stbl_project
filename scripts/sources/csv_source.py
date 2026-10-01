@@ -1,6 +1,6 @@
 """Base des sources alimentées par un fichier CSV déposé manuellement.
 
-Le fichier est cherché dans le dossier `import_dir` défini dans sources.json,
+Le fichier est cherché dans le dossier `import_dir` défini dans l'onglet config (Sources | Import Files),
 selon le motif propre à l'étape (`files.draft`, `files.ros`...). Si plusieurs
 fichiers correspondent, le plus récent (d'après le nom, puis la date de
 modification) est utilisé. Un chemin précis peut aussi être imposé.
@@ -43,7 +43,7 @@ def detect_delimiter(text):
 
 
 class CsvProjectionSource(ProjectionSource):
-    """Source CSV générique : tout se paramètre dans sources.json."""
+    """Source CSV générique : tout se paramètre dans l'onglet config."""
 
     def __init__(self, settings=None, http=None, file_path=None):
         super().__init__(settings, http)
@@ -58,7 +58,7 @@ class CsvProjectionSource(ProjectionSource):
             return self.file_path if os.path.exists(self.file_path) else None
         pattern = self.source_config.get("files", {}).get(self.stage)
         if not pattern:
-            log.error("[%s] Aucun motif de fichier pour l'étape '%s' dans sources.json.", self.label, self.stage)
+            log.error("[%s] Aucun motif de fichier pour l'étape '%s' (Sources | Draft / RoS).", self.label, self.stage)
             return None
         candidates = glob.glob(os.path.join(self.import_dir(), pattern))
         if not candidates:
@@ -133,7 +133,7 @@ class CsvProjectionSource(ProjectionSource):
         pos_col = self.source_config.get("positions_column")
         missing = [c for c in [player_col, team_col, pos_col] if c and c not in rows[0]]
         if missing:
-            log.error("[%s] Colonnes absentes du CSV : %s (vérifier sources.json).", self.label, ", ".join(missing))
+            log.error("[%s] Colonnes absentes du CSV : %s (vérifier les lignes Transco de l'onglet config).", self.label, ", ".join(missing))
             return []
         unknown = sorted(set(rows[0]) - set(self.source_config["columns"]) - {player_col, team_col, pos_col})
         if unknown:

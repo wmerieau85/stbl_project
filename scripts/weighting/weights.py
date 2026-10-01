@@ -1,4 +1,4 @@
-"""Lecture et validation des grilles de pondération (config/weights/<phase>.csv).
+"""Lecture et validation des grilles de pondération (onglet config, sections « Grid <phase> | ... »).
 
 Format : la grille telle qu'elle est dans Google Sheets (copier/coller ou export CSV).
 
@@ -22,7 +22,7 @@ import logging
 import os
 import re
 
-from scripts.config import WEIGHTS_DIR, load_sources_config
+from scripts.config import load_grid_rows, load_sources_config
 
 log = logging.getLogger(__name__)
 
@@ -60,7 +60,7 @@ def season_from_year(yy):
 
 
 def source_codes():
-    """{code: libellé enregistré en base}, depuis config/sources.json."""
+    """{code: libellé enregistré en base}, depuis la configuration des sources."""
     from scripts.sources import SOURCES
 
     sources_config = load_sources_config()
@@ -145,10 +145,16 @@ def _level_of(label):
 def load_grid(phase, active_season, path=None):
     """Retourne {"phase", "path", "slots": [{slot, code, source, season, stage, final,
     weights: {"gp": w, "min": w, "stats": {cat: w}}}]} avec des poids normalisés (somme = 1)."""
-    path = path or os.path.join(WEIGHTS_DIR, f"{phase}.csv")
-    if not os.path.exists(path):
-        raise FileNotFoundError(path)
-    rows = _read_rows(path)
+    if path:
+        if not os.path.exists(path):
+            raise FileNotFoundError(path)
+        rows = _read_rows(path)
+    else:
+        rows = load_grid_rows(phase)
+        if rows is None:
+            raise FileNotFoundError(f"grille {phase} (onglet config, sections Grid {phase})")
+        rows = [[str(c) for c in r] for r in rows if any(str(c).strip() for c in r)]
+        path = f"Grille {phase}"
     if len(rows) < 3:
         raise WeightsError(f"{path} : grille incomplète.")
 

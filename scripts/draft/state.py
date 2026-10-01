@@ -77,10 +77,10 @@ def build_state(league, pool, pick_rows, owners=None):
     order = list(draft.get("order") or [])
     teams = int(league["teams"])
     if len(order) != teams:
-        raise ValueError(f"league.json : draft.order contient {len(order)} managers, {teams} attendus.")
+        raise ValueError(f"Onglet config : Draft | Order contient {len(order)} managers, {teams} attendus.")
     my_team = draft.get("my_team") or ""
     if my_team not in order:
-        raise ValueError(f"league.json : draft.my_team '{my_team}' absent de draft.order.")
+        raise ValueError(f"Onglet config : My team '{my_team}' absent de Draft | Order.")
     if str(draft.get("type", "snake")).lower() != "snake":
         raise ValueError("Seule la draft snake est gérée pour l'instant.")
 
@@ -128,7 +128,7 @@ def build_state(league, pool, pick_rows, owners=None):
     _fill_keeper_rounds(state, draft.get("keeper_rounds") or [])
     state.unknown, state.duplicates = unknown, duplicates
     for label in unknown:
-        log.warning("Nom non reconnu : %s (ajoutez un alias dans config/player_aliases.json)", label)
+        log.warning("Nom non reconnu : %s (ajoutez un alias dans l'onglet config_alias)", label)
     for name in duplicates:
         log.warning("Joueur saisi deux fois : %s", name)
     return state

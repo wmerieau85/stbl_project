@@ -1,0 +1,12 @@
+{
+  "spreadsheet_id": "1vLuP0XS4sPpfgx4anXB1icjLfQXkyHc7QMdaGsVpcao",
+  "config_tab": "config",
+  "google": {
+    "service_account_file": "credentials/service_account.json"
+  },
+  "yahoo": {
+    "app_file": "credentials/yahoo_app.json",
+    "token_file": "credentials/yahoo_token.json",
+    "redirect_uri": "https://localhost:8080"
+  }
+}

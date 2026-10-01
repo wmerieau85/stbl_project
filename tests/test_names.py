@@ -1,6 +1,5 @@
-import json
 
-from scripts.config import ALIASES_PATH
+from scripts.config import load_aliases
 from scripts.names import has_lost_chars, match_lost_chars, name_key, strip_accents
 
 
@@ -27,7 +26,7 @@ def test_lost_chars_match_unique_candidate():
 
 
 def test_aliases_are_clean():
-    aliases = json.load(open(ALIASES_PATH, encoding="utf-8"))
+    aliases = load_aliases()
     assert not [k for k in aliases if has_lost_chars(k) or has_lost_chars(aliases[k])]
     assert not [k for k, v in aliases.items() if k == v]
     assert not [v for v in aliases.values() if strip_accents(v) != v]
