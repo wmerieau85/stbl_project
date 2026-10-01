@@ -16,7 +16,7 @@ from scripts.weighting.engine import compute_phase, run_phases
 parser = argparse.ArgumentParser(description="Projections finales pondérées")
 parser.add_argument("--phase", help="draft, lt, st... (sinon phases de l'étape active)")
 parser.add_argument("--season", help="ex. 2026-27")
-parser.add_argument("--grid", help="grille à utiliser à la place de config/weights/<phase>.csv")
+parser.add_argument("--grid", help="grille CSV à utiliser à la place de celle de l'onglet config")
 args = parser.parse_args()
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)-7s %(message)s", datefmt="%H:%M:%S")

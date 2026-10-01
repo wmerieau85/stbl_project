@@ -5,7 +5,7 @@ Fichiers locaux (dossier credentials/, jamais versionné) :
 - credentials/yahoo_token.json : jeton d'accès, créé par `python -m scripts.yahoo auth`
   puis renouvelé automatiquement.
 
-Chemins réglables dans config/settings.json > "yahoo".
+Chemins réglables dans config/bootstrap.json > "yahoo".
 """
 
 import base64

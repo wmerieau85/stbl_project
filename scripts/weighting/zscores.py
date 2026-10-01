@@ -1,6 +1,6 @@
 """Z-scores des 9 catégories, en moyenne par match (AVG) et en totaux (TOT).
 
-Paramètres dans config/league.json :
+Paramètres dans l'onglet config :
 - teams x somme du roster = taille du groupe de joueurs draftés (15 x 14 = 210) ;
 - categories : poids de chaque catégorie dans la somme (0 = catégorie ignorée / punt) ;
 - zscore.min_gp : matchs projetés minimum pour entrer dans le groupe de référence ;
@@ -103,9 +103,9 @@ def add_zscores(players, league):
     """Ajoute z_<cat>_avg/tot, z_sum_avg/tot et rank_avg/tot à chaque joueur (en place)."""
     unknown = [c for c in league["categories"] if c not in CATEGORIES]
     if unknown:
-        raise ValueError(f"league.json : catégories inconnues {unknown} (attendu : {', '.join(CATEGORIES)})")
+        raise ValueError(f"Configuration : catégories inconnues {unknown} (attendu : {', '.join(CATEGORIES)})")
     if str(league.get("format", "h2h")).lower() not in ("h2h", "roto"):
-        raise ValueError("league.json : format attendu 'h2h' ou 'roto'.")
+        raise ValueError("Configuration : format attendu 'h2h' ou 'roto'.")
     for mode in MODES:
         params = _compute_mode(players, league, mode)
         log.debug("Z-scores %s : %s", mode, params)

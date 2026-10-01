@@ -55,7 +55,7 @@ COUNTING_COLUMNS = {
 
 
 def standardize_stats(raw_stats, columns_map, percent_scale):
-    """Renomme les colonnes selon sources.json et convertit les valeurs."""
+    """Renomme les colonnes selon la configuration (Transco) et convertit les valeurs."""
     stats = {}
     for source_col, value in raw_stats.items():
         std_col = columns_map.get(source_col.strip().lower())
@@ -110,7 +110,7 @@ def complete_stats(stats, per_game=False):
 class ProjectionSource:
     """Classe de base d'une source de projections."""
 
-    name = ""  # clé dans config/sources.json
+    name = ""  # nom interne de la source (configuration des sources)
     label = ""  # valeur enregistrée dans la colonne `source`
 
     def __init__(self, settings=None, http=None):
@@ -149,7 +149,7 @@ class ProjectionSource:
     def url_template(self):
         template = self.source_config.get("urls", {}).get(self.stage)
         if not template:
-            raise ValueError(f"[{self.label}] Aucune URL pour l'étape '{self.stage}' dans sources.json")
+            raise ValueError(f"[{self.label}] Aucune URL pour l'étape '{self.stage}' (onglet config, Sources | Draft / RoS)")
         return template
 
     def fetch(self):

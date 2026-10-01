@@ -1,7 +1,7 @@
 """Pipeline STBL : import des projections, rapprochement des joueurs, puis pondération.
 
 Exemples :
-    python main.py                        # sources et étape définies dans config/settings.json
+    python main.py                        # sources et étape définies dans l'onglet config
     python main.py --stage ros            # projections "rest of season" + stats par période (lt, st)
     python main.py --sources cbs          # une seule source
     python main.py --file fanscout=C:/chemin/table.csv   # fichier CSV précis
@@ -13,7 +13,7 @@ import argparse
 import logging
 import sys
 
-from scripts.config import load_settings
+from scripts.config import enabled_sources, load_settings
 from scripts.db import init_db
 from scripts.exports import export_raw_projections
 from scripts.http_client import HttpClient
@@ -27,7 +27,7 @@ log = logging.getLogger("stbl")
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Pipeline de projections fantasy NBA (STBL)")
-    parser.add_argument("--season", help="ex. 2026-27 (sinon valeur de settings.json)")
+    parser.add_argument("--season", help="ex. 2026-27 (sinon valeur de l'onglet config)")
     parser.add_argument("--stage", choices=["draft", "ros"], help="draft ou ros")
     parser.add_argument("--sources", nargs="+", choices=sorted(SOURCES), help="sources à importer")
     parser.add_argument(
@@ -72,7 +72,7 @@ def run_pipeline(args):
     if args.stage:
         settings["active_stage"] = args.stage
 
-    selected = args.sources or [name for name, enabled in settings["sources"].items() if enabled]
+    selected = args.sources or enabled_sources(settings)
     unknown = [name for name in selected if name not in SOURCES]
     if unknown:
         log.warning("Sources inconnues ignorées : %s", ", ".join(unknown))

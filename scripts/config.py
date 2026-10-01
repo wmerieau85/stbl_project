@@ -7,25 +7,31 @@ import os
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CONFIG_DIR = os.path.join(BASE_DIR, "config")
 DB_PATH = os.path.join(BASE_DIR, "database.sqlite")
-SETTINGS_PATH = os.path.join(CONFIG_DIR, "settings.json")
-SOURCES_PATH = os.path.join(CONFIG_DIR, "sources.json")
-ALIASES_PATH = os.path.join(CONFIG_DIR, "player_aliases.json")
-LEAGUE_PATH = os.path.join(CONFIG_DIR, "league.json")
-WEIGHTS_DIR = os.path.join(CONFIG_DIR, "weights")
+# Configuration : l'onglet « config » du classeur fait foi. config/config.json en est la copie locale
+# (écrite par config_sheet.pull, ignorée par git) ; config/defaults.json sert tant qu'elle n'existe pas.
+# config/bootstrap.json : ce qu'il faut connaître avant de lire le classeur (ID, onglet, identifiants).
+BOOTSTRAP_PATH = os.path.join(CONFIG_DIR, "bootstrap.json")
+DEFAULTS_PATH = os.path.join(CONFIG_DIR, "defaults.json")
+CONFIG_PATH = os.environ.get("STBL_CONFIG") or os.path.join(CONFIG_DIR, "config.json")
+# libellés des catégories dans l'onglet config (Settings | Scoring)
+CATEGORY_LABELS_SHEET = {"fgp": "FG%", "fg3m": "3PM", "ftp": "FT%", "reb": "REB", "ast": "AST", "stl": "STL",
+                         "blk": "BLK", "tov": "TO", "pts": "PTS"}
 EXPORTS_DIR = os.path.join(BASE_DIR, "exports")
 
-# Valeurs de secours si une clé manque dans config/settings.json.
+# Valeurs de secours si une clé manque dans la configuration.
 DEFAULT_SETTINGS = {
     "active_season": "2026-27",
     "active_stage": "draft",  # "draft" ou "ros"
     # stats réelles par période, importées avec l'étape ros (codes fp.sea, fp.l30... des grilles)
     "stats_windows": {"fantasypros": ["sea", "l30", "l15", "l07"]},
-    "sources": {"cbs": True, "fantasypros": True, "fanscout": True, "draftkick": True, "lineupexperts": True},
+    # sources activées par étape : {"cbs": {"draft": True, "ros": True}, ...}
+    "sources": {name: {"draft": True, "ros": True}
+                for name in ("cbs", "fantasypros", "fanscout", "draftkick", "lineupexperts")},
     "google": {"service_account_file": "credentials/service_account.json"},
     "yahoo": {"app_file": "credentials/yahoo_app.json", "token_file": "credentials/yahoo_token.json",
               "redirect_uri": "https://localhost:8080"},
     "http": {"timeout": 30, "retries": 2, "pause_seconds": 1.5},
-    # Phases de pondération calculées selon l'étape active (grilles dans config/weights/)
+    # Phases de pondération calculées selon l'étape active (grilles de l'onglet config)
     "phases": {"draft": ["draft"], "ros": ["lt", "st"]},
     # Export CSV des projections finales (format Excel / Google Sheets FR par défaut)
     "export": {"delimiter": ";", "decimal": ","},
@@ -48,18 +54,66 @@ def _deep_merge(base, override):
     return result
 
 
+def load_bootstrap():
+    data = {"spreadsheet_id": "", "config_tab": "config",
+            "google": {"service_account_file": "credentials/service_account.json"},
+            "yahoo": {"app_file": "credentials/yahoo_app.json", "token_file": "credentials/yahoo_token.json",
+                      "redirect_uri": "https://localhost:8080"}}
+    if os.path.exists(BOOTSTRAP_PATH):
+        data = _deep_merge(data, _read_json(BOOTSTRAP_PATH))
+    return data
+
+
+def save_bootstrap(data):
+    _write_json(BOOTSTRAP_PATH, data)
+
+
+def load_config():
+    """Configuration complète {league, settings, sources, grids, aliases} : copie locale de l'onglet
+    config (config/config.json), sinon valeurs livrées (config/defaults.json)."""
+    path = CONFIG_PATH if os.path.exists(CONFIG_PATH) else DEFAULTS_PATH
+    data = _read_json(path) if os.path.exists(path) else {}
+    for key, empty in (("league", {}), ("settings", {}), ("sources", {}), ("grids", {}), ("aliases", {})):
+        data.setdefault(key, empty)
+    return data
+
+
+def save_config(data):
+    _write_json(CONFIG_PATH, data)
+
+
+def _write_json(path, data):
+    with open(path, "w", encoding="utf-8") as fh:
+        json.dump(data, fh, ensure_ascii=False, indent=2)
+        fh.write("\n")
+
+
+def _stage_flags(value):
+    if isinstance(value, dict):
+        return {"draft": bool(value.get("draft", False)), "ros": bool(value.get("ros", False))}
+    return {"draft": bool(value), "ros": bool(value)}
+
+
 def load_settings():
-    """Retourne les réglages actifs (valeurs par défaut + config/settings.json)."""
-    if os.path.exists(SETTINGS_PATH):
-        return _deep_merge(DEFAULT_SETTINGS, _read_json(SETTINGS_PATH))
-    return copy.deepcopy(DEFAULT_SETTINGS)
+    """Réglages actifs : valeurs par défaut + configuration + chemins locaux (bootstrap)."""
+    settings = _deep_merge(DEFAULT_SETTINGS, load_config()["settings"])
+    boot = load_bootstrap()
+    settings["google"] = boot["google"]
+    settings["yahoo"] = boot["yahoo"]
+    settings["sources"] = {name: _stage_flags(v) for name, v in settings["sources"].items()}
+    return settings
+
+
+def enabled_sources(settings, stage=None):
+    stage = stage or settings["active_stage"]
+    return [name for name, flags in settings["sources"].items() if _stage_flags(flags).get(stage)]
 
 
 def load_source_config(source_name):
-    """Retourne le bloc de config/sources.json propre à une source."""
-    sources = _read_json(SOURCES_PATH)
+    """Réglages propres à une source (URL / fichiers, colonnes...)."""
+    sources = load_sources_config()
     if source_name not in sources:
-        raise KeyError(f"Source '{source_name}' absente de config/sources.json")
+        raise KeyError(f"Source '{source_name}' absente de la configuration (onglet config, sections Sources)")
     return sources[source_name]
 
 
@@ -91,27 +145,31 @@ NON_STARTING_SLOTS = ("BN", "IL", "IL+")
 
 
 def load_league():
-    """Paramètres de la ligue (config/league.json) complétés par les valeurs par défaut."""
-    if not os.path.exists(LEAGUE_PATH):
-        return copy.deepcopy(DEFAULT_LEAGUE)
-    league = _read_json(LEAGUE_PATH)
+    """Paramètres de la ligue complétés par les valeurs par défaut et le bootstrap (ID du classeur)."""
+    league = load_config()["league"]
     merged = _deep_merge(DEFAULT_LEAGUE, league)
-    # roster et catégories : la liste du fichier remplace entièrement celle par défaut
+    # roster et catégories : la liste de la configuration remplace entièrement celle par défaut
     for key in ("roster", "categories"):
         if key in league:
             merged[key] = league[key]
+    boot = load_bootstrap()
+    merged["google_sheets"]["draft_spreadsheet_id"] = boot.get("spreadsheet_id", "")
+    merged["google_sheets"]["config_tab"] = boot.get("config_tab") or "config"
     return merged
 
 
 def load_sources_config():
-    return _read_json(SOURCES_PATH)
+    return load_config()["sources"]
 
 
 def load_aliases():
-    """Alias de noms : {"nom vu dans une source": "nom canonique"}."""
-    if os.path.exists(ALIASES_PATH):
-        return _read_json(ALIASES_PATH)
-    return {}
+    """Alias de noms : {"nom vu dans une source": "nom canonique"} (onglet config_alias)."""
+    return load_config()["aliases"]
+
+
+def load_grid_rows(phase):
+    """Grille de pondération d'une phase, sous forme de lignes (disposition CSV historique)."""
+    return load_config()["grids"].get(phase)
 
 
 def starting_slots(league):

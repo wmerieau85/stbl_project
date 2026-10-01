@@ -17,7 +17,7 @@ pip install -r requirements.txt
 Toujours lancer depuis la racine du projet.
 
 ```bash
-python main.py                          # réglages de config/settings.json
+python main.py                          # réglages de l'onglet config
 python main.py --stage ros              # projections "rest of season"
 python main.py --sources fantasypros    # une seule source
 python main.py --skip-link -v           # sans rapprochement, logs détaillés
@@ -32,13 +32,40 @@ python -m scripts.player_linker         # relancer le rapprochement
 
 ## Configuration
 
+L'onglet `config` du classeur Google Sheets fait foi : on ne modifie plus de JSON à la main.
+Une ligne par information, quatre colonnes `Section | Paramètre | Valeur | Aide`, ordre libre :
+
+| Section | Contenu |
+|---|---|
+| `Settings \| League / Roster Positions / Scoring / Phases / Draft` | saison et étape actives, format, ligue Yahoo, mon équipe, postes, poids des catégories, grilles lt / st, snake, tours, tours des keepers |
+| `Sheets \| Settings / Tab / Draft / Projections / Season` | ID du classeur, noms des onglets, source des choix de draft et des effectifs (`yahoo` / `sheet`) |
+| `Optim \| Draft / Season` | z-scores, veille, candidats, simulations, horizon court terme |
+| `Pipeline \| Import / Export` | réglages HTTP, séparateur et décimale des CSV |
+| `Draft \| Order`, `Draft \| Keepers`, `Transco \| Managers` | ordre du 1er tour, keepers (mode `sheet` seulement : sinon Yahoo fait foi), équipes Yahoo |
+| `Sources \| Types / Draft / RoS / Active / Import Files / Sea / L30 / L15 / L07` | par code de site (`cbs`, `fp`, `fs`, `dk`, `le`) : URL ou fichier par étape, sources actives par étape, dossiers d'import, fenêtres de stats réelles |
+| `Grid <phase> \| GP / MIN / STATS / <catégorie>` | grilles de pondération : code de la ligne « site » -> poids (chaque niveau = 100 %) |
+| `Transco \| <colonne> / percent_scale / Player / Team / Positions...` | lecture des sites : colonne du site pour chaque colonne standard, options de lecture |
+
+Les alias de joueurs sont dans l'onglet `config_alias`. `main.py`, `reco`, `watch`,
+`season update` et `yahoo` relisent les onglets à chaque lancement (`--no-sync-config` pour
+l'éviter) : une erreur de saisie arrête le calcul avec un message, une ligne inconnue est signalée.
+
 | Fichier | Versionné | Rôle |
 |---|---|---|
-| `config/settings.json` | oui | Réglages d'exécution : saison active, étape (`draft`/`ros`), sources activées, phases de pondération, format d'export, réglages HTTP. |
-| `config/sources.json` | oui | Description de chaque source : code court (grilles de pondération), URL ou dossier/fichiers d'import, échelle des pourcentages, correspondance colonnes source -> colonnes standard. |
-| `config/league.json` | oui | Paramètres de la ligue, à adapter chaque saison : `format` (`h2h` / `roto`), `platform`, `teams`, `roster` (joueurs par poste, IL et BN compris), `categories` (poids, 0 = ignorée), `zscore`, `games` (matchs par poste titulaire, alignements quotidiens), `draft` (snake, tours, ordre, mon équipe, keepers, réglages des simulations) et `google_sheets` (classeurs et onglets). |
-| `config/weights/<phase>.csv` | oui | Grilles de pondération des sources (GP / MIN / STATS), au format de la grille Google Sheets. Voir `config/weights/README.md`. |
-| `config/player_aliases.json` | oui | `{"nom dans une source": "nom canonique"}` pour les joueurs que la normalisation ne suffit pas à relier (ex. `"Nic Claxton": "Nicolas Claxton"`). |
+| `config/bootstrap.json` | oui | ce qu'il faut avant de lire le classeur : `spreadsheet_id`, `config_tab`, chemins des identifiants Google / Yahoo (jamais les secrets). L'ID et l'onglet sont repris de l'onglet config s'ils y changent. |
+| `config/config.json` | non | copie locale des onglets, réécrite à chaque relecture (permet de travailler hors ligne). |
+| `config/defaults.json` | oui | configuration livrée, utilisée tant que `config.json` n'existe pas (et par les tests). |
+
+```bash
+python -m scripts.config_sheet pull      # onglets config + config_alias -> config/config.json
+python -m scripts.config_sheet check     # contrôle l'onglet sans rien écrire
+python -m scripts.config_sheet push      # remise à plat des onglets depuis la configuration locale
+python -m scripts.config_sheet migrate   # ancien format (blocs) -> nouveau, copie dans config_old
+```
+
+Codes de la ligne « site » des grilles : `fs26` (FanScout 2026-27, pré-saison), `fp.ros`
+(FantasyPros, saison active, rest of season), `fp26.ros`, `fp.sea` / `fp.l30` / `fp.l15` /
+`fp.l07` (stats réelles), `draft` / `lt` (projections finales d'une phase calculée avant).
 
 ## Sources
 
@@ -81,14 +108,14 @@ scripts/weighting/zscores.py z-scores des 9 catégories (AVG et TOT), sommes et 
 Ajouter une source :
 - **web** : une classe héritant de `ProjectionSource` (méthodes `page_requests` et `parse_page`) ;
 - **CSV** : une classe de deux lignes héritant de `CsvProjectionSource` (voir `fanscout.py`) ;
-  tout le reste se règle dans `sources.json` :
+  tout le reste se règle dans l'onglet config (sections Sources et Transco) :
   - `import_dir`, `files` (motif du fichier par étape) ;
   - `player_column`, `team_column`, `positions_column` (un en-tête en double devient `Nom_2`) ;
   - `stat_mode` (`auto`, `totals`, `per_game`), `percent_scale` (1 ou 100) ;
   - `empty_as_zero` (case vide = 0), `missing_values` (ex. ADP 999 = vide), `skip_players` ;
   - `columns` (en-tête du CSV -> colonne standard) ;
 
-puis un bloc dans `sources.json` et une ligne dans `scripts/sources/__init__.py`.
+puis sa configuration dans `config/defaults.json` > `sources` (code, `urls` ou `files`) et une ligne dans `scripts/sources/__init__.py`.
 
 ## Données
 
@@ -109,7 +136,7 @@ puis un bloc dans `sources.json` et une ligne dans `scripts/sources/__init__.py`
   `fga_estimated`, et les z-scores : `z_<cat>_avg` / `z_<cat>_tot` pour FG%, 3PM, FT%, REB,
   AST, STL, BLK, TO, PTS, leur somme pondérée `z_sum_avg` / `z_sum_tot` et le rang
   `rank_avg` / `rank_tot`. Exportées (triées par `rank_avg` en H2H, `rank_tot` en Roto) dans `exports/final_<phase>_<saison>.csv` (`;` et virgule
-  décimale par défaut, réglable dans `settings.json` > `export`).
+  décimale par défaut, réglable dans l'onglet config, `Pipeline | Export`).
 
 ## Z-scores
 
@@ -129,8 +156,8 @@ Le classeur Google Sheets reste l'interface : on saisit les choix dans `draft_re
 ```bash
 python main.py --push-sheet                # pipeline complet puis projections (toutes phases) -> proj
 python -m scripts.draft push-projections   # seulement l'envoi des projections vers proj
-python -m scripts.draft config-push        # fichiers de config/ -> onglets "config" et "config_alias"
-python -m scripts.draft config-pull        # onglets -> fichiers de config/
+python -m scripts.draft config-push        # configuration locale -> onglets "config" et "config_alias"
+python -m scripts.draft config-pull        # onglets -> config/config.json
 python -m scripts.draft watch              # veille pendant la draft : recalcul à chaque choix saisi
 python -m scripts.draft reco               # un seul calcul
 python -m scripts.draft reco --xlsx draft2627.xlsx --until 40 --no-sheet   # test hors ligne / mock draft
@@ -138,30 +165,19 @@ python -m scripts.draft reco --xlsx draft2627.xlsx --until 40 --no-sheet   # tes
 
 Mise en place (une fois) :
 1. Copier le JSON du compte de service dans `credentials/service_account.json` (ignoré par git),
-   ou modifier `google.service_account_file` dans `config/settings.json`.
+   ou modifier `google.service_account_file` dans `config/bootstrap.json`.
 2. Partager le classeur de draft avec l'adresse `client_email` du compte de service, en Éditeur.
-3. `google_sheets.draft_spreadsheet_id` dans `config/league.json` : l'identifiant dans l'URL
-   `docs.google.com/spreadsheets/d/<ID>/edit` (seul réglage à laisser dans le JSON).
-4. `python -m scripts.draft config-push` crée l'onglet `config`, en blocs repérés par leur
-   1re cellule (un bloc se termine à la 1re ligne vide, ordre libre) :
-   - paramètres `Section | Paramètre | Valeur | Aide`, rangés par module (Général, Ligue,
-     Roster, Catégories, Matchs, Valorisation, Projections, Draft, Saison, Import, Export) ->
-     `league.json` et `settings.json` ;
-   - `Ordre | Manager | Équipe Yahoo | Keeper 1 | Keeper 2...` (ordre du 1er tour) ;
-   - `Source | Code | Activée | Étape | URL ou fichier | Dossier d'import` -> `sources.json`
-     (les étapes autres que draft et ros d'une source web sont ses fenêtres de stats) ;
-   - `Grille draft`, `Grille lt`, `Grille st` -> `config/weights/<phase>.csv` (même disposition,
-     contrôlée avant d'écraser le fichier).
-   Les alias de joueurs sont dans l'onglet `config_alias`. Ensuite on modifie les onglets, plus
-   les fichiers : `main.py`, `reco`, `watch` et `season update` les relisent à chaque lancement
-   (`--no-sync-config` pour l'éviter). Les anciens libellés restent reconnus.
+3. `spreadsheet_id` dans `config/bootstrap.json` : l'identifiant dans l'URL
+   `docs.google.com/spreadsheets/d/<ID>/edit`.
+4. `python -m scripts.config_sheet push` crée les onglets `config` et `config_alias` (voir
+   Configuration) ; ensuite on ne modifie plus que les onglets.
 
 Projections : `push-projections` écrit toutes les phases de la saison (draft, lt, st) dans un
 seul onglet `proj`, colonnes A à BI : A = phase, puis la disposition de l'ancien onglet `export`
 (joueur en B). Les colonnes à droite (formules) ne sont pas touchées. Pour une seule phase :
 `--phase lt`. Onglet et colonne de départ réglables dans l'onglet config (section Projections).
 
-Keepers : `draft.keeper_rounds` = tours occupés par les keepers (`[1, 2]` : le 1er keeper
+Keepers : `Settings | Draft | Keeper rounds` = tours occupés par les keepers (`1, 2` : le 1er keeper
 prend le choix du manager au tour 1, le 2e au tour 2) ; vide si les keepers s'ajoutent aux
 tours. Un keeper saisi dans `draft_res` par son propre manager n'est jamais compté deux fois.
 
@@ -183,7 +199,7 @@ L'onglet `reco` contient : l'état de la draft, les 20 meilleurs candidats (poin
 avec le n°1, disponibilité, points par catégorie), le classement roto projeté, le classement
 des effectifs actuels avec leurs totaux, et mon équipe. Même contenu dans `exports/reco_<saison>.csv`.
 Les noms saisis sont reconnus sans tenir compte des accents, de la casse ni des suffixes ; sinon
-ajouter un alias dans `config/player_aliases.json`.
+ajouter un alias dans l'onglet `config_alias`.
 
 ## Yahoo Fantasy (API)
 

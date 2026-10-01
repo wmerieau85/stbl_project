@@ -1,6 +1,6 @@
 """Lecture / écriture Google Sheets via un compte de service (gspread).
 
-Le fichier JSON du compte de service est indiqué dans config/settings.json :
+Le fichier JSON du compte de service est indiqué dans config/bootstrap.json :
     "google": {"service_account_file": "credentials/service_account.json"}
 (chemin relatif à la racine du projet ; le dossier credentials/ est ignoré par git).
 Le classeur doit être partagé avec l'adresse e-mail du compte de service (droit Éditeur).
@@ -26,14 +26,14 @@ def _service_account_path(settings=None):
     if not path or not os.path.exists(path):
         raise SheetsError(
             f"Fichier du compte de service introuvable : '{path}'. "
-            "Renseignez google.service_account_file dans config/settings.json."
+            "Renseignez google.service_account_file dans config/bootstrap.json."
         )
     return path
 
 
 def open_spreadsheet(spreadsheet_id, settings=None):
     if not spreadsheet_id:
-        raise SheetsError("Identifiant de classeur vide : renseignez google_sheets dans config/league.json.")
+        raise SheetsError("Identifiant de classeur vide : renseignez spreadsheet_id dans config/bootstrap.json.")
     try:
         import gspread
     except ImportError as exc:  # pragma: no cover
