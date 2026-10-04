@@ -2,6 +2,8 @@
 
 import csv
 import logging
+
+from scripts.names import name_key
 from dataclasses import dataclass, field
 
 log = logging.getLogger(__name__)
@@ -118,7 +120,7 @@ def build_state(league, pool, pick_rows, owners=None):
         if player is None:
             unknown.append(f"{name} (tour {rnd}, choix {pick})")
         elif player.idx in keeper_team and keeper_team[player.idx] == state.team_at(overall):
-            # keeper saisi dans draft_res par son manager : compté comme ce choix, pas en double
+            # keeper saisi dans les choix par son manager : compté comme ce choix, pas en double
             state.keepers[keeper_team.pop(player.idx)].remove(player)
         elif player.idx in seen:
             duplicates.append(player.name)
@@ -128,7 +130,7 @@ def build_state(league, pool, pick_rows, owners=None):
     _fill_keeper_rounds(state, draft.get("keeper_rounds") or [])
     state.unknown, state.duplicates = unknown, duplicates
     for label in unknown:
-        log.warning("Nom non reconnu : %s (ajoutez un alias dans l'onglet config_alias)", label)
+        log.warning("Nom non reconnu : %s (ajoutez un alias dans l'onglet players)", label)
     for name in duplicates:
         log.warning("Joueur saisi deux fois : %s", name)
     return state
@@ -170,8 +172,72 @@ def picks_from_csv(path):
         return [(r.get("round"), r.get("pick"), r.get("player")) for r in csv.DictReader(fh, dialect=dialect)]
 
 
+def picks_from_assignments(league, pool, assignments):
+    """[(manager, joueur)] (colonne Team Draft de l'onglet bdd) -> [(tour, choix, joueur)].
+
+    L'onglet ne dit pas à quel choix chaque joueur a été pris : les joueurs d'un manager occupent
+    ses choix dans l'ordre snake, ses keepers (Draft | Keepers) d'abord dans les tours keepers,
+    les autres dans l'ordre des lignes. Le choix en cours est donc le premier choix d'un manager
+    qui n'a pas encore autant de joueurs que de choix passés.
+    """
+    draft = league["draft"]
+    order = list(draft.get("order") or [])
+    teams, rounds = len(order), int(draft.get("rounds", 12))
+    if not teams:
+        return []
+    keeper_rounds = set(draft.get("keeper_rounds") or [])
+    keepers = {}
+    for team, names in (draft.get("keepers") or {}).items():
+        for name in names or []:
+            player = pool.find(name)
+            keepers.setdefault(team, set()).add(player.idx if player is not None else name_key(name))
+
+    def team_at(overall):
+        rnd, pos = divmod(overall, teams)
+        return order[pos] if rnd % 2 == 0 else order[teams - 1 - pos]
+
+    slots = {t: [o for o in range(teams * rounds) if team_at(o) == t] for t in order}
+    rows, unknown, too_many = [], set(), set()
+    by_team = {}
+    for manager, name in assignments:
+        if manager not in slots:
+            unknown.add(manager)
+            continue
+        by_team.setdefault(manager, []).append(name)
+    for team, names in by_team.items():
+        def is_keeper(n):
+            player = pool.find(n)
+            return (player.idx if player is not None else name_key(n)) in keepers.get(team, set())
+        keeper_slots = [o for o in slots[team] if o // teams + 1 in keeper_rounds]
+        other_slots = [o for o in slots[team] if o // teams + 1 not in keeper_rounds]
+        for name in [n for n in names if is_keeper(n)] + [n for n in names if not is_keeper(n)]:
+            first, second = (keeper_slots, other_slots) if is_keeper(name) else (other_slots, keeper_slots)
+            pool_slots = first or second
+            if not pool_slots:
+                too_many.add(team)
+                continue
+            overall = pool_slots.pop(0)
+            rows.append((overall // teams + 1, overall % teams + 1, name))
+    if unknown:
+        log.warning("Team Draft : managers inconnus de Draft | Order ignorés : %s", ", ".join(sorted(unknown)))
+    for team in sorted(too_many):
+        log.warning("Team Draft : %s a plus de joueurs que de choix (%d), surplus ignoré.", team, rounds)
+    return sorted(rows)
+
+
+def picks_from_bdd_xlsx(path, league, pool, tab="bdd", gs=None):
+    """Mock draft hors ligne : export Excel du classeur, colonne Team Draft de l'onglet bdd."""
+    import openpyxl
+
+    from scripts.bdd import draft_assignments
+
+    ws = openpyxl.load_workbook(path, data_only=True, read_only=True)[tab]
+    rows = [["" if v is None else v for v in r] for r in ws.iter_rows(max_col=8, values_only=True)]
+    return picks_from_assignments(league, pool, draft_assignments(rows, gs or {}))
+
+
 def picks_from_sheet_rows(rows):
-    """Lignes brutes de la plage draft_res!A2:D : tour, choix, clé, joueur."""
+    """Lignes brutes d'une plage tour, choix, clé, joueur (ancien onglet draft_res)."""
     out = []
     for r in rows:
         r = list(r) + [""] * 4

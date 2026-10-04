@@ -1,7 +1,7 @@
 """Projections finales au format de l'onglet « export » lu par draft_bdd (IMPORTRANGE A1:BH).
 
 build_rows : une phase, colonnes A-BH (disposition historique).
-build_all_rows : toutes les phases de la saison dans un seul bloc (onglet proj), colonne A = phase
+build_all_rows : toutes les phases de la saison dans un seul bloc (onglet bdd), colonne Phase
 (draft, lt, st), puis la disposition historique décalée d'une colonne (joueur en B, A:BI).
 
 Colonnes (disposition historique) : A-R stats par match, T-AD z-scores AVG + EFF + RANG, AF-AT totaux,

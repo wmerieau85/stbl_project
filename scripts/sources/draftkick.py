@@ -7,7 +7,7 @@ draftkick_<étape>_AAAA-MM-JJ.csv (ex. draftkick_ros_2026-09-25.csv), puis :
     python -m scripts.sources.draftkick                        # fichier le plus récent
     python -m scripts.sources.draftkick chemin/vers/export.csv  # fichier précis
 
-Particularités de l'export, gérées dans l'onglet config (Transco) :
+Particularités de l'export, gérées dans l'onglet settings (Transco) :
 - deux colonnes "Team" : la 1re est l'équipe fantasy (vide), la 2e l'équipe NBA ("Team_2") ;
 - ADP 999 = joueur non drafté (enregistré vide) ;
 - cases de stats vides = 0 ;

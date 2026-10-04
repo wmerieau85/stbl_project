@@ -1,6 +1,6 @@
 """Z-scores des 9 catégories, en moyenne par match (AVG) et en totaux (TOT).
 
-Paramètres dans l'onglet config :
+Paramètres dans l'onglet settings :
 - teams x somme du roster = taille du groupe de joueurs draftés (15 x 14 = 210) ;
 - categories : poids de chaque catégorie dans la somme (0 = catégorie ignorée / punt) ;
 - zscore.min_gp : matchs projetés minimum pour entrer dans le groupe de référence ;

@@ -13,7 +13,7 @@ DB_PATH = os.path.join(BASE_DIR, "database.sqlite")
 BOOTSTRAP_PATH = os.path.join(CONFIG_DIR, "bootstrap.json")
 DEFAULTS_PATH = os.path.join(CONFIG_DIR, "defaults.json")
 CONFIG_PATH = os.environ.get("STBL_CONFIG") or os.path.join(CONFIG_DIR, "config.json")
-# libellés des catégories dans l'onglet config (Settings | Scoring)
+# libellés des catégories dans l'onglet settings (Settings | Scoring)
 CATEGORY_LABELS_SHEET = {"fgp": "FG%", "fg3m": "3PM", "ftp": "FT%", "reb": "REB", "ast": "AST", "stl": "STL",
                          "blk": "BLK", "tov": "TO", "pts": "PTS"}
 EXPORTS_DIR = os.path.join(BASE_DIR, "exports")
@@ -31,7 +31,7 @@ DEFAULT_SETTINGS = {
     "yahoo": {"app_file": "credentials/yahoo_app.json", "token_file": "credentials/yahoo_token.json",
               "redirect_uri": "https://localhost:8080"},
     "http": {"timeout": 30, "retries": 2, "pause_seconds": 1.5},
-    # Phases de pondération calculées selon l'étape active (grilles de l'onglet config)
+    # Phases de pondération calculées selon l'étape active (grilles de l'onglet settings)
     "phases": {"draft": ["draft"], "ros": ["lt", "st"]},
     # Export CSV des projections finales (format Excel / Google Sheets FR par défaut)
     "export": {"delimiter": ";", "decimal": ","},
@@ -55,7 +55,7 @@ def _deep_merge(base, override):
 
 
 def load_bootstrap():
-    data = {"spreadsheet_id": "", "config_tab": "config",
+    data = {"spreadsheet_id": "", "config_tab": "settings",
             "google": {"service_account_file": "credentials/service_account.json"},
             "yahoo": {"app_file": "credentials/yahoo_app.json", "token_file": "credentials/yahoo_token.json",
                       "redirect_uri": "https://localhost:8080"}}
@@ -113,7 +113,7 @@ def load_source_config(source_name):
     """Réglages propres à une source (URL / fichiers, colonnes...)."""
     sources = load_sources_config()
     if source_name not in sources:
-        raise KeyError(f"Source '{source_name}' absente de la configuration (onglet config, sections Sources)")
+        raise KeyError(f"Source '{source_name}' absente de la configuration (onglet settings, sections Sources)")
     return sources[source_name]
 
 
@@ -126,18 +126,21 @@ DEFAULT_LEAGUE = {
     "platform": "yahoo",
     "yahoo": {"league_id": ""},
     "season": {"st_days": 15, "lt_phase": "lt", "st_phase": "st", "simulations": 2000,
-               "roster_source": "yahoo", "roster_tab": "rosters"},
+               "roster_source": "yahoo"},
     "games": {"per_slot": 82, "lineup": "daily"},
     "draft": {
         "type": "snake", "rounds": 12, "my_team": "", "order": [], "keepers": {}, "keeper_rounds": [], "picks_source": "sheet",
         "candidates": 40, "simulations": 40, "adp_noise": 0.15,
     },
     "google_sheets": {
-        "draft_spreadsheet_id": "", "config_tab": "config", "picks_tab": "draft_res", "picks_range": "A2:D",
-        "reco_tab": "draft_reco", "projections_spreadsheet_id": "", "projections_tab": "proj",
-        "projections_start_col": "A", "poll_seconds": 10, "write_picks_to_sheet": True, "season_tab": "season",
-        "alias_tab": "config_alias",
+        "draft_spreadsheet_id": "", "config_tab": "settings",
+        "reco_tab": "draft_reco", "projections_spreadsheet_id": "", "projections_tab": "bdd",
+        "projections_start_col": "C", "poll_seconds": 10, "write_picks_to_sheet": True, "season_tab": "season",
+        "alias_tab": "players",
     },
+    # tirage au sort de l'ordre de draft (onglet board)
+    "lottery": {"balls_range": "board!N8:O22", "managers_range": "board!B8:B22", "active_range": "board!L8:L22",
+                "number_range": "board!AA9", "output_range": "lottery!A1"},
 }
 
 # Postes qui ne comptent pas dans le plafond de matchs (banc, blessés)
@@ -154,7 +157,7 @@ def load_league():
             merged[key] = league[key]
     boot = load_bootstrap()
     merged["google_sheets"]["draft_spreadsheet_id"] = boot.get("spreadsheet_id", "")
-    merged["google_sheets"]["config_tab"] = boot.get("config_tab") or "config"
+    merged["google_sheets"]["config_tab"] = boot.get("config_tab") or "settings"
     return merged
 
 
@@ -163,7 +166,7 @@ def load_sources_config():
 
 
 def load_aliases():
-    """Alias de noms : {"nom vu dans une source": "nom canonique"} (onglet config_alias)."""
+    """Alias de noms : {"nom vu dans une source": "nom canonique"} (onglet players)."""
     return load_config()["aliases"]
 
 

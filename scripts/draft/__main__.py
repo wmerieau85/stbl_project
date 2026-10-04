@@ -3,9 +3,9 @@
 Commandes :
     python -m scripts.draft reco                  # une recommandation (choix lus dans Google Sheets)
     python -m scripts.draft watch                 # veille : recalcule à chaque nouveau choix saisi
-    python -m scripts.draft push-projections      # projections finales, toutes phases -> onglet proj (A = phase)
-    python -m scripts.draft config-push           # configuration locale -> onglets "config" et alias (remise à plat)
-    python -m scripts.draft config-pull           # onglets "config" et alias -> config/config.json
+    python -m scripts.draft push-projections      # projections finales, toutes phases -> onglet bdd (C = phase)
+    python -m scripts.draft config-push           # configuration locale -> onglets "settings" et "players" (remise à plat)
+    python -m scripts.draft config-pull           # onglets "settings" et "players" -> config/config.json
     python -m scripts.draft check                 # vérifie l'accès au classeur (compte de service)
 
 Hors ligne (tests, mock draft) :
@@ -13,7 +13,7 @@ Hors ligne (tests, mock draft) :
     python -m scripts.draft reco --csv picks.csv  # colonnes round;pick;player
 
 Options communes : --season, --phase, --sims N, --no-sheet (n'écrit pas dans le classeur).
-Les paramètres (ordre de draft, keepers, mon équipe...) sont dans l'onglet "config" du classeur,
+Les paramètres (ordre de draft, keepers, mon équipe...) sont dans l'onglet "settings" du classeur,
 recopié dans config/config.json au lancement de reco / watch (sauf --no-sync-config).
 """
 
@@ -27,15 +27,16 @@ import sys
 import time
 
 from scripts.config import EXPORTS_DIR, load_league, load_settings
-from scripts import config_sheet
+from scripts import bdd, config_sheet
 from scripts.draft import report
 from scripts.draft.engine import Simulator
 from scripts.draft.pool import load_pool
 from scripts.draft.projections_tab import build_all_rows
 from scripts.names import strip_accents
 from scripts.yahoo.client import YahooError
-from scripts.draft.state import build_state, picks_from_csv, picks_from_sheet_rows, picks_from_xlsx
-from scripts.sheets import (SheetsError, open_spreadsheet, read_range, service_account_email, write_block,
+from scripts.draft.state import (build_state, picks_from_assignments, picks_from_bdd_xlsx, picks_from_csv,
+                                 picks_from_xlsx)
+from scripts.sheets import (SheetsError, open_spreadsheet, service_account_email, write_block,
                             write_tab)
 
 log = logging.getLogger("stbl.draft")
@@ -47,12 +48,12 @@ def parse_args(argv=None):
                                             "check"])
     parser.add_argument("--season")
     parser.add_argument("--phase", help="push-projections : n'écrire que cette phase (défaut : toutes)")
-    parser.add_argument("--xlsx", help="lire les choix dans un export Excel (onglet draft_res)")
+    parser.add_argument("--xlsx", help="lire les choix dans un export Excel (colonne Team Draft de l'onglet bdd, sinon onglet draft_res)")
     parser.add_argument("--csv", help="lire les choix dans un CSV round;pick;player")
     parser.add_argument("--until", type=int, help="ne garder que les N premiers choix (mock draft)")
-    parser.add_argument("--sims", type=int, help="nombre de simulations (défaut : onglet config)")
+    parser.add_argument("--sims", type=int, help="nombre de simulations (défaut : onglet settings)")
     parser.add_argument("--no-sheet", action="store_true", help="ne rien écrire dans Google Sheets")
-    parser.add_argument("--no-sync-config", action="store_true", help="ne pas relire l'onglet config")
+    parser.add_argument("--no-sync-config", action="store_true", help="ne pas relire l'onglet settings")
     parser.add_argument("-v", "--verbose", action="store_true")
     return parser.parse_args(argv)
 
@@ -96,15 +97,20 @@ class Session:
 
     def read_picks(self):
         if self.args.xlsx:
-            rows = picks_from_xlsx(self.args.xlsx, self.gs.get("picks_tab", "draft_res"))
+            import openpyxl
+
+            tabs = openpyxl.load_workbook(self.args.xlsx, read_only=True).sheetnames
+            tab = self.gs.get("projections_tab") or "bdd"
+            rows = (picks_from_bdd_xlsx(self.args.xlsx, self.league, self.pool, tab, self.gs) if tab in tabs
+                    else picks_from_xlsx(self.args.xlsx, "draft_res"))
         elif self.args.csv:
             rows = picks_from_csv(self.args.csv)
         elif str(self.league["draft"].get("picks_source", "sheet")).lower() == "yahoo":
             try:
                 rows = self._yahoo_picks()
             except (YahooError, OSError) as exc:
-                log.warning("Lecture Yahoo impossible (%s) : lecture de l'onglet %s à la place.", exc,
-                            self.gs.get("picks_tab", "draft_res"))
+                log.warning("Lecture Yahoo impossible (%s) : lecture de la colonne Team Draft de l'onglet %s "
+                            "à la place.", exc, self.gs.get("projections_tab") or "bdd")
                 rows = self._sheet_picks()
         else:
             rows = self._sheet_picks()
@@ -132,18 +138,20 @@ class Session:
         return reco
 
     def _sheet_picks(self):
-        raw = read_range(self.book(), self.gs.get("picks_tab", "draft_res"), self.gs.get("picks_range", "A2:D"))
-        return picks_from_sheet_rows(raw)
+        """Choix saisis dans le classeur : colonne Team Draft des lignes de phase draft de l'onglet bdd."""
+        assignments = bdd.draft_assignments(bdd.read_rows(self.book(), self.gs), self.gs)
+        return picks_from_assignments(self.league, self.pool, assignments)
 
     def _yahoo_picks(self):
-        """Choix lus dans Yahoo (API, sinon page publique de la ligue) ; recopiés dans draft_res si demandé.
+        """Choix lus dans Yahoo (API, sinon page publique de la ligue) ; recopiés dans la colonne Team Draft
+        de l'onglet bdd si demandé.
 
         Yahoo donne aussi l'ordre réel choix par choix (y compris les choix pas encore faits) :
         il remplace l'ordre snake calculé depuis la config.
         """
         league_id = str(self.league.get("yahoo", {}).get("league_id") or "").strip()
         if not league_id:
-            raise YahooError("ID de ligue Yahoo absent (onglet config > ID de la ligue Yahoo)")
+            raise YahooError("ID de ligue Yahoo absent (onglet settings > ID de la ligue Yahoo)")
         picks = self._yahoo_fetch(league_id)
         teams = int(self.league["teams"])
         mapping = self._team_mapping(picks, teams)
@@ -157,7 +165,7 @@ class Session:
                     unknown.add(p["team"])
         if unknown:
             self._warn_once("unknown_teams", "Équipes Yahoo non reliées à un manager : %s. Renseignez la colonne "
-                            "« Équipe Yahoo » de l'onglet config. Ordre snake de la config utilisé.",
+                            "« Équipe Yahoo » de l'onglet settings. Ordre snake de la config utilisé.",
                             ", ".join(sorted(unknown)))
             self.owners = None
         else:
@@ -167,7 +175,9 @@ class Session:
         rows = [(p["round"], (p["pick"] - 1) % teams + 1, p["player"]) for p in picks if p["player"]]
         log.info("[Yahoo %s] %d choix lus.", self._yahoo_mode, len(rows))
         if self.gs.get("write_picks_to_sheet") and not self.args.no_sheet:
-            self._copy_to_sheet([(r, k, self._sheet_name(n)) for r, k, n in rows])
+            self._copy_to_sheet({self._sheet_name(p["player"]): owners[p["pick"] - 1] if self.owners
+                                 else self._state_team(p["pick"] - 1, self.league["draft"].get("order") or [])
+                                 for p in picks if p["player"]})
         return rows
 
     def _yahoo_fetch(self, league_id):
@@ -209,13 +219,13 @@ class Session:
             return {}
         mapping = {p["team"]: order[i] for i, p in enumerate(first)}
         self._warn_once("inferred", "Équipes Yahoo reliées aux managers d'après le 1er tour : %s. À confirmer "
-                        "dans la colonne « Équipe Yahoo » de l'onglet config.",
+                        "dans la colonne « Équipe Yahoo » de l'onglet settings.",
                         ", ".join(f"{m} = {t}" for t, m in mapping.items()))
         return mapping
 
     def _check_keepers(self, picks, owners):
         """Keepers : Yahoo fait foi. Les choix des tours keepers remplacent les keepers de la config
-        (équipe par équipe) ; les écarts sont signalés une fois pour mettre l'onglet config à jour."""
+        (équipe par équipe) ; les écarts sont signalés une fois pour mettre l'onglet settings à jour."""
         if not owners:
             return
         draft = self.league["draft"]
@@ -231,7 +241,7 @@ class Session:
             known = {getattr(self.pool.find(n), "idx", n) for n in old}
             if found != known:
                 self._warn_once(f"keepers-{team}", "Keepers de %s : Yahoo = %s, config = %s. Yahoo fait foi "
-                                "(pensez à mettre l'onglet config à jour).", team, ", ".join(names),
+                                "(pensez à mettre l'onglet settings à jour).", team, ", ".join(names),
                                 ", ".join(old) or "aucun")
             declared[team] = names
         draft["keepers"] = declared
@@ -255,35 +265,20 @@ class Session:
         return order[pos] if rnd % 2 == 0 else order[len(order) - 1 - pos]
 
     def _sheet_name(self, name):
-        """Nom tel qu'il figure dans les projections (onglet proj), pour que les formules du classeur
+        """Nom tel qu'il figure dans les projections (onglet bdd), pour que les formules du classeur
         le retrouvent : « Nikola Jokić » (Yahoo) -> « Nikola Jokic ». Sinon, nom sans accents."""
         player = self.pool.find(name)
         return player.name if player is not None else strip_accents(name)
 
-    def _copy_to_sheet(self, rows):
-        digest = hashlib.sha1(json.dumps(rows, default=str).encode()).hexdigest()
+    def _copy_to_sheet(self, picks_by_player):
+        """{joueur: manager} des choix Yahoo -> colonne Team Draft de l'onglet bdd (autres saisies gardées)."""
+        digest = hashlib.sha1(json.dumps(sorted(picks_by_player.items()), default=str).encode()).hexdigest()
         if digest == self._copied:
             return
-        tab = self.gs.get("picks_tab", "draft_res")
-        existing = read_range(self.book(), tab, "A2:D")
-        names = {(int(r0), int(r1)): n for r0, r1, n in rows}
-        column, changed = [], False
-        for r in existing:
-            r = list(r) + [""] * (4 - len(r))
-            current = str(r[3] or "")
-            try:
-                key = (int(float(r[0])), int(float(r[1])))
-            except (TypeError, ValueError):
-                column.append([current])
-                continue
-            # seuls les choix faits dans Yahoo sont recopiés : la saisie manuelle des autres est conservée
-            value = names.get(key, current)
-            changed |= value != current
-            column.append([value])
-        if column and changed:
-            self.book().worksheet(tab).update(values=column, range_name=f"D2:D{len(column) + 1}",
-                                              value_input_option="RAW")
-            log.info("[Yahoo] Choix recopiés dans %s (colonne D).", tab)
+        changed = bdd.write_team_draft(self.book(), self.gs, picks_by_player)
+        if changed:
+            log.info("[Yahoo] %d cellules Team Draft mises à jour dans l'onglet %s.", changed,
+                     self.gs.get("projections_tab") or "bdd")
         self._copied = digest
 
     def _write_csv(self, rows):
@@ -302,8 +297,8 @@ def watch(session):
     poll = max(3, int(session.gs.get("poll_seconds", 10)))
     last = None
     source = str(session.league["draft"].get("picks_source", "sheet")).lower()
-    tab = session.gs.get("picks_tab", "draft_res")
-    print(f"Source des choix : {'Yahoo (les saisies de ' + tab + ' sont ignorées)' if source == 'yahoo' else 'onglet ' + tab}"
+    tab = f"colonne Team Draft de l'onglet {session.gs.get('projections_tab') or 'bdd'}"
+    print(f"Source des choix : {'Yahoo (recopiés dans la ' + tab + ')' if source == 'yahoo' else tab}"
           f" ; recommandation écrite dans l'onglet {session.gs.get('reco_tab') or 'draft_reco'}.")
     print(f"Veille active (toutes les {poll} s). Ctrl+C pour arrêter.")
     while True:
@@ -322,7 +317,8 @@ def watch(session):
 
 def push_projections(session=None, season=None, phase=None):
     """Écrit les projections finales de toutes les phases (draft, lt, st) dans l'onglet cible
-    (proj, colonnes A:BI par défaut, A = phase), sans toucher aux colonnes de formules à droite."""
+    (bdd : C = phase, A / B = Team Draft / Team Season reportés sur les nouvelles lignes), sans toucher
+    aux colonnes de formules à droite."""
     if session is None:
         league, settings = load_league(), load_settings()
     else:
@@ -334,8 +330,12 @@ def push_projections(session=None, season=None, phase=None):
     if len(rows) <= 1:
         raise ValueError(f"Aucune projection finale pour {season} : lancez d'abord python main.py.")
     book = open_spreadsheet(gs.get("projections_spreadsheet_id") or gs.get("draft_spreadsheet_id"), settings)
-    tab = gs.get("projections_tab") or "proj"
-    write_block(book, tab, rows, first_col=gs.get("projections_start_col", "A") or "A")
+    tab = gs.get("projections_tab") or "bdd"
+    cols = bdd.layout(gs)
+    teams = bdd.team_map(bdd.read_rows(book, gs), gs) if cols["team_draft"] is not None else None
+    write_block(book, tab, rows, first_col=gs.get("projections_start_col") or "C")
+    if teams is not None:   # Team Draft / Team Season suivent leur joueur (le bloc a pu être retrié)
+        write_block(book, tab, bdd.team_columns(rows, teams), first_col=bdd._col_letter(cols["team_draft"]))
     print(f"{len(rows) - 1} lignes écrites dans l'onglet '{tab}' (phases : {', '.join(phases)}).")
 
 
@@ -352,10 +352,10 @@ def main(argv=None):
         elif args.command == "push-projections":
             push_projections(session)
         elif args.command == "config-push":
-            config_sheet.push(session.book(), session.gs.get("config_tab") or "config", session.league)
+            config_sheet.push(session.book(), session.gs.get("config_tab") or "settings", session.league)
             print(f"Onglet '{session.gs.get('config_tab') or 'config'}' réécrit à partir de la configuration locale.")
         elif args.command == "config-pull":
-            config_sheet.pull(session.book(), session.gs.get("config_tab") or "config")
+            config_sheet.pull(session.book(), session.gs.get("config_tab") or "settings")
             print("config/config.json mis à jour.")
         elif args.command == "watch":
             watch(session)

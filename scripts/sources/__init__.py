@@ -2,7 +2,7 @@
 
 Pour ajouter une source : créer une classe héritant de ProjectionSource
 (page web) ou de CsvProjectionSource (fichier CSV),
-ajouter sa configuration (config/defaults.json > sources, puis onglet config) et l'enregistrer ici.
+ajouter sa configuration (config/defaults.json > sources, puis onglet settings) et l'enregistrer ici.
 """
 
 from scripts.sources.cbs import CbsSource

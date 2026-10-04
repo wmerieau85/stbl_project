@@ -1,12 +1,12 @@
 """Pipeline STBL : import des projections, rapprochement des joueurs, puis pondération.
 
 Exemples :
-    python main.py                        # sources et étape définies dans l'onglet config
+    python main.py                        # sources et étape définies dans l'onglet settings
     python main.py --stage ros            # projections "rest of season" + stats par période (lt, st)
     python main.py --sources cbs          # une seule source
     python main.py --file fanscout=C:/chemin/table.csv   # fichier CSV précis
     python main.py --skip-import          # recalcule seulement la pondération
-    python main.py --push-sheet           # ... puis envoie les projections (toutes phases) dans l'onglet proj
+    python main.py --push-sheet           # ... puis envoie les projections (toutes phases) dans l'onglet bdd
 """
 
 import argparse
@@ -27,7 +27,7 @@ log = logging.getLogger("stbl")
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Pipeline de projections fantasy NBA (STBL)")
-    parser.add_argument("--season", help="ex. 2026-27 (sinon valeur de l'onglet config)")
+    parser.add_argument("--season", help="ex. 2026-27 (sinon valeur de l'onglet settings)")
     parser.add_argument("--stage", choices=["draft", "ros"], help="draft ou ros")
     parser.add_argument("--sources", nargs="+", choices=sorted(SOURCES), help="sources à importer")
     parser.add_argument(
@@ -38,15 +38,15 @@ def parse_args():
     parser.add_argument("--skip-link", action="store_true", help="ne pas lancer le rapprochement des joueurs")
     parser.add_argument("--skip-weighting", action="store_true", help="ne pas calculer les projections finales")
     parser.add_argument("--push-sheet", action="store_true",
-                        help="écrire les projections finales (toutes phases) dans Google Sheets (onglet proj)")
+                        help="écrire les projections finales (toutes phases) dans Google Sheets (onglet bdd)")
     parser.add_argument("--no-sync-config", action="store_true",
-                        help="ne pas relire l'onglet config du classeur (fichiers config/ utilisés tels quels)")
+                        help="ne pas relire l'onglet settings du classeur (fichiers config/ utilisés tels quels)")
     parser.add_argument("-v", "--verbose", action="store_true", help="logs détaillés")
     return parser.parse_args()
 
 
 def sync_config():
-    """Relit l'onglet config (paramètres, sources, grilles, alias) avant le calcul, si le classeur est accessible."""
+    """Relit l'onglet settings (paramètres, sources, grilles, alias) avant le calcul, si le classeur est accessible."""
     from scripts.config import load_league
 
     gs = load_league().get("google_sheets", {})

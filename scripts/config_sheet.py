@@ -1,4 +1,4 @@
-"""Onglet « config » du classeur : il fait foi pour toute la configuration.
+"""Onglet « settings » du classeur : il fait foi pour toute la configuration.
 
 Une ligne par information, quatre colonnes : Section | Paramètre | Valeur | Aide.
 La section est de la forme « Domaine | Sous-domaine » (ex. « Settings | League »). L'ordre des
@@ -17,13 +17,14 @@ lignes est libre, les lignes vides sont ignorées. Sections reconnues :
 - grilles de pondération : Grid <phase> | GP / MIN / STATS / <catégorie> (paramètre = code de
   la ligne « site », valeur = poids).
 
-Les alias de joueurs sont dans un onglet à part (Sheets | Tab | Players source, config_alias).
+Les alias de joueurs sont dans un onglet à part (Sheets | Tab | Players source, players).
+Tirage au sort de l'ordre de draft : sections Draft Lottery (plages de l'onglet board).
 
 Une liste ou une grille présente dans l'onglet remplace entièrement celle de la configuration
 locale ; un paramètre absent garde sa valeur. La configuration locale (config/config.json,
 ignorée par git) n'est qu'une copie, réécrite à chaque relecture de l'onglet :
 
-    python -m scripts.config_sheet pull      # onglets config + alias -> config/config.json
+    python -m scripts.config_sheet pull      # onglets settings + players -> config/config.json
     python -m scripts.config_sheet push      # config/config.json -> onglets (remise à plat)
     python -m scripts.config_sheet migrate   # ancien format de l'onglet -> nouveau (une fois)
 """
@@ -62,27 +63,25 @@ PARAMS = [
     ("Settings | Draft", "Keeper rounds", "league", "draft.keeper_rounds", "intlist",
      "ex. 1, 2 (vide = keepers en plus des tours)"),
     ("Sheets | Settings", "ID", "bootstrap", "spreadsheet_id", "str",
-     "docs.google.com/spreadsheets/d/<ID>/edit (repris dans config/bootstrap.json)"),
+     "classeur lu (indicatif : l'ID utilisé est celui de config/bootstrap.json)"),
     ("Sheets | Settings", "Projections ID", "league", "google_sheets.projections_spreadsheet_id", "optstr",
      "autre classeur pour l'onglet des projections (vide = ce classeur)"),
-    ("Sheets | Tab", "Config", "bootstrap", "config_tab", "str", "cet onglet (repris dans config/bootstrap.json)"),
-    ("Sheets | Tab", "Draft results", "league", "google_sheets.picks_tab", "str", "saisie des choix de draft"),
+    ("Sheets | Tab", "Config", "bootstrap", "config_tab", "str", "cet onglet (indicatif : nom lu dans config/bootstrap.json)"),
     ("Sheets | Tab", "Season", "league", "google_sheets.season_tab", "str", "classement réel et projeté, mon effectif"),
     ("Sheets | Tab", "Players source", "league", "google_sheets.alias_tab", "str",
      "alias : noms lus dans les sources -> nom de référence"),
-    ("Sheets | Tab", "Rosters", "league", "season.roster_tab", "str", "effectifs de simulation : colonnes Player et Team"),
     ("Sheets | Tab", "Draft reco", "league", "google_sheets.reco_tab", "str", "réécrit à chaque recalcul"),
     ("Sheets | Tab", "Projections", "league", "google_sheets.projections_tab", "str",
-     "toutes les phases (colonne A = phase), écrit par push-projections / --push-sheet"),
+     "toutes les phases + Team Draft / Team Season, écrit par push-projections / --push-sheet"),
+    ("Sheets | Tab", "Board", "league", "google_sheets.board_tab", "str", "draft board et tirage au sort (formules)"),
     ("Sheets | Draft", "Choices Source", "league", "draft.picks_source", "choice:yahoo,sheet",
-     "yahoo (lecture en direct) ou sheet (saisie dans l'onglet Draft results)"),
-    ("Sheets | Draft", "Cells Range", "league", "google_sheets.picks_range", "str", "tour, choix, clé, joueur"),
+     "yahoo (lecture en direct) ou sheet (colonne Team Draft de l'onglet Projections, lignes draft)"),
     ("Sheets | Draft", "Copy results into the input tab", "league", "google_sheets.write_picks_to_sheet", "bool",
-     "oui / non (seuls les choix faits dans Yahoo sont recopiés)"),
+     "oui / non : choix Yahoo recopiés dans la colonne Team Draft (les autres saisies sont gardées)"),
     ("Sheets | Projections", "Start Column", "league", "google_sheets.projections_start_col", "str",
-     "les colonnes à droite du bloc (formules) ne sont pas touchées"),
+     "colonne Phase ; les 2 colonnes à gauche = Team Draft / Team Season, les formules à droite sont gardées"),
     ("Sheets | Season", "Rosters Source", "league", "season.roster_source", "choice:yahoo,sheet",
-     "yahoo (effectifs réels) ou sheet (onglet Rosters, ex. simulation de draft)"),
+     "yahoo (effectifs réels) ou sheet (colonne Team Season de l'onglet Projections, sinon Team Draft)"),
     ("Optim | Draft", "Minimum number of games", "league", "zscore.min_gp", "int",
      "z-scores : matchs projetés pour entrer dans le groupe de référence"),
     ("Optim | Draft", "Iterations", "league", "zscore.iterations", "int", "z-scores : recalculs du groupe de référence"),
@@ -99,7 +98,18 @@ PARAMS = [
     ("Pipeline | Import", "Pause between pages (s)", "settings", "http.pause_seconds", "float", ""),
     ("Pipeline | Export", "CSV Delimiter", "settings", "export.delimiter", "str", "; pour Excel en français"),
     ("Pipeline | Export", "Decimal separator", "settings", "export.decimal", "str", ","),
+    ("Draft Lottery | Managers", "Cells Range", "league", "lottery.managers_range", "str", "managers du tirage"),
+    ("Draft Lottery | Active", "Cells Range", "league", "lottery.active_range", "str",
+     "0 = manager encore dans le tirage (pas encore placé dans l'ordre final)"),
+    ("Draft Lottery | Number Balls", "Cells Range", "league", "lottery.balls_range", "str",
+     "boules par manager : 1re colonne = tirage 1, 2e colonne = tirage 2"),
+    ("Draft Lottery | Lottery Number", "Cells Range", "league", "lottery.number_range", "str", "tirage en cours : 1 ou 2"),
+    ("Draft Lottery | Balls", "Cells Range", "league", "lottery.output_range", "str",
+     "où écrire les boules générées (Ball | Manager), onglet créé si absent"),
 ]
+
+# lignes d'anciennes versions de l'onglet, devenues sans objet : ignorées sans erreur
+OBSOLETE = {("sheets | tab", "draft results"), ("sheets | tab", "rosters"), ("sheets | draft", "cells range")}
 
 # autres libellés acceptés (versions de travail de l'onglet) -> (section, paramètre) officiels
 PARAM_ALIASES = {
@@ -249,7 +259,9 @@ def build_rows(cfg=None, bootstrap=None):
              ("Settings | Phases", None), ("Settings | Draft", None), ("Sheets | Settings", None),
              ("Sheets | Tab", None), ("Sheets | Draft", None), ("Sheets | Projections", None),
              ("Sheets | Season", None), ("Optim | Draft", None), ("Optim | Season", None),
-             ("Pipeline | Import", None), ("Pipeline | Export", None)]
+             ("Pipeline | Import", None), ("Pipeline | Export", None), ("Draft Lottery | Managers", None),
+             ("Draft Lottery | Active", None), ("Draft Lottery | Number Balls", None),
+             ("Draft Lottery | Lottery Number", None), ("Draft Lottery | Balls", None)]
     for section, special in order:
         if special == "roster":
             for pos, n in league["roster"].items():
@@ -344,7 +356,7 @@ def parse_rows(rows, cfg=None, bootstrap=None):
     codes = _codes(sources)
     cat_by_label = {_norm(v): k for k, v in CATEGORY_LABELS_SHEET.items()}
 
-    grouped, unknown = {}, set()
+    grouped, unknown, obsolete = {}, set(), set()
     for section, param, value, _ in _clean_rows(rows):
         grouped.setdefault(_norm(section), []).append((section, param, value))
 
@@ -360,9 +372,18 @@ def parse_rows(rows, cfg=None, bootstrap=None):
         domain, sub = _split_section(key)
         for section, param, value in items:
             pkey = (key, _norm(param))
-            if pkey in params:
+            if pkey in OBSOLETE:
+                obsolete.add(f"{section} | {param}")
+            elif pkey in params:
                 target, path, kind, label = params[pkey]
-                _set(targets[target], path, _parse(value, kind, label))
+                parsed = _parse(value, kind, label)
+                if target == "bootstrap":   # le classeur ne peut pas changer l'ID / l'onglet par lesquels on le lit
+                    if parsed and parsed != _get(boot, path):
+                        log.warning("[Config] %s | %s = « %s » mais config/bootstrap.json indique « %s » : "
+                                    "valeur du classeur ignorée (mettez la ligne à jour).", section, param, parsed,
+                                    _get(boot, path))
+                else:
+                    _set(targets[target], path, parsed)
             elif key == _norm(ROSTER_SECTION):
                 roster[param.upper()] = int(_number(value, f"{section} {param}"))
             elif key == _norm(SCORING_SECTION):
@@ -410,6 +431,8 @@ def parse_rows(rows, cfg=None, bootstrap=None):
                 continue
     if unknown:
         log.warning("[Config] Lignes non reconnues (ignorées) : %s", ", ".join(sorted(unknown)))
+    if obsolete:
+        log.info("[Config] Lignes devenues inutiles (à supprimer de l'onglet) : %s", ", ".join(sorted(obsolete)))
 
     if roster:
         league["roster"] = roster
@@ -446,7 +469,9 @@ def parse_rows(rows, cfg=None, bootstrap=None):
         cfg["grids"][phase] = _grid_from_cells(phase, cells, settings.get("active_season"))
 
     season = league.get("season", {})
-    settings.setdefault("phases", {})["ros"] = [season.get("lt_phase", "lt"), season.get("st_phase", "st")]
+    ros = [season.get("lt_phase", "lt"), season.get("st_phase", "st")]
+    ros += [p for p in cfg["grids"] if p != "draft" and p not in ros]   # ex. season : stats réelles
+    settings.setdefault("phases", {})["ros"] = ros
     return cfg, boot
 
 
@@ -552,11 +577,12 @@ def pull(spreadsheet, tab=None):
     from scripts.config import load_league
 
     current, boot_now = load_config(), load_bootstrap()
-    tab = tab or boot_now.get("config_tab") or "config"
+    tab = tab or boot_now.get("config_tab") or "settings"
     cfg, boot = parse_rows(_read_tab(spreadsheet, tab), current, boot_now)
-    aliases = _read_aliases(spreadsheet, cfg["league"].get("google_sheets", {}).get("alias_tab") or "config_alias")
+    aliases = _read_aliases(spreadsheet, cfg["league"].get("google_sheets", {}).get("alias_tab") or "players")
     if aliases:
         cfg["aliases"] = dict(sorted(aliases.items()))
+    _check_tabs(spreadsheet, cfg["league"].get("google_sheets", {}))
     changed = []
     if cfg != current:
         save_config(cfg)
@@ -564,10 +590,26 @@ def pull(spreadsheet, tab=None):
     if boot != boot_now:
         save_bootstrap(boot)
         changed.append("bootstrap.json")
-        log.warning("[Config] ID du classeur ou onglet config modifié : pris en compte au prochain lancement.")
+        log.warning("[Config] ID du classeur ou onglet settings modifié : pris en compte au prochain lancement.")
     log.info("[Config] %s", f"Mis à jour depuis l'onglet '{tab}' : {', '.join(changed)}." if changed
              else f"Onglet '{tab}' identique à la configuration locale.")
     return load_league()
+
+
+def _check_tabs(spreadsheet, gs):
+    """Signale les onglets de l'onglet settings qui n'existent pas dans le classeur."""
+    try:
+        existing = {ws.title for ws in spreadsheet.worksheets()}
+    except Exception:  # classeur factice (tests) ou erreur réseau : contrôle ignoré
+        return
+    labels = {"alias_tab": "Players source", "projections_tab": "Projections", "board_tab": "Board"}
+    if not gs.get("projections_spreadsheet_id"):
+        missing = [f"{label} = {gs[key]}" for key, label in labels.items() if gs.get(key) and gs[key] not in existing]
+    else:
+        missing = [f"{label} = {gs[key]}" for key, label in labels.items()
+                   if key != "projections_tab" and gs.get(key) and gs[key] not in existing]
+    if missing:
+        log.warning("[Config] Onglets introuvables dans le classeur (Sheets | Tab) : %s", ", ".join(missing))
 
 
 def push(spreadsheet, tab=None, league=None):
@@ -575,10 +617,10 @@ def push(spreadsheet, tab=None, league=None):
     from scripts.sheets import write_tab
 
     cfg, boot = load_config(), load_bootstrap()
-    tab = tab or boot.get("config_tab") or "config"
+    tab = tab or boot.get("config_tab") or "settings"
     rows = build_rows(cfg, boot)
     write_tab(spreadsheet, tab, rows)
-    alias_tab = cfg["league"].get("google_sheets", {}).get("alias_tab") or "config_alias"
+    alias_tab = cfg["league"].get("google_sheets", {}).get("alias_tab") or "players"
     write_tab(spreadsheet, alias_tab, [ALIAS_HEADER] + [[k, v] for k, v in sorted(cfg["aliases"].items())])
     try:
         fmt = {"textFormat": {"bold": True}, "backgroundColor": {"red": 0.85, "green": 0.9, "blue": 1}}
@@ -588,7 +630,7 @@ def push(spreadsheet, tab=None, league=None):
         ws.freeze(rows=1)
         spreadsheet.worksheet(alias_tab).format("A1:B1", fmt)
     except Exception as exc:  # la mise en forme est un bonus
-        log.debug("Mise en forme de l'onglet config ignorée : %s", exc)
+        log.debug("Mise en forme de l'onglet settings ignorée : %s", exc)
     return rows
 
 
@@ -598,7 +640,7 @@ def migrate(spreadsheet, tab=None):
     from scripts.sheets import write_tab
 
     boot = load_bootstrap()
-    tab = tab or boot.get("config_tab") or "config"
+    tab = tab or boot.get("config_tab") or "settings"
     rows = spreadsheet.worksheet(tab).get("A1:Z600")
     cfg = load_config()
     league, settings, sources, grids = config_legacy.parse_rows(rows, cfg["league"], cfg["settings"], cfg["sources"])
@@ -611,7 +653,7 @@ def migrate(spreadsheet, tab=None):
     gs = cfg["league"].get("google_sheets", {})
     gs.pop("draft_spreadsheet_id", None)
     gs.pop("config_tab", None)
-    aliases = _read_aliases(spreadsheet, gs.get("alias_tab") or "config_alias")
+    aliases = _read_aliases(spreadsheet, gs.get("alias_tab") or "players")
     if aliases:
         cfg["aliases"] = dict(sorted(aliases.items()))
     save_config(cfg)
@@ -639,7 +681,7 @@ def main(argv=None):
         if args.command == "pull":
             pull(book)
         elif args.command == "check":
-            parse_rows(_read_tab(book, boot.get("config_tab") or "config"))
+            parse_rows(_read_tab(book, boot.get("config_tab") or "settings"))
             print("Onglet config lisible, aucune erreur.")
         elif args.command == "push":
             rows = push(book)
