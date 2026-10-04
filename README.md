@@ -17,7 +17,7 @@ pip install -r requirements.txt
 Toujours lancer depuis la racine du projet.
 
 ```bash
-python main.py                          # réglages de l'onglet config
+python main.py                          # réglages de l'onglet settings
 python main.py --stage ros              # projections "rest of season"
 python main.py --sources fantasypros    # une seule source
 python main.py --skip-link -v           # sans rapprochement, logs détaillés
@@ -32,7 +32,7 @@ python -m scripts.player_linker         # relancer le rapprochement
 
 ## Configuration
 
-L'onglet `config` du classeur Google Sheets fait foi : on ne modifie plus de JSON à la main.
+L'onglet `settings` du classeur Google Sheets fait foi : on ne modifie plus de JSON à la main.
 Une ligne par information, quatre colonnes `Section | Paramètre | Valeur | Aide`, ordre libre :
 
 | Section | Contenu |
@@ -46,18 +46,18 @@ Une ligne par information, quatre colonnes `Section | Paramètre | Valeur | Aide
 | `Grid <phase> \| GP / MIN / STATS / <catégorie>` | grilles de pondération : code de la ligne « site » -> poids (chaque niveau = 100 %) |
 | `Transco \| <colonne> / percent_scale / Player / Team / Positions...` | lecture des sites : colonne du site pour chaque colonne standard, options de lecture |
 
-Les alias de joueurs sont dans l'onglet `config_alias`. `main.py`, `reco`, `watch`,
+Les alias de joueurs sont dans l'onglet `players`. `main.py`, `reco`, `watch`,
 `season update` et `yahoo` relisent les onglets à chaque lancement (`--no-sync-config` pour
 l'éviter) : une erreur de saisie arrête le calcul avec un message, une ligne inconnue est signalée.
 
 | Fichier | Versionné | Rôle |
 |---|---|---|
-| `config/bootstrap.json` | oui | ce qu'il faut avant de lire le classeur : `spreadsheet_id`, `config_tab`, chemins des identifiants Google / Yahoo (jamais les secrets). L'ID et l'onglet sont repris de l'onglet config s'ils y changent. |
+| `config/bootstrap.json` | oui | ce qu'il faut avant de lire le classeur : `spreadsheet_id`, `config_tab`, chemins des identifiants Google / Yahoo (jamais les secrets). Les lignes `Sheets | Settings | ID` et `Sheets | Tab | Config` du classeur sont indicatives (alerte si elles diffèrent). |
 | `config/config.json` | non | copie locale des onglets, réécrite à chaque relecture (permet de travailler hors ligne). |
 | `config/defaults.json` | oui | configuration livrée, utilisée tant que `config.json` n'existe pas (et par les tests). |
 
 ```bash
-python -m scripts.config_sheet pull      # onglets config + config_alias -> config/config.json
+python -m scripts.config_sheet pull      # onglets settings + players -> config/config.json
 python -m scripts.config_sheet check     # contrôle l'onglet sans rien écrire
 python -m scripts.config_sheet push      # remise à plat des onglets depuis la configuration locale
 python -m scripts.config_sheet migrate   # ancien format (blocs) -> nouveau, copie dans config_old
@@ -108,7 +108,7 @@ scripts/weighting/zscores.py z-scores des 9 catégories (AVG et TOT), sommes et 
 Ajouter une source :
 - **web** : une classe héritant de `ProjectionSource` (méthodes `page_requests` et `parse_page`) ;
 - **CSV** : une classe de deux lignes héritant de `CsvProjectionSource` (voir `fanscout.py`) ;
-  tout le reste se règle dans l'onglet config (sections Sources et Transco) :
+  tout le reste se règle dans l'onglet settings (sections Sources et Transco) :
   - `import_dir`, `files` (motif du fichier par étape) ;
   - `player_column`, `team_column`, `positions_column` (un en-tête en double devient `Nom_2`) ;
   - `stat_mode` (`auto`, `totals`, `per_game`), `percent_scale` (1 ou 100) ;
@@ -136,7 +136,7 @@ puis sa configuration dans `config/defaults.json` > `sources` (code, `urls` ou `
   `fga_estimated`, et les z-scores : `z_<cat>_avg` / `z_<cat>_tot` pour FG%, 3PM, FT%, REB,
   AST, STL, BLK, TO, PTS, leur somme pondérée `z_sum_avg` / `z_sum_tot` et le rang
   `rank_avg` / `rank_tot`. Exportées (triées par `rank_avg` en H2H, `rank_tot` en Roto) dans `exports/final_<phase>_<saison>.csv` (`;` et virgule
-  décimale par défaut, réglable dans l'onglet config, `Pipeline | Export`).
+  décimale par défaut, réglable dans l'onglet settings, `Pipeline | Export`).
 
 ## Z-scores
 
@@ -150,13 +150,15 @@ puis sa configuration dans `config/defaults.json` > `sources` (code, `urls` ou `
 
 ## Assistant de draft (Rotisserie)
 
-Le classeur Google Sheets reste l'interface : on saisit les choix dans `draft_res`
-(colonne D), le script lit l'état de la draft et écrit ses recommandations dans l'onglet `draft_reco`.
+Le classeur Google Sheets reste l'interface : on saisit le manager de chaque joueur drafté dans la
+colonne `Team Draft` (A) de l'onglet `bdd`, sur sa ligne de phase `draft` ; le script en déduit
+l'état de la draft (ordre snake, keepers dans leurs tours) et écrit ses recommandations dans
+`draft_reco`, que l'onglet `board` (draft board) reprend par formules.
 
 ```bash
-python main.py --push-sheet                # pipeline complet puis projections (toutes phases) -> proj
-python -m scripts.draft push-projections   # seulement l'envoi des projections vers proj
-python -m scripts.draft config-push        # configuration locale -> onglets "config" et "config_alias"
+python main.py --push-sheet                # pipeline complet puis projections (toutes phases) -> bdd
+python -m scripts.draft push-projections   # seulement l'envoi des projections vers bdd
+python -m scripts.draft config-push        # configuration locale -> onglets "settings" et "players"
 python -m scripts.draft config-pull        # onglets -> config/config.json
 python -m scripts.draft watch              # veille pendant la draft : recalcul à chaque choix saisi
 python -m scripts.draft reco               # un seul calcul
@@ -169,17 +171,35 @@ Mise en place (une fois) :
 2. Partager le classeur de draft avec l'adresse `client_email` du compte de service, en Éditeur.
 3. `spreadsheet_id` dans `config/bootstrap.json` : l'identifiant dans l'URL
    `docs.google.com/spreadsheets/d/<ID>/edit`.
-4. `python -m scripts.config_sheet push` crée les onglets `config` et `config_alias` (voir
+4. `python -m scripts.config_sheet push` crée les onglets `settings` et `players` (voir
    Configuration) ; ensuite on ne modifie plus que les onglets.
 
-Projections : `push-projections` écrit toutes les phases de la saison (draft, lt, st) dans un
-seul onglet `proj`, colonnes A à BI : A = phase, puis la disposition de l'ancien onglet `export`
-(joueur en B). Les colonnes à droite (formules) ne sont pas touchées. Pour une seule phase :
-`--phase lt`. Onglet et colonne de départ réglables dans l'onglet config (section Projections).
+Projections : `push-projections` écrit toutes les phases de la saison (draft, lt, st, season)
+dans l'onglet `bdd`, colonnes C à BK : C = phase, puis la disposition de l'ancien onglet `export`
+(joueur en D). Les colonnes A `Team Draft` et B `Team Season` sont des propriétés du joueur :
+elles sont conservées et reportées sur toutes ses lignes, même si l'ordre change. Les colonnes à
+droite (formules) ne sont pas touchées. Pour une seule phase : `--phase lt`. Onglet et colonne de
+départ réglables dans l'onglet settings (section Projections).
+
+Phase `season` (étape ros) : stats réelles de la saison en cours (`Grid season`, par défaut
+`fp.sea` à 100 %), avec z-scores et rangs comme les autres phases.
+
+Tirage au sort de l'ordre de draft (bloc lottery de l'onglet `board`) :
+
+```bash
+python -m scripts.lottery              # boules des managers encore dans le tirage -> onglet lottery
+python -m scripts.lottery --draw       # ... puis tire une boule au hasard
+python -m scripts.lottery --dry-run    # affiche sans écrire
+```
+
+Plages dans l'onglet settings (`Draft Lottery | Managers / Active / Number Balls / Lottery
+Number`) : managers dont `Active` = 0, nombre de boules de la colonne du tirage en cours (1 ou 2).
+Boules numérotées de 1 à N, mélangées, écrites en `Ball | Manager` (`Draft Lottery | Balls`,
+par défaut `lottery!A1`).
 
 Keepers : `Settings | Draft | Keeper rounds` = tours occupés par les keepers (`1, 2` : le 1er keeper
 prend le choix du manager au tour 1, le 2e au tour 2) ; vide si les keepers s'ajoutent aux
-tours. Un keeper saisi dans `draft_res` par son propre manager n'est jamais compté deux fois.
+tours. Un keeper inscrit dans `Team Draft` pour son propre manager n'est jamais compté deux fois.
 
 Calcul :
 - tour et manager déduits de l'ordre snake de `draft.order` (tour impair : ordre normal,
@@ -199,7 +219,7 @@ L'onglet `reco` contient : l'état de la draft, les 20 meilleurs candidats (poin
 avec le n°1, disponibilité, points par catégorie), le classement roto projeté, le classement
 des effectifs actuels avec leurs totaux, et mon équipe. Même contenu dans `exports/reco_<saison>.csv`.
 Les noms saisis sont reconnus sans tenir compte des accents, de la casse ni des suffixes ; sinon
-ajouter un alias dans l'onglet `config_alias`.
+ajouter un alias dans l'onglet `players`.
 
 ## Yahoo Fantasy (API)
 
@@ -212,21 +232,21 @@ Lecture seule, via l'application déclarée sur developer.yahoo.com (redirect UR
    coller l'adresse complète dans le terminal. Le jeton est enregistré dans
    `credentials/yahoo_token.json` et renouvelé automatiquement.
 3. `python -m scripts.yahoo leagues` : liste mes ligues NBA avec leur ID, à reporter dans
-   l'onglet config (« ID de la ligue Yahoo »).
+   l'onglet settings (« ID de la ligue Yahoo »).
 4. `python -m scripts.yahoo check` : réglages, équipes et managers, nombre de choix de draft.
    `python -m scripts.yahoo draft` : choix effectués (+ `exports/yahoo_draft_<saison>.csv`).
 
 Tant que Yahoo n'a pas validé l'accès à l'API (erreur 403), la ligue étant publique, les choix
 sont lus sur la page `basketball.fantasysports.yahoo.com/nba/<ID>/draftresults` : aucun réglage
-à faire, le programme bascule tout seul. La colonne « Équipe Yahoo » de l'onglet config relie
+à faire, le programme bascule tout seul. La colonne « Équipe Yahoo » de l'onglet settings relie
 chaque équipe Yahoo à un manager ; l'ordre réel de Yahoo (choix par choix) remplace alors l'ordre
 snake de la config, avec une alerte en cas d'écart et si un choix des tours keepers ne correspond
 pas aux keepers déclarés.
 
-Pendant la draft (`Source des choix` = `yahoo` dans l'onglet config), `watch` lit les choix
-directement dans Yahoo, les recopie dans la colonne D de `draft_res` (réglable) et signale tout
+Pendant la draft (`Source des choix` = `yahoo` dans l'onglet settings), `watch` lit les choix
+directement dans Yahoo, les recopie dans la colonne `Team Draft` de `bdd` (réglable) et signale tout
 écart entre l'ordre Yahoo et l'ordre de la config. Si Yahoo ne répond pas, lecture de
-`draft_res` à la place : la saisie manuelle reste possible.
+`Team Draft` à la place : la saisie manuelle reste possible.
 
 ## Module saison
 
@@ -234,7 +254,7 @@ directement dans Yahoo, les recopie dans la colonne D de `draft_res` (réglable)
 python main.py --stage ros                 # projections ROS (lt) + stats par période (st)
 python -m scripts.season update            # onglet season (+ exports/season_rosters_<saison>.csv)
 python -m scripts.season update --no-sheet # console + exports/season_<saison>.csv
-python -m scripts.season update --rosters sheet  # effectifs de l'onglet rosters (simulation de draft)
+python -m scripts.season update --rosters sheet  # effectifs de bdd : Team Season (sinon Team Draft)
 ```
 
 Projection de fin de saison de chaque équipe = stats réelles (classement Yahoo) + 15 prochains
@@ -243,8 +263,8 @@ fixturedownload.com) et les plafonds de matchs restants par poste (G, F, C, Util
 de chaque équipe. Onglet season : classement projeté (points espérés, chances de titre et de
 podium), mes catégories (ce qu'il faut pour gagner un point, marge avant d'en perdre un), mes
 matchs par poste, stats projetées de toutes les équipes. Sans projections lt, la phase draft
-est utilisée. Effectifs : Yahoo par défaut, ou un onglet du classeur (« Source des effectifs » =
-`sheet` dans l'onglet config, colonnes Player et Team repérées par leur en-tête) ; les plafonds de
+est utilisée. Effectifs : Yahoo par défaut, ou le classeur (`Sheets | Season | Rosters Source` =
+`sheet` : colonne `Team Season` de `bdd`, sinon `Team Draft`) ; les plafonds de
 matchs sont alors ceux de la saison complète (82 x postes).
 
 Limites : les tentatives de tirs réelles (FGA, FTA) ne sont pas publiées par Yahoo et sont
@@ -265,4 +285,4 @@ python -m pytest -q
 ```
 
 Couvrent les noms (accents, caractères perdus, alias), les grilles de pondération, les points
-roto, l'allocation des matchs sous plafonds et l'aller-retour de l'onglet config.
+roto, l'allocation des matchs sous plafonds et l'aller-retour de l'onglet settings.

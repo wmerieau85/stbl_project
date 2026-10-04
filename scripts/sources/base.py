@@ -149,7 +149,7 @@ class ProjectionSource:
     def url_template(self):
         template = self.source_config.get("urls", {}).get(self.stage)
         if not template:
-            raise ValueError(f"[{self.label}] Aucune URL pour l'étape '{self.stage}' (onglet config, Sources | Draft / RoS)")
+            raise ValueError(f"[{self.label}] Aucune URL pour l'étape '{self.stage}' (onglet settings, Sources | Draft / RoS)")
         return template
 
     def fetch(self):

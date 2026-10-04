@@ -1,4 +1,4 @@
-"""Lecture et validation des grilles de pondération (onglet config, sections « Grid <phase> | ... »).
+"""Lecture et validation des grilles de pondération (onglet settings, sections « Grid <phase> | ... »).
 
 Format : la grille telle qu'elle est dans Google Sheets (copier/coller ou export CSV).
 
@@ -152,7 +152,7 @@ def load_grid(phase, active_season, path=None):
     else:
         rows = load_grid_rows(phase)
         if rows is None:
-            raise FileNotFoundError(f"grille {phase} (onglet config, sections Grid {phase})")
+            raise FileNotFoundError(f"grille {phase} (onglet settings, sections Grid {phase})")
         rows = [[str(c) for c in r] for r in rows if any(str(c).strip() for c in r)]
         path = f"Grille {phase}"
     if len(rows) < 3:

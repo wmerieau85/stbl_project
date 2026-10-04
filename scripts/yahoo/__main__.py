@@ -18,7 +18,7 @@ from scripts.yahoo.league import draft_results, league_key, league_settings, my_
 
 
 def _sync_config(settings, league):
-    """Relit l'onglet config du classeur (s'il est accessible) pour récupérer l'ID de ligue à jour."""
+    """Relit l'onglet settings du classeur (s'il est accessible) pour récupérer l'ID de ligue à jour."""
     gs = league.get("google_sheets", {})
     if not (gs.get("draft_spreadsheet_id") and gs.get("config_tab")):
         return league
@@ -37,7 +37,7 @@ def _key(client, league):
     league_id = str(league.get("yahoo", {}).get("league_id") or "").strip()
     if not league_id:
         raise YahooError("ID de ligue Yahoo absent. Lancez python -m scripts.yahoo leagues pour le connaître, puis "
-                         "renseignez « ID de la ligue Yahoo » dans l'onglet config (ou utilisez --league <ID>).")
+                         "renseignez « ID de la ligue Yahoo » dans l'onglet settings (ou utilisez --league <ID>).")
     return league_key(client, league_id)
 
 
@@ -45,7 +45,7 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description="API Yahoo Fantasy")
     parser.add_argument("command", choices=["auth", "leagues", "check", "draft"])
     parser.add_argument("--no-browser", action="store_true", help="ne pas ouvrir le navigateur (auth)")
-    parser.add_argument("--league", help="ID de la ligue Yahoo (sinon onglet config)")
+    parser.add_argument("--league", help="ID de la ligue Yahoo (sinon onglet settings)")
     parser.add_argument("-v", "--verbose", action="store_true")
     args = parser.parse_args(argv)
     logging.basicConfig(level=logging.DEBUG if args.verbose else logging.INFO,

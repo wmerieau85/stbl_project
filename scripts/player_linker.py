@@ -1,7 +1,7 @@
 """Rapprochement des joueurs entre sources via la table `players`.
 
 Chaque ligne de raw_projections porte une clé normalisée (player_key). Le linker :
-1. applique les alias (onglet config_alias) (nom vu dans une source -> nom canonique) ;
+1. applique les alias (onglet players) (nom vu dans une source -> nom canonique) ;
    sans alias, le nom canonique d'un nouveau joueur est le nom lu, sans accents (Nikola Jokić ->
    Nikola Jokic), comme dans les onglets du classeur ;
 2. retrouve ou crée le joueur correspondant dans `players` ;

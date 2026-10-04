@@ -143,24 +143,29 @@
       "picks_source": "yahoo"
     },
     "google_sheets": {
-      "picks_tab": "draft_res",
-      "picks_range": "A2:D",
       "reco_tab": "draft_reco",
       "projections_spreadsheet_id": "",
-      "projections_tab": "proj",
-      "projections_start_col": "A",
+      "projections_tab": "bdd",
+      "projections_start_col": "C",
       "poll_seconds": 10,
       "write_picks_to_sheet": true,
       "season_tab": "season",
-      "alias_tab": "config_alias"
+      "alias_tab": "players",
+      "board_tab": "board"
     },
     "season": {
       "st_days": 15,
       "lt_phase": "lt",
       "st_phase": "st",
       "simulations": 2000,
-      "roster_source": "yahoo",
-      "roster_tab": "rosters"
+      "roster_source": "yahoo"
+    },
+    "lottery": {
+      "balls_range": "board!N8:O22",
+      "managers_range": "board!B8:B22",
+      "active_range": "board!L8:L22",
+      "number_range": "board!AA9",
+      "output_range": "lottery!A1"
     }
   },
   "settings": {
@@ -194,7 +199,8 @@
       ],
       "ros": [
         "lt",
-        "st"
+        "st",
+        "season"
       ]
     },
     "export": {
@@ -504,6 +510,28 @@
         "40,00%",
         "10,00%",
         "0,00%"
+      ]
+    ],
+    "season": [
+      [
+        "",
+        "season01"
+      ],
+      [
+        "site",
+        "fp.sea"
+      ],
+      [
+        "GP",
+        "100%"
+      ],
+      [
+        "MIN",
+        "100%"
+      ],
+      [
+        "STATS",
+        "100%"
       ]
     ]
   },

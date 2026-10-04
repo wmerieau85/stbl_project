@@ -1,6 +1,6 @@
 {
-  "spreadsheet_id": "1vLuP0XS4sPpfgx4anXB1icjLfQXkyHc7QMdaGsVpcao",
-  "config_tab": "config",
+  "spreadsheet_id": "12hsmgeLNQfiqQhZVyE-FR8yxXsQlIJ-1pIbhqolm6UY",
+  "config_tab": "settings",
   "google": {
     "service_account_file": "credentials/service_account.json"
   },
