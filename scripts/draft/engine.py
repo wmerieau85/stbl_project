@@ -7,9 +7,11 @@ En roto, chaque équipe marque des points selon son rang dans chaque catégorie 
 l'absolu » mais celui qui fait gagner le plus de points au classement final projeté.
 
 Pour chaque joueur candidat :
-1. on simule la suite de la draft N fois (les autres managers choisissent selon l'ADP,
-   avec un bruit aléatoire ; nous choisissons ensuite le meilleur z-score TOT disponible
-   compatible avec les postes à remplir) ;
+1. on simule la suite de la draft N fois. Les autres managers choisissent selon l'ADP, avec
+   un bruit aléatoire ; en mode « need » (Optim | Draft | Opponent model), ils départagent
+   les quelques prochains joueurs de l'ADP selon les besoins de leur équipe, d'autant plus
+   que la draft avance. Nos choix suivants : meilleur z-score TOT compatible avec les postes
+   à remplir ;
 2. on projette les totaux de chaque équipe sur la saison, avec le plafond de matchs
    (82 x postes titulaires = 656) : les meilleurs joueurs par match jouent en priorité ;
 3. on convertit les totaux en points roto « espérés » : pour chaque catégorie, la
@@ -169,12 +171,89 @@ class Simulator:
         self.noise = float(draft.get("adp_noise", 0.15))
         self.rng = np.random.default_rng(seed)
         self.value_order = sorted(range(len(pool)), key=lambda i: pool.players[i].value_tot, reverse=True)
+        # modèle des choix simulés : adp (marché seul) ou need (marché + besoins de chaque équipe)
+        self.model = str(draft.get("opponent_model", "need")).lower()
+        self.need_weight = float(draft.get("need_weight", 2.0))
+        self.need_k = max(1, int(draft.get("need_candidates", 4)))
+        self.rounds = max(1, int(draft.get("rounds", 12)))
+        self._init_need()
 
     # standings --------------------------------------------------------------------------
     def evaluate(self, rosters):
         values = np.array([category_values(team_totals(rosters[t], self.cap), self.categories)
                            for t in self.state.order])
         return values, roto_points(values, self.categories, self.weights)
+
+    # besoins des équipes (mode need) ---------------------------------------------------------
+    def _init_need(self):
+        """Totaux saison par joueur (sans plafond), pour estimer vite ce qu'un joueur apporte à une équipe.
+
+        Les équipes sont comparées sur leur moyenne par joueur (catégories de volume) et sur leurs
+        pourcentages : en snake, elles n'ont pas le même nombre de joueurs au même moment.
+        """
+        totals = (np.array([p.per_game * p.gp for p in self.pool.players]) if len(self.pool)
+                  else np.zeros((0, len(STATS))))
+        self._cc = np.array([j for j, c in enumerate(self.categories) if c not in ("fgp", "ftp")], dtype=int)
+        self._pc = np.array([j for j, c in enumerate(self.categories) if c in ("fgp", "ftp")], dtype=int)
+        pct = [("fgm", "fga") if self.categories[j] == "fgp" else ("ftm", "fta") for j in self._pc]
+        self._cnt = totals[:, [S[self.categories[j]] for j in self._cc]] if len(self._cc) else np.zeros((len(totals), 0))
+        self._mk = totals[:, [S[m] for m, _ in pct]] if pct else np.zeros((len(totals), 0))
+        self._at = totals[:, [S[a] for _, a in pct]] if pct else np.zeros((len(totals), 0))
+        self._sign = np.array([-1.0 if c in LOWER_IS_BETTER else 1.0 for c in self.categories])
+
+    def _need_state(self, rosters):
+        """État des besoins : sommes par équipe, nombre de joueurs, valeurs par catégorie, dispersion."""
+        n_teams = len(self.state.order)
+        ns = {"cnt": np.zeros((n_teams, len(self._cc))), "mk": np.zeros((n_teams, len(self._pc))),
+              "at": np.zeros((n_teams, len(self._pc))), "n": np.zeros(n_teams),
+              "x": np.zeros((n_teams, len(self.categories))),
+              "pending": [(i, p.idx) for t, i in self.team_index.items() for p in rosters.get(t, [])]}
+        self._refresh_slopes(ns)
+        return ns
+
+    @staticmethod
+    def _sigma(x):
+        sigma = UNCERTAINTY * x.std(axis=0)
+        return np.where(sigma > 1e-12, sigma, 1.0)
+
+    def _need_flush(self, ns):
+        """Intègre les choix en attente (une seule opération vectorisée par tour)."""
+        if not ns["pending"]:
+            return
+        teams, idxs = map(list, zip(*ns["pending"]))
+        ns["pending"].clear()
+        np.add.at(ns["cnt"], teams, self._cnt[idxs])
+        np.add.at(ns["mk"], teams, self._mk[idxs])
+        np.add.at(ns["at"], teams, self._at[idxs])
+        np.add.at(ns["n"], teams, 1.0)
+        x = ns["x"]
+        x[:, self._cc] = ns["cnt"] / np.maximum(ns["n"], 1.0)[:, None]
+        x[:, self._pc] = ns["mk"] / np.maximum(ns["at"], 1e-9)
+
+    def _refresh_slopes(self, ns):
+        """Pente des points roto espérés de chaque équipe dans chaque catégorie (recalculée à chaque tour).
+
+        Densité de l'écart avec chaque adversaire (loi normale, comme roto_points) x sens x pondération.
+        """
+        self._need_flush(ns)
+        x = ns["x"]
+        sigma = self._sigma(x)
+        z = (x[:, None, :] - x[None, :, :]) / sigma
+        slope = (np.exp(-0.5 * z * z).sum(axis=1) - 1.0) / sigma * self._sign * self.weights
+        ns["slope"] = slope
+        # gains linéarisés de tous les joueurs pour chaque équipe (joueurs x équipes), pour les choix
+        # des adversaires : volumes -> écart à la moyenne de l'équipe, pourcentages -> effet sur le %
+        gain = (self._cnt @ slope[:, self._cc].T - (x[:, self._cc] * slope[:, self._cc]).sum(axis=1)) \
+            / (ns["n"] + 1.0)
+        if len(self._pc):
+            at = np.maximum(ns["at"], 1e-9)
+            u = slope[:, self._pc] / at
+            gain = gain + self._mk @ u.T - self._at @ (u * x[:, self._pc]).T
+        ns["gain"] = gain
+
+    def _need_weight(self, overall):
+        rnd = overall // max(1, self.state.teams) + 1
+        return self.need_weight * (rnd - 1) / max(1, self.rounds - 1)
 
     # un tirage de la suite de la draft ------------------------------------------------------
     def _market_order(self):
@@ -190,6 +269,9 @@ class Simulator:
         """
         st = self.state
         players = self.pool.players
+        need = self.model == "need"
+        if need:
+            ns = self._need_state(rosters)
         mptr = 0
         for overall in range(start, st.total_picks):
             if overall in st.picks:
@@ -208,13 +290,34 @@ class Simulator:
                 if mptr >= len(market_order):
                     return None
                 idx = market_order[mptr]
+                lam = self._need_weight(overall) if need else 0.0
+                if lam * math.sqrt(2 * self.need_k) > 1 and self.need_k > 1:   # sinon l'ADP l'emporte toujours
+                    cands, k = [], mptr
+                    while k < len(market_order) and len(cands) < self.need_k:
+                        if market_order[k] not in taken:
+                            cands.append(market_order[k])
+                        k += 1
+                    if len(cands) > 1:
+                        gains = ns["gain"][cands, self.team_index[team]].tolist()
+                        mean = sum(gains) / len(gains)
+                        spread = math.sqrt(sum((g - mean) ** 2 for g in gains) / len(gains))
+                        if spread > 1e-12:
+                            scores = [lam * (g - mean) / spread - r for r, g in enumerate(gains)]
+                            idx = cands[scores.index(max(scores))]
             if idx is None:
                 continue
             taken.add(idx)
             rosters[team].append(players[idx])
+            if need:
+                ns["pending"].append((self.team_index[team], idx))
+                if (overall + 1) % st.teams == 0:     # pentes remises à jour à chaque tour
+                    self._refresh_slopes(ns)
         return None
 
     def _my_choice(self, taken, roster, overall):
+        """Notre choix simulé : meilleur z TOT disponible qui laisse les postes complétables.
+
+        (Un choix « selon nos besoins » a été essayé : pas meilleur sur les mock drafts.)"""
         left_after = len(self.state.my_picks_from(overall + 1))
         players = self.pool.players
         fallback = None

@@ -12,7 +12,7 @@ Hors ligne (tests, mock draft) :
     python -m scripts.draft reco --xlsx draft2627.xlsx --until 40
     python -m scripts.draft reco --csv picks.csv  # colonnes round;pick;player
 
-Options communes : --season, --phase, --sims N, --no-sheet (n'écrit pas dans le classeur).
+Options communes : --season, --phase, --sims N, --model adp|need, --no-sheet (n'écrit pas dans le classeur).
 Les paramètres (ordre de draft, keepers, mon équipe...) sont dans l'onglet "settings" du classeur,
 recopié dans config/config.json au lancement de reco / watch (sauf --no-sync-config).
 """
@@ -52,6 +52,8 @@ def parse_args(argv=None):
     parser.add_argument("--csv", help="lire les choix dans un CSV round;pick;player")
     parser.add_argument("--until", type=int, help="ne garder que les N premiers choix (mock draft)")
     parser.add_argument("--sims", type=int, help="nombre de simulations (défaut : onglet settings)")
+    parser.add_argument("--model", choices=["adp", "need"],
+                        help="choix simulés des managers : adp ou need (défaut : Optim | Draft | Opponent model)")
     parser.add_argument("--no-sheet", action="store_true", help="ne rien écrire dans Google Sheets")
     parser.add_argument("--no-sync-config", action="store_true", help="ne pas relire l'onglet settings")
     parser.add_argument("-v", "--verbose", action="store_true")
@@ -73,6 +75,8 @@ class Session:
             self.gs = self.league.get("google_sheets", {})
         if args.sims:
             self.league["draft"]["simulations"] = args.sims
+        if getattr(args, "model", None):
+            self.league["draft"]["opponent_model"] = args.model
         self._pool = None
         self._yahoo = None
         self._yahoo_mode = None

@@ -130,7 +130,7 @@ DEFAULT_LEAGUE = {
     "games": {"per_slot": 82, "lineup": "daily"},
     "draft": {
         "type": "snake", "rounds": 12, "my_team": "", "order": [], "keepers": {}, "keeper_rounds": [], "picks_source": "sheet",
-        "candidates": 40, "simulations": 40, "adp_noise": 0.15,
+        "candidates": 40, "simulations": 40, "adp_noise": 0.15, "opponent_model": "need", "need_weight": 2.0, "need_candidates": 4,
     },
     "google_sheets": {
         "draft_spreadsheet_id": "", "config_tab": "settings",
