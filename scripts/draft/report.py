@@ -75,7 +75,7 @@ def build_rows(reco, state, league):
         if pk.team == state.my_team:
             p = pk.player
             if p is None:
-                rows.append([pk.name, "", "", "", "", "", f"tour {pk.round} (non reconnu)"])
+                rows.append([pk.name, "", "", "", "", "", f"tour {pk.round} (non reconnu ou en double)"])
             else:
                 rows.append([p.name, p.positions, p.team, round(p.gp or 0), _fmt(p.value_tot, 2), p.rank_tot,
                              f"tour {pk.round}"])
