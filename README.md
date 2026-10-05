@@ -210,6 +210,11 @@ Calcul :
 - pour chaque candidat, `draft.simulations` tirages de la suite de la draft : les autres
   managers suivent l'ADP (bruit `draft.adp_noise`, joueurs sans ADP placés d'après leur rang
   TOT), nos choix suivants prennent le meilleur z TOT compatible avec les postes G / F / C ;
+- mode `need` (`Optim | Draft | Opponent model`, par défaut) : chaque manager départage les
+  `Need candidates` (4) prochains joueurs de son ADP selon les besoins de son équipe (pente de
+  ses points roto par catégorie, équipes comparées en moyenne par joueur et en %). Le poids des
+  besoins vaut 0 au 1er tour et monte jusqu'à `Need weight` (2) au dernier : l'ADP reste la base.
+  `adp` = ancien comportement ; `--model adp|need` pour comparer sans toucher l'onglet settings ;
 - chaque tirage donne un classement roto projeté (points espérés par catégorie, FG% et FT%
   recalculés sur les tirs de l'équipe) ; la recommandation classe les candidats selon les
   points roto espérés de notre équipe, avec la probabilité qu'ils soient encore disponibles

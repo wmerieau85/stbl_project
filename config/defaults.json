@@ -140,6 +140,9 @@
       "candidates": 40,
       "simulations": 40,
       "adp_noise": 0.15,
+      "opponent_model": "need",
+      "need_weight": 2.0,
+      "need_candidates": 4,
       "picks_source": "yahoo"
     },
     "google_sheets": {
