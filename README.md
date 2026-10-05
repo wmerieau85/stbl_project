@@ -185,6 +185,14 @@ elles sont conservées et reportées sur toutes ses lignes, même si l'ordre cha
 droite (formules) ne sont pas touchées. Pour une seule phase : `--phase lt`. Onglet et colonne de
 départ réglables dans l'onglet settings (section Projections).
 
+Détail par source : `push-projections` (et `python main.py --push-sheet`) écrit aussi l'onglet
+`bdd_detail` (réglable : `Sheets | Tab | Detail`, vide = pas d'onglet ; seul :
+`python -m scripts.draft push-detail`). Une ligne par joueur et par source (colonne Stage :
+draft, ros, sea, l30...) et une ligne `Pondéré` par phase, triées par rang final : stats par match,
+ADP, EFF et RANG AVG / TOT calculés avec le groupe de référence de la phase pondérée (une source
+optimiste sur un joueur lui donne un meilleur rang). Sans tirs tentés, les tentatives par match de
+la projection pondérée sont reprises avec le % de la source (colonne `Tirs estimés`).
+
 Phase `season` (étape ros) : stats réelles de la saison en cours (`Grid season`, par défaut
 `fp.sea` à 100 %), avec z-scores et rangs comme les autres phases.
 

@@ -154,7 +154,8 @@
       "write_picks_to_sheet": true,
       "season_tab": "season",
       "alias_tab": "players",
-      "board_tab": "board"
+      "board_tab": "board",
+      "detail_tab": "bdd_detail"
     },
     "season": {
       "st_days": 15,

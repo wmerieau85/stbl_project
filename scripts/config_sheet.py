@@ -74,6 +74,8 @@ PARAMS = [
     ("Sheets | Tab", "Projections", "league", "google_sheets.projections_tab", "str",
      "toutes les phases + Team Draft / Team Season, écrit par push-projections / --push-sheet"),
     ("Sheets | Tab", "Board", "league", "google_sheets.board_tab", "str", "draft board et tirage au sort (formules)"),
+    ("Sheets | Tab", "Detail", "league", "google_sheets.detail_tab", "str",
+     "projections de chaque source à côté de la pondérée (vide = pas d'onglet)"),
     ("Sheets | Draft", "Choices Source", "league", "draft.picks_source", "choice:yahoo,sheet",
      "yahoo (lecture en direct) ou sheet (colonne Team Draft de l'onglet Projections, lignes draft)"),
     ("Sheets | Draft", "Copy results into the input tab", "league", "google_sheets.write_picks_to_sheet", "bool",

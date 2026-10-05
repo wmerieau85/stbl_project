@@ -49,6 +49,33 @@ def _raw(player, cat, mode):
     return (None if value is None else value * scale), None, scale
 
 
+def apply_params(players, params, weights, mode):
+    """z_<cat>_<mode> et z_sum_<mode> de chaque joueur, avec les paramètres (moyenne, écart-type)
+    d'un groupe de référence."""
+    for p in players:
+        total = 0.0
+        for cat in CATEGORIES:
+            league_pct, mu, sd = params[cat]
+            first, att, scale = _raw(p, cat, mode)
+            if cat in PERCENTS:
+                value = ((first or 0) - league_pct * att) * scale if att else 0.0
+            else:
+                value = first
+            z = None if value is None or not sd else (value - mu) / sd
+            if z is not None and cat in NEGATIVE:
+                z = -z
+            p[f"z_{cat}_{mode}"] = z
+            total += weights[cat] * (z or 0.0)
+        p[f"z_sum_{mode}"] = total
+
+
+def reference_params(players, league):
+    """Paramètres des z-scores (par mode) calculés sur ces joueurs, sans modifier la liste fournie."""
+    import copy
+    work = copy.deepcopy(players)
+    return {mode: _compute_mode(work, league, mode) for mode in MODES}
+
+
 def _compute_mode(players, league, mode):
     weights = {cat: float(league["categories"].get(cat, 0)) for cat in CATEGORIES}
     size = pool_size(league)
@@ -75,21 +102,7 @@ def _compute_mode(players, league, mode):
             sd = pstdev(values) if len(values) > 1 else 0.0
             params[cat] = (league_pct, mu, sd)
 
-        for p in players:
-            total = 0.0
-            for cat in CATEGORIES:
-                league_pct, mu, sd = params[cat]
-                first, att, scale = _raw(p, cat, mode)
-                if cat in PERCENTS:
-                    value = ((first or 0) - league_pct * att) * scale if att else 0.0
-                else:
-                    value = first
-                z = None if value is None or not sd else (value - mu) / sd
-                if z is not None and cat in NEGATIVE:
-                    z = -z
-                p[f"z_{cat}_{mode}"] = z
-                total += weights[cat] * (z or 0.0)
-            p[f"z_sum_{mode}"] = total
+        apply_params(players, params, weights, mode)
 
         pool = sorted(eligible, key=lambda p: p[f"z_sum_{mode}"], reverse=True)[:size]
 

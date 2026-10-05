@@ -4,6 +4,7 @@ Commandes :
     python -m scripts.draft reco                  # une recommandation (choix lus dans Google Sheets)
     python -m scripts.draft watch                 # veille : recalcule à chaque nouveau choix saisi
     python -m scripts.draft push-projections      # projections finales, toutes phases -> onglet bdd (C = phase)
+    python -m scripts.draft push-detail           # projections de chaque source -> onglet bdd_detail (aussi fait par push-projections)
     python -m scripts.draft config-push           # configuration locale -> onglets "settings" et "players" (remise à plat)
     python -m scripts.draft config-pull           # onglets "settings" et "players" -> config/config.json
     python -m scripts.draft check                 # vérifie l'accès au classeur (compte de service)
@@ -44,7 +45,7 @@ log = logging.getLogger("stbl.draft")
 
 def parse_args(argv=None):
     parser = argparse.ArgumentParser(description="Assistant de draft STBL (roto)")
-    parser.add_argument("command", choices=["reco", "watch", "push-projections", "config-push", "config-pull",
+    parser.add_argument("command", choices=["reco", "watch", "push-projections", "push-detail", "config-push", "config-pull",
                                             "check"])
     parser.add_argument("--season")
     parser.add_argument("--phase", help="push-projections : n'écrire que cette phase (défaut : toutes)")
@@ -341,6 +342,18 @@ def push_projections(session=None, season=None, phase=None):
     if teams is not None:   # Team Draft / Team Season suivent leur joueur (le bloc a pu être retrié)
         write_block(book, tab, bdd.team_columns(rows, teams), first_col=bdd._col_letter(cols["team_draft"]))
     print(f"{len(rows) - 1} lignes écrites dans l'onglet '{tab}' (phases : {', '.join(phases)}).")
+    detail = gs.get("detail_tab")
+    if detail and not phase:
+        push_detail(book, detail, season)
+
+
+def push_detail(book, tab, season):
+    """Onglet bdd_detail : projections de chaque source à côté de la projection pondérée."""
+    from scripts.draft.detail_tab import build_detail_rows
+
+    rows = build_detail_rows(season)
+    write_block(book, tab, rows, first_col="A")
+    print(f"{len(rows) - 1} lignes écrites dans l'onglet '{tab}' (une par joueur et par source).")
 
 
 def main(argv=None):
@@ -355,6 +368,12 @@ def main(argv=None):
             print(f"Classeur ouvert : {book.title} (onglets : {', '.join(ws.title for ws in book.worksheets())})")
         elif args.command == "push-projections":
             push_projections(session)
+        elif args.command == "push-detail":
+            gs = session.gs
+            book = session.book() if not gs.get("projections_spreadsheet_id") else \
+                open_spreadsheet(gs["projections_spreadsheet_id"], session.settings)
+            push_detail(book, gs.get("detail_tab") or "bdd_detail",
+                        session.args.season or session.settings["active_season"])
         elif args.command == "config-push":
             config_sheet.push(session.book(), session.gs.get("config_tab") or "settings", session.league)
             print(f"Onglet '{session.gs.get('config_tab') or 'config'}' réécrit à partir de la configuration locale.")

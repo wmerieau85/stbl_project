@@ -45,3 +45,12 @@ def test_fantasynerds_totals():
 
 def test_api_key_hidden():
     assert safe_url("https://x/y?apikey=SECRET&a=1") == "https://x/y?apikey=***&a=1"
+
+
+def test_detail_estimates_missing_shots():
+    from scripts.draft.detail_tab import _estimate_shots
+
+    row = {"gp": 50, "fgp": 0.5, "fga": None, "fgm": None, "ftp": 0.8, "fta": 200, "ftm": 160}
+    final = {"gp": 70, "fga": 1400, "fta": 280}
+    assert _estimate_shots(row, final) is True
+    assert row["fga"] == 1000 and row["fgm"] == 500 and row["fta"] == 200
