@@ -76,6 +76,8 @@ Codes de la ligne « site » des grilles : `fs26` (FanScout 2026-27, pré-saison
 | FanScout | fichier CSV | export manuel depuis [fanscout.pro/projections](https://fanscout.pro/projections), déposé dans `data/imports/fanscout/` sous le nom `fanscout_<étape>_AAAA-MM-JJ.csv` |
 | LineupExperts | export navigateur | protégé par Cloudflare : favori `tools/lineupexperts_export.js` (voir `tools/README.md`) qui télécharge `lineupexperts_<étape>_AAAA-MM-JJ.csv`, à déposer dans `data/imports/lineupexperts/` |
 | DraftKick | fichier CSV | export manuel, déposé dans `data/imports/draftkick/` sous le nom `draftkick_<étape>_AAAA-MM-JJ.csv` |
+| 9cat (9 Fantasy, code `nc`) | API JSON | automatique : projections « Expected » de [9cat.co.il](https://9cat.co.il/en/basketball/players/nba-103) (API publique 365scores, moyennes par match + matchs projetés, FGM/FGA et FTM/FTA fournis) ; `nc.sea` = stats réelles de la saison, une fois celle-ci commencée |
+| Fantasy Nerds (code `fn`) | API payante | clé personnelle dans `credentials/fantasynerds_key.txt` (une ligne, ignoré par git) ou variable `FANTASYNERDS_API_KEY` ; projections de draft en totaux, FG% / FT% sans tentatives (estimées). Désactivée par défaut (`Sources | Active`) |
 
 Pour les sources CSV, l'import prend le fichier le plus récent de l'étape active
 (ou celui passé avec `--file`). Totaux ou moyennes par match : détection
@@ -96,6 +98,8 @@ scripts/sources/fantasypros.py
 scripts/sources/fanscout.py  FanScout (CSV)
 scripts/sources/draftkick.py DraftKick (CSV)
 scripts/sources/lineupexperts.py LineupExperts (CSV exporté depuis le navigateur)
+scripts/sources/ninecat.py     9cat.co.il (API 365scores)
+scripts/sources/fantasynerds.py Fantasy Nerds (API, clé personnelle)
 tools/                       outils navigateur (export LineupExperts)
 data/imports/<source>/       dépôt des exports CSV
 scripts/player_linker.py     table players et rapprochement entre sources

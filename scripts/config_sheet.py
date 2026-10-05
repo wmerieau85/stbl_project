@@ -7,8 +7,8 @@ lignes est libre, les lignes vides sont ignorées. Sections reconnues :
 - paramètres simples (PARAMS ci-dessous) : Settings, Sheets, Optim, Pipeline ;
 - listes : Draft | Order (rang -> manager), Draft | Keepers (manager -> joueur),
   Transco | Managers (manager -> équipe Yahoo) ;
-- sources (paramètre = code du site : cbs, fp, fs, dk, le) : Sources | Types, Sources | Draft,
-  Sources | RoS, Sources | Active (paramètre = étape draft / ros, valeur = code),
+- sources (paramètre = code du site : cbs, fp, fs, dk, le, nc, fn) : Sources | Types, Sources | Draft,
+  Sources | RoS, Sources | Active (paramètre = étape draft / ros, valeur = code), Sources | Players,
   Sources | Import Files, Sources | <fenêtre> (Sea, L30, L15, L07 : stats réelles par période) ;
 - lecture des fichiers et pages des sites : Transco | <colonne> (gp, min, pts... : paramètre =
   code du site, valeur = nom de la colonne chez le site, plusieurs lignes possibles),
@@ -307,6 +307,9 @@ def build_rows(cfg=None, bootstrap=None):
         if conf.get("import_dir"):
             add("Sources | Import Files", code, conf["import_dir"], "dossier où déposer les fichiers")
     for code, _, conf in codes:
+        if conf.get("players_url"):
+            add("Sources | Players", code, conf["players_url"], "liste des joueurs (équipe, postes)")
+    for code, _, conf in codes:
         for stage, url in (conf.get("urls") or {}).items():
             if stage not in MAIN_STAGES:
                 add(f"Sources | {_window_label(stage)}", code, url, "stats réelles par période (étape ros)")
@@ -366,14 +369,18 @@ def parse_rows(rows, cfg=None, bootstrap=None):
     for section, param, value, _ in _clean_rows(rows):
         grouped.setdefault(_norm(section), []).append((section, param, value))
 
+    _sheet_codes = set()   # sources présentes dans l'onglet ; les autres (nouvelles) gardent les valeurs livrées
+
     def code_of(code, section):
         if code not in codes:
             raise ValueError(f"Onglet config, {section} : code source « {code} » inconnu "
                              f"(codes : {', '.join(sorted(codes))}).")
+        _sheet_codes.add(codes[code])
         return codes[code]
 
     roster, scoring, order, keepers, teams = {}, {}, [], {}, {}
     stages, active, windows, dirs, grids, transco = {}, {}, {}, {}, {}, {}
+    players_urls = {}
     for key, items in grouped.items():
         domain, sub = _split_section(key)
         for section, param, value in items:
@@ -415,6 +422,9 @@ def parse_rows(rows, cfg=None, bootstrap=None):
                 active.setdefault(code_of(value, section), set()).add(stage)
             elif domain == "sources" and sub == "import files":
                 dirs[code_of(param, section)] = value
+            elif domain == "sources" and sub == "players":
+                if value:
+                    players_urls[code_of(param, section)] = value
             elif domain == "sources" and sub == "types":
                 name = code_of(param, section)
                 expected = "url" if "urls" in sources[name] else "csv"
@@ -455,19 +465,28 @@ def parse_rows(rows, cfg=None, bootstrap=None):
 
     if stages:
         for name, conf in sources.items():
+            if name not in stages:      # source absente de l'onglet (nouvelle source) : valeurs livrées
+                continue
             key = "urls" if "urls" in conf else "files"
             extra = {s: u for s, u in (conf.get(key) or {}).items() if s not in MAIN_STAGES}
             conf[key] = dict(stages.get(name, {}), **extra)
     if windows:   # fenêtres de stats : la liste de l'onglet remplace l'ancienne
+        listed = set(_sheet_codes)
         for name, conf in sources.items():
-            if "urls" in conf:
+            if "urls" in conf and name in listed:
                 conf["urls"] = {s: u for s, u in conf["urls"].items() if s in MAIN_STAGES}
                 conf["urls"].update(windows.get(name, {}))
-        settings["stats_windows"] = {name: list(w) for name, w in windows.items()}
+        settings["stats_windows"] = dict({name: w for name, w in (settings.get("stats_windows") or {}).items()
+                                          if name not in listed}, **{name: list(w) for name, w in windows.items()})
     if "sources | active" in grouped:
-        settings["sources"] = {name: {s: s in active.get(name, set()) for s in MAIN_STAGES} for name in sources}
+        previous = settings.get("sources") or {}
+        settings["sources"] = {name: ({s: s in active.get(name, set()) for s in MAIN_STAGES}
+                                      if name in _sheet_codes else previous.get(name, {s: False for s in MAIN_STAGES}))
+                               for name in sources}
     for name, folder in dirs.items():
         sources[name]["import_dir"] = folder
+    for name, url in players_urls.items():
+        sources[name]["players_url"] = url
     for name, entries in transco.items():
         _apply_transco(sources[name], entries)
 

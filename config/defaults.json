@@ -194,6 +194,14 @@
       "lineupexperts": {
         "draft": true,
         "ros": true
+      },
+      "ninecat": {
+        "draft": true,
+        "ros": true
+      },
+      "fantasynerds": {
+        "draft": false,
+        "ros": false
       }
     },
     "phases": {
@@ -221,6 +229,9 @@
         "l30",
         "l15",
         "l07"
+      ],
+      "ninecat": [
+        "sea"
       ]
     }
   },
@@ -385,6 +396,52 @@
         "BLK": "blk",
         "TO": "tov",
         "ADP": "adp"
+      }
+    },
+    "ninecat": {
+      "code": "nc",
+      "urls": {
+        "draft": "https://api.fantasy.365scores.com/sports/players/stats?competitions=103&period=projected",
+        "ros": "https://api.fantasy.365scores.com/sports/players/stats?competitions=103&period=projected",
+        "sea": "https://api.fantasy.365scores.com/sports/players/stats?competitions=103&period=season"
+      },
+      "players_url": "https://api.fantasy.365scores.com/sports/players?competitions=103&lang=1",
+      "percent_scale": 1,
+      "columns": {
+        "gp": "gp",
+        "1": "min",
+        "2": "pts",
+        "3": "fgm",
+        "4": "fga",
+        "7": "fg3m",
+        "8": "fg3a",
+        "11": "ftm",
+        "12": "fta",
+        "17": "reb",
+        "18": "ast",
+        "19": "stl",
+        "20": "tov",
+        "21": "blk"
+      }
+    },
+    "fantasynerds": {
+      "code": "fn",
+      "urls": {
+        "draft": "https://api.fantasynerds.com/v1/nba/draft-projections?apikey={apikey}"
+      },
+      "percent_scale": 1,
+      "columns": {
+        "games_played": "gp",
+        "minutes": "min",
+        "points": "pts",
+        "rebounds": "reb",
+        "assists": "ast",
+        "steals": "stl",
+        "blocks": "blk",
+        "turnovers": "tov",
+        "threes": "fg3m",
+        "fg": "fgp",
+        "ft": "ftp"
       }
     }
   },
