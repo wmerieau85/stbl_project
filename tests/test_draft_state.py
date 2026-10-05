@@ -31,3 +31,23 @@ def test_keeper_picked_by_other_team_ignored(monkeypatch):
     state = build_state(_league({"A": ["Nikola Jokic"]}), pool, [(1, 2, "Nikola Jokic")])
     assert [p.name for p in state.rosters()["A"]] == ["Nikola Jokic"] and state.rosters()["B"] == []
     assert "keeper de A" in state.duplicates[0]
+
+
+def test_invalid_picks_ignored(monkeypatch):
+    monkeypatch.setattr("scripts.draft.pool.load_aliases", lambda: {})
+    pool = Pool([_player(0, "Nikola Jokic"), _player(1, "Luka Doncic")])
+    rows = [(0, 1, "Nikola Jokic"), (4, 1, "Nikola Jokic"), (1, 3, "Nikola Jokic"), ("x", 1, "Luka Doncic"),
+            (1, 1, ""), (1, 1, None), (1.0, "2", "Inconnu Total"), ("1", 1.0, "nikola jokic")]
+    state = build_state(_league(), pool, rows)
+    assert sorted(state.picks) == [0, 1]                      # tour 0, tour 4, choix 3 et « x » ignorés
+    assert state.picks[0].player.name == "Nikola Jokic"       # nom en minuscules reconnu
+    assert state.picks[1].player is None and state.unknown == ["Inconnu Total (tour 1, choix 2)"]
+    assert state.current == 2
+
+
+def test_keeper_declared_twice(monkeypatch):
+    monkeypatch.setattr("scripts.draft.pool.load_aliases", lambda: {})
+    pool = Pool([_player(0, "Nikola Jokic")])
+    state = build_state(_league({"A": ["Nikola Jokic"], "B": ["Nikola Jokic"]}), pool, [])
+    assert [p.name for p in state.rosters()["A"]] == ["Nikola Jokic"] and state.rosters()["B"] == []
+    assert len(state.duplicates) == 1
