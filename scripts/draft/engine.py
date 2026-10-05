@@ -25,6 +25,7 @@ l'équipe entière : un gros volume à faible réussite pèse vraiment sur l'éq
 
 import logging
 import math
+import time
 from dataclasses import dataclass, field
 
 import numpy as np
@@ -37,6 +38,7 @@ log = logging.getLogger(__name__)
 S = {name: i for i, name in enumerate(STATS)}
 CATEGORY_ORDER = ("fgp", "fg3m", "ftp", "reb", "ast", "stl", "blk", "tov", "pts")
 LOWER_IS_BETTER = {"tov"}
+MIN_AVAIL = 0.2     # un candidat disponible dans moins de 20 % des tirages passe après les autres
 UNCERTAINTY = 0.5   # écart-type de l'incertitude = 0,5 x dispersion des équipes dans la catégorie
 _erf = np.vectorize(math.erf)
 
@@ -125,6 +127,9 @@ class Candidate:
     available_now: int = 0
     available_next: float | None = None
     points: float = 0.0
+    points_sq: float = 0.0              # somme des carrés (écart-type de l'estimation)
+    runs: int = 0                       # tirages où ses points ont été simulés
+    active: bool = True                 # encore en course (élimination progressive)
     points_cat: np.ndarray = None
     team_points: np.ndarray = None      # équipes x catégories (somme sur les simulations)
     feasible: bool = True
@@ -135,11 +140,19 @@ class Candidate:
 
     @property
     def mean_points(self):
-        return self.points / self.available_now if self.available_now else None
+        return self.points / self.runs if self.runs else None
+
+    @property
+    def std_error(self):
+        if self.runs < 2:
+            return float("inf")
+        mean = self.points / self.runs
+        var = max(0.0, self.points_sq / self.runs - mean * mean) * self.runs / (self.runs - 1)
+        return math.sqrt(var / self.runs)
 
     @property
     def mean_cat(self):
-        return self.points_cat / self.available_now if self.available_now else None
+        return self.points_cat / self.runs if self.runs else None
 
 
 @dataclass
@@ -152,6 +165,8 @@ class Recommendation:
     standings: np.ndarray = None         # équipes x catégories (points espérés)
     standings_now: np.ndarray = None     # classement projeté des effectifs actuels
     totals_now: np.ndarray = None        # valeurs par catégorie des effectifs actuels
+    draws: int = 0                       # tirages effectués
+    finalists: int = 0                   # candidats encore en course à la fin
 
 
 class Simulator:
@@ -166,7 +181,15 @@ class Simulator:
         self.slots = required_slots(league)
         self.team_index = {t: i for i, t in enumerate(state.order)}
         draft = league.get("draft", {})
-        self.n_sims = max(1, int(draft.get("simulations", 40)))
+        # tirages adaptatifs : tous les candidats jusqu'à simulations_min, puis on écarte ceux qui sont
+        # nettement derrière le meilleur (écart > prune_z écarts-types), sans descendre sous finalists ;
+        # les autres continuent jusqu'à simulations tirages ou au bout de time_budget secondes
+        self.n_sims = max(1, int(draft.get("simulations", 200)))
+        self.n_min = max(2, min(self.n_sims, int(draft.get("simulations_min", 10))))
+        self.prune_z = float(draft.get("prune_z", 2.0))
+        self.time_budget = float(draft.get("time_budget", 8.0) or 0)
+        self.keep = max(1, int(draft.get("finalists", 5)))
+        self.batch = 10
         self.n_candidates = max(1, int(draft.get("candidates", 40)))
         self.noise = float(draft.get("adp_noise", 0.15))
         self.rng = np.random.default_rng(seed)
@@ -314,6 +337,29 @@ class Simulator:
                     self._refresh_slopes(ns)
         return None
 
+    def _prune(self, cands, draws):
+        """Élimination progressive : renvoie le nombre de candidats encore en course.
+
+        Hors course : impossible (postes), disponible dans moins de MIN_AVAIL des tirages, ou moyenne
+        inférieure à celle du meilleur de plus de prune_z écarts-types (de la différence)."""
+        for c in cands.values():
+            if c.active and (not c.feasible or c.p_now < MIN_AVAIL):
+                c.active = False
+        live = [c for c in cands.values() if c.active and c.runs >= 2]
+        if not live:
+            return 0
+        leader = max(live, key=lambda c: c.mean_points)
+        # du plus faible au plus fort : on écarte tant qu'il reste plus de finalists candidats
+        count = sum(1 for c in cands.values() if c.active)
+        for c in sorted(live, key=lambda c: c.mean_points):
+            if count <= self.keep or c is leader:
+                break
+            gap = leader.mean_points - c.mean_points
+            if gap > self.prune_z * math.sqrt(c.std_error ** 2 + leader.std_error ** 2):
+                c.active = False
+                count -= 1
+        return count
+
     def _my_choice(self, taken, roster, overall):
         """Notre choix simulé : meilleur z TOT disponible qui laisse les postes complétables.
 
@@ -361,8 +407,11 @@ class Simulator:
                                    team_points=np.zeros((st.teams, len(self.categories))))
         next_avail = {idx: 0 for idx in cands}
         next_runs = 0
+        started = time.monotonic()
+        draws = 0
 
-        for _ in range(self.n_sims):
+        while draws < self.n_sims:
+            draws += 1
             market_order = self._market_order()
             taken = set(base_taken)
             rosters = {t: list(r) for t, r in base_rosters.items()}
@@ -387,24 +436,35 @@ class Simulator:
                 if idx in taken or not cand.feasible:
                     continue
                 cand.available_now += 1
+                if not cand.active:
+                    continue
                 t2, r2 = set(taken), {t: list(r) for t, r in rosters.items()}
                 self._run(reco.my_pick, t2, r2, market_order, forced={reco.my_pick: idx})
                 _, pts = self.evaluate(r2)
                 me = self.team_index[st.my_team]
-                cand.points += pts[me].sum()
+                total = pts[me].sum()
+                cand.runs += 1
+                cand.points += total
+                cand.points_sq += total * total
                 cand.points_cat += pts[me]
                 cand.team_points += pts
+            if draws >= self.n_min and draws % self.batch == 0:
+                self._prune(cands, draws)
+                if self.time_budget and time.monotonic() - started > self.time_budget:
+                    log.info("[Draft] Budget de temps atteint après %d tirages.", draws)
+                    break
+        reco.draws = draws
+        reco.finalists = sum(1 for c in cands.values() if c.active)
 
         for idx, cand in cands.items():
             if reco.my_next is not None and next_runs:
                 cand.available_next = next_avail[idx] / next_runs
         # un joueur presque jamais disponible à mon choix ne doit pas être en tête :
         # on classe d'abord ceux disponibles dans au moins 20 % des simulations
-        min_avail = max(1, int(round(0.2 * self.n_sims)))
-        ranked = sorted(cands.values(), key=lambda c: (c.feasible, c.available_now >= min_avail,
+        ranked = sorted(cands.values(), key=lambda c: (c.feasible, c.p_now >= MIN_AVAIL, c.active,
                                                        c.mean_points or 0), reverse=True)
         reco.candidates = ranked
         best = next((c for c in ranked if c.available_now), None)
         if best is not None:
-            reco.standings = best.team_points / best.available_now
+            reco.standings = best.team_points / max(1, best.runs)
         return reco

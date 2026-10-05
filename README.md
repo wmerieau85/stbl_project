@@ -219,7 +219,12 @@ Calcul :
 - effectif de chaque équipe = keepers + choix saisis ; les totaux saison respectent le plafond
   `games.per_slot` × postes titulaires (82 × 8 = 656) : les meilleurs joueurs par match
   (z AVG) jouent en priorité ;
-- pour chaque candidat, `draft.simulations` tirages de la suite de la draft : les autres
+- tirages de la suite de la draft, tous partagés par les candidats (même ordre des autres
+  managers pour tous, comparaison à hasard égal) : `Simulations min` (10) tirages pour tous, puis
+  tous les 10 tirages on écarte ceux dont l'écart au meilleur dépasse `Prune z` (2) écarts-types,
+  sans descendre sous `Finalists` (5) ; les finalistes vont jusqu'à `Simulations` (200) tirages
+  ou `Time budget` (8 s). La disponibilité est mesurée sur tous les tirages, pour tous les
+  candidats. Colonnes `± pts (95 %)` et `Tirages` dans draft_reco. Dans la suite simulée, les autres
   managers suivent l'ADP (bruit `draft.adp_noise`, joueurs sans ADP placés d'après leur rang
   TOT), nos choix suivants prennent le meilleur z TOT compatible avec les postes G / F / C ;
 - mode `need` (`Optim | Draft | Opponent model`, par défaut) : chaque manager départage les

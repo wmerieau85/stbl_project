@@ -44,10 +44,10 @@ def build_rows(reco, state, league):
 
     if reco.candidates:
         best = next((c.mean_points for c in reco.candidates if c.mean_points is not None), None)
-        rows.append(["RECOMMANDATIONS"])
+        rows.append(["RECOMMANDATIONS", f"{reco.draws} tirages", f"{reco.finalists} candidat(s) jusqu'au bout"])
         rows.append(["#", "Joueur", "Pos", "Équipe", "Pts roto espérés", "Écart vs n°1",
                      "Dispo à mon choix %", "Dispo au choix suivant %", "Z TOT", "Rang TOT", "ADP",
-                     "Postes OK"] + cats)
+                     "Postes OK"] + cats + ["± pts (95 %)", "Tirages"])
         for i, c in enumerate(reco.candidates[:TOP_N], 1):
             p = c.player
             mean = c.mean_points
@@ -56,7 +56,8 @@ def build_rows(reco, state, league):
                 "" if mean is None or best is None else _fmt(mean - best, 2),
                 _pct(c.p_now), _pct(c.available_next), _fmt(p.value_tot, 2), p.rank_tot,
                 _fmt(p.adp, 1), "oui" if c.feasible else "NON",
-            ] + ([_fmt(v, 1) for v in c.mean_cat] if c.mean_cat is not None else [""] * len(cats)))
+            ] + ([_fmt(v, 1) for v in c.mean_cat] if c.mean_cat is not None else [""] * len(cats))
+                + ["" if c.runs < 2 else _fmt(1.96 * c.std_error, 2), c.runs])
         rows.append([])
 
     table = reco.standings if reco.standings is not None else reco.standings_now
@@ -105,11 +106,12 @@ def console_summary(reco, state, top=10):
         lines.append("Draft terminée.")
     else:
         lines.append(f"Choix en cours : {_slot_label(state, reco.current)} -> {state.team_at(reco.current)}")
-        lines.append(f"Mon prochain choix : {_slot_label(state, reco.my_pick)}")
+        lines.append(f"Mon prochain choix : {_slot_label(state, reco.my_pick)} ({reco.draws} tirages, "
+                     f"{reco.finalists} candidat(s) jusqu'au bout)")
     for i, c in enumerate(reco.candidates[:top], 1):
         mean = "-" if c.mean_points is None else f"{c.mean_points:6.2f}"
         nxt = "" if c.available_next is None else f" | dispo choix suivant {100 * c.available_next:3.0f}%"
-        lines.append(f"{i:2d}. {c.player.name:<28} {c.player.positions:<8} pts {mean} | dispo {100 * c.p_now:3.0f}%"
+        lines.append(f"{i:2d}. {c.player.name:<28} {c.player.positions:<8} pts {mean} ({c.runs:3d} t.) | dispo {100 * c.p_now:3.0f}%"
                      f"{nxt}{'' if c.feasible else ' | POSTES KO'}")
     if state.unknown:
         lines.append("Noms non reconnus : " + ", ".join(state.unknown))
