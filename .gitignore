@@ -33,3 +33,4 @@ __pycache__/
 
 # Projections finales exportées
 exports/
+!tests/fixtures/*.json
