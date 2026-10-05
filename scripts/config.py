@@ -23,10 +23,11 @@ DEFAULT_SETTINGS = {
     "active_season": "2026-27",
     "active_stage": "draft",  # "draft" ou "ros"
     # stats réelles par période, importées avec l'étape ros (codes fp.sea, fp.l30... des grilles)
-    "stats_windows": {"fantasypros": ["sea", "l30", "l15", "l07"]},
+    "stats_windows": {"fantasypros": ["sea", "l30", "l15", "l07"], "ninecat": ["sea"]},
     # sources activées par étape : {"cbs": {"draft": True, "ros": True}, ...}
-    "sources": {name: {"draft": True, "ros": True}
-                for name in ("cbs", "fantasypros", "fanscout", "draftkick", "lineupexperts")},
+    "sources": dict({name: {"draft": True, "ros": True}
+                     for name in ("cbs", "fantasypros", "fanscout", "draftkick", "lineupexperts", "ninecat")},
+                    fantasynerds={"draft": False, "ros": False}),   # API payante : clé nécessaire
     "google": {"service_account_file": "credentials/service_account.json"},
     "yahoo": {"app_file": "credentials/yahoo_app.json", "token_file": "credentials/yahoo_token.json",
               "redirect_uri": "https://localhost:8080"},
@@ -58,7 +59,8 @@ def load_bootstrap():
     data = {"spreadsheet_id": "", "config_tab": "settings",
             "google": {"service_account_file": "credentials/service_account.json"},
             "yahoo": {"app_file": "credentials/yahoo_app.json", "token_file": "credentials/yahoo_token.json",
-                      "redirect_uri": "https://localhost:8080"}}
+                      "redirect_uri": "https://localhost:8080"},
+            "fantasynerds": {"api_key_file": "credentials/fantasynerds_key.txt"}}
     if os.path.exists(BOOTSTRAP_PATH):
         data = _deep_merge(data, _read_json(BOOTSTRAP_PATH))
     return data

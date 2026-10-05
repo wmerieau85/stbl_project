@@ -1,11 +1,17 @@
 """Client HTTP partagé : timeout, nouvelles tentatives et pause entre requêtes."""
 
 import logging
+import re
 import time
 
 import cloudscraper
 
 log = logging.getLogger(__name__)
+
+
+def safe_url(url):
+    """URL sans clé d'API (pour les messages)."""
+    return re.sub(r"(apikey|api_key|key|token)=[^&]+", r"\1=***", url or "", flags=re.I)
 
 
 class HttpClient:
@@ -36,9 +42,9 @@ class HttpClient:
                 self._last_request = time.monotonic()
                 if response.status_code == 200:
                     return response.text
-                log.warning("HTTP %s sur %s (tentative %d)", response.status_code, url, attempt)
+                log.warning("HTTP %s sur %s (tentative %d)", response.status_code, safe_url(url), attempt)
             except Exception as exc:  # erreurs réseau, timeouts, Cloudflare...
                 self._last_request = time.monotonic()
-                log.warning("Erreur réseau sur %s (tentative %d) : %s", url, attempt, exc)
-        log.error("Échec définitif : %s", url)
+                log.warning("Erreur réseau sur %s (tentative %d) : %s", safe_url(url), attempt, safe_url(str(exc)))
+        log.error("Échec définitif : %s", safe_url(url))
         return None

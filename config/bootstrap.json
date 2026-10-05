@@ -8,5 +8,8 @@
     "app_file": "credentials/yahoo_app.json",
     "token_file": "credentials/yahoo_token.json",
     "redirect_uri": "https://localhost:8080"
+  },
+  "fantasynerds": {
+    "api_key_file": "credentials/fantasynerds_key.txt"
   }
 }
