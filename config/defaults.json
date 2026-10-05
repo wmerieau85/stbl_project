@@ -138,12 +138,16 @@
         2
       ],
       "candidates": 40,
-      "simulations": 40,
+      "simulations": 200,
       "adp_noise": 0.15,
       "opponent_model": "need",
       "need_weight": 2.0,
       "need_candidates": 4,
-      "picks_source": "yahoo"
+      "picks_source": "yahoo",
+      "simulations_min": 10,
+      "finalists": 5,
+      "prune_z": 2.0,
+      "time_budget": 8
     },
     "google_sheets": {
       "reco_tab": "draft_reco",

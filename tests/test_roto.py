@@ -55,3 +55,22 @@ def test_need_weight_grows_with_rounds():
     sim.rounds, sim.need_weight = 12, 2.0
     assert sim._need_weight(0) == 0.0
     assert 0 < sim._need_weight(3 * 5) < sim._need_weight(3 * 11) == 2.0
+
+
+def test_prune_keeps_finalists_and_drops_clear_losers():
+    from types import SimpleNamespace
+    from scripts.draft.engine import Candidate, Simulator
+
+    def cand(mean, spread, runs=20, avail=20):
+        c = Candidate(player=None, sims=20, available_now=avail, runs=runs)
+        c.points = mean * runs
+        c.points_sq = (mean * mean + spread * spread) * runs
+        return c
+
+    sim = SimpleNamespace(keep=2, prune_z=2.0)
+    cands = {0: cand(80, 1), 1: cand(79.8, 1), 2: cand(70, 1), 3: cand(79.9, 1), 4: cand(90, 1, avail=2)}
+    assert Simulator._prune(sim, cands, 20) == 3       # 2 écarté (loin), 4 écarté (dispo 10 %)
+    assert not cands[2].active and not cands[4].active and cands[1].active
+    sim.keep = 3
+    cands = {i: cand(80 - 5 * i, 1) for i in range(5)}
+    assert Simulator._prune(sim, cands, 20) == 3       # jamais sous finalists
