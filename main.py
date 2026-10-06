@@ -79,7 +79,7 @@ def update_yahoo_rankings(settings):
     try:
         rankings.update(settings, league)
     except (YahooError, OSError, ValueError, KeyError) as exc:
-        log.warning("[Yahoo] Pré-classement non mis à jour (%s) ; si besoin : python -m scripts.yahoo auth.", exc)
+        log.warning("[Yahoo] Pré-classement non mis à jour : %s", exc)
 
 
 def run_pipeline(args):
