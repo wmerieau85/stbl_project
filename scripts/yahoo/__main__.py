@@ -104,12 +104,7 @@ def main(argv=None):
             from scripts.yahoo import rankings
 
             init_db()
-            key = _key(client, league)
-            count = args.count or int((league.get("yahoo") or {}).get("rankings_count") or 300)
-            rows = rankings.fetch_rankings(client, key, count)
-            if not rows:
-                raise YahooError("Classement Yahoo vide.")
-            rankings.save_rankings(rows, settings["active_season"])
+            rows = rankings.update(settings, league, args.count)
             os.makedirs(EXPORTS_DIR, exist_ok=True)
             path = os.path.join(EXPORTS_DIR, f"yahoo_rankings_{settings['active_season']}.csv")
             with open(path, "w", encoding="utf-8-sig", newline="") as fh:

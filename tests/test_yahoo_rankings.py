@@ -51,3 +51,39 @@ def test_save_links_players(tmp_path, monkeypatch):
     assert rankings.save_rankings(rows, "2026-27") == ["Inconnu"]
     found = rankings.rankings_by_player("2026-27")
     assert found[7]["rank"] == 1 and found[7]["adp"] == 1.4 and found[8]["rank"] == 2
+
+
+def test_public_rankings_paging():
+    """Lecture publique (format json_f) : rang O-Rank, ADP, ADP de présaison à défaut."""
+    from scripts.yahoo import rankings
+
+    def player(i, adp):
+        return {"player": {"player_key": f"478.p.{i}", "name": {"full": f"Joueur {i}"}, "editorial_team_abbr": "den",
+                           "display_position": "C", "player_ranks": [{"player_rank": {"rank_type": "OR", "rank_value": str(i)}}],
+                           "draft_analysis": {"average_pick": adp, "preseason_average_pick": "9.5", "average_round": "1.0",
+                                              "percent_drafted": "1.00"}}}
+
+    class Resp:
+        status_code = 200
+
+        def __init__(self, data):
+            self.data, self.text = data, ""
+
+        def json(self):
+            return {"fantasy_content": self.data}
+
+    calls = []
+
+    class Session:
+        def get(self, url, **kw):
+            calls.append(url)
+            if "/game/nba" in url:
+                return Resp({"game": {"game_key": "478"}})
+            start = int(url.split("start=")[1].split(";")[0])
+            n = 25 if start == 0 else 3
+            return Resp({"league": {"players": [player(start + k + 1, "-" if k == 1 else "1.6") for k in range(n)]}})
+
+    rows = rankings.fetch_public_rankings("4205", 300, session=Session())
+    assert len(rows) == 28 and "league/478.l.4205/players" in calls[1] and len(calls) == 3
+    assert rows[0]["rank"] == 1 and rows[0]["adp"] == 1.6 and rows[0]["nba_team"] == "DEN"
+    assert rows[1]["adp"] == 9.5

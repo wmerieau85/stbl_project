@@ -1,6 +1,8 @@
 """Pré-classement (O-Rank) et ADP Yahoo des joueurs, lus dans le contexte de ma ligue.
 
-API : league/<clé>/players;sort=OR;start=N;count=25/draft_analysis
+Lecture publique par défaut, sans connexion (la ligue est publique) : c'est l'adresse qu'utilise la
+page Draft Analysis de Yahoo (pub-api-ro.fantasysports.yahoo.com, format json_f). Si elle échoue
+(ligue privée), API avec le jeton : league/<clé>/players;sort=OR;start=N;count=25/draft_analysis
 - l'ordre de la réponse (sort=OR) donne le rang Yahoo, celui de la salle de draft ;
 - draft_analysis donne l'ADP Yahoo (average_pick, tous les drafts Yahoo), le tour moyen et le
   % de drafts où le joueur est pris.
@@ -57,6 +59,77 @@ def parse_players(content, start=0):
             "avg_cost": _num(draft.get("average_cost")),
         })
     return rows
+
+
+PUBLIC_API = "https://pub-api-ro.fantasysports.yahoo.com/fantasy/v2"
+PUBLIC_HEADERS = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) "
+                                "Chrome/128.0 Safari/537.36"}
+
+
+def _public_get(path, session=None, timeout=30):
+    """Lecture publique (sans jeton) : adresse utilisée par la page Draft Analysis de Yahoo."""
+    import requests
+
+    from scripts.yahoo.client import YahooError
+
+    resp = (session or requests).get(f"{PUBLIC_API}/{path}?format=json_f", headers=PUBLIC_HEADERS, timeout=timeout)
+    if resp.status_code != 200:
+        raise YahooError(f"lecture publique Yahoo impossible ({resp.status_code}) : {resp.text[:200]}")
+    return resp.json().get("fantasy_content", {})
+
+
+def parse_public_players(content, start=0):
+    """Réponse publique (format json_f, objets à plat) -> mêmes lignes que parse_players."""
+    rows = []
+    for i, item in enumerate((content.get("league") or {}).get("players") or []):
+        info = item.get("player", item)
+        name = info.get("name", {})
+        draft = info.get("draft_analysis") or {}
+        rank = None
+        for r in info.get("player_ranks") or []:
+            r = r.get("player_rank", r)
+            if str(r.get("rank_type", "")).upper() == "OR":
+                rank = _num(r.get("rank_value"))
+        adp = _num(draft.get("average_pick"))
+        if adp is None:
+            adp = _num(draft.get("preseason_average_pick"))
+        pct = _num(draft.get("percent_drafted"))
+        if pct is None:
+            pct = _num(draft.get("preseason_percent_drafted"))
+        rows.append({
+            "rank": int(rank) if rank else start + i + 1,
+            "player_key": info.get("player_key"),
+            "player": name.get("full", "") if isinstance(name, dict) else str(name or ""),
+            "nba_team": (info.get("editorial_team_abbr") or "").upper(),
+            "positions": info.get("display_position", ""),
+            "adp": adp,
+            "avg_round": _num(draft.get("average_round")),
+            "pct_drafted": pct,
+            "avg_cost": _num(draft.get("average_cost")),
+        })
+    return rows
+
+
+def public_league_key(league_id, session=None):
+    league_id = str(league_id).strip()
+    if ".l." in league_id:
+        return league_id
+    game = _public_get("game/nba", session).get("game") or {}
+    return f"{game.get('game_key')}.l.{league_id}"
+
+
+def fetch_public_rankings(league_id, count=300, session=None):
+    """Classement Yahoo de ma ligue sans connexion (ligue publique), par pages de 25."""
+    key = public_league_key(league_id, session)
+    rows = []
+    for start in range(0, max(1, int(count)), PAGE):
+        page = parse_public_players(_public_get(
+            f"league/{key}/players;position=ALL;start={start};count={PAGE};sort=OR;out=ranks;ranks=o-rank"
+            f"/draft_analysis", session), start)
+        rows += page
+        if len(page) < PAGE:
+            break
+    return rows[:count]
 
 
 def fetch_rankings(client, key, count=300):
@@ -132,18 +205,23 @@ def rankings_by_player(season):
 
 
 def update(settings, league, count=None):
-    """Récupère et enregistre le classement Yahoo de la ligue configurée. Renvoie le nombre de joueurs."""
+    """Récupère et enregistre le classement Yahoo de la ligue configurée : lecture publique (ligue
+    publique, sans connexion), sinon API avec le jeton. Renvoie les lignes enregistrées."""
     from scripts.yahoo.client import YahooClient, YahooError
     from scripts.yahoo.league import league_key
 
     league_id = str((league.get("yahoo") or {}).get("league_id") or "").strip()
     if not league_id:
         raise YahooError("ID de ligue Yahoo absent (Settings | League | League ID).")
-    client = YahooClient(settings)
-    key = league_key(client, league_id)
     count = count or int((league.get("yahoo") or {}).get("rankings_count") or 300)
-    rows = fetch_rankings(client, key, count)
+    try:
+        rows = fetch_public_rankings(league_id, count)
+        log.info("[Yahoo] Classement de la ligue lu sans connexion (%d joueurs).", len(rows))
+    except Exception as exc:  # ligue privée ou adresse publique indisponible : API avec le jeton
+        log.info("[Yahoo] Lecture publique impossible (%s) : passage par l'API.", exc)
+        client = YahooClient(settings)
+        rows = fetch_rankings(client, league_key(client, league_id), count)
     if not rows:
         raise YahooError("Classement Yahoo vide.")
     save_rankings(rows, settings["active_season"])
-    return len(rows)
+    return rows

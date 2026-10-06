@@ -74,3 +74,22 @@ def test_invalid_grid_rejected(cfg):
     rows[i][2] = "90,00%"
     with pytest.raises(ValueError):
         C.parse_rows(rows, json.loads(json.dumps(config)), boot)
+
+
+def test_old_local_config_gets_new_sources(tmp_path, monkeypatch):
+    """config.json créé avant l'ajout de 9cat : le code nc doit être reconnu dans l'onglet settings."""
+    import json
+
+    from scripts import config, config_sheet
+
+    old = config._read_json(config.DEFAULTS_PATH)
+    old["sources"] = {k: v for k, v in old["sources"].items() if k not in ("ninecat", "fantasynerds")}
+    old["sources"]["fanscout"].pop("import_dir", None)
+    path = tmp_path / "config.json"
+    path.write_text(json.dumps(old), encoding="utf-8")
+    monkeypatch.setattr(config, "CONFIG_PATH", str(path))
+    data = config.load_config()
+    assert data["sources"]["ninecat"]["code"] == "nc" and "import_dir" in data["sources"]["fanscout"]
+    rows = [config_sheet.HEADER, ["Sources | Types", "nc", "URL", ""], ["Sources | Active", "draft", "nc", ""]]
+    cfg, _ = config_sheet.parse_rows(rows, cfg=data)
+    assert cfg["settings"]["sources"]["ninecat"]["draft"] is True
