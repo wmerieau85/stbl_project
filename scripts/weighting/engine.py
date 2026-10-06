@@ -229,6 +229,11 @@ def compute_phase(phase, settings=None, grid_path=None):
         )
         results.append(result)
 
+    if not results:
+        # aucune donnée pour cette phase (ex. projections ros pas encore publiées) : on garde le calcul
+        # précédent plutôt que de vider la phase
+        log.warning("[Pondération %s] Aucun joueur calculé : projections précédentes conservées.", phase)
+        return 0
     _finalize_shooting(results)
     add_zscores(results, load_league())
     computed_at = datetime.now().isoformat(timespec="seconds")
