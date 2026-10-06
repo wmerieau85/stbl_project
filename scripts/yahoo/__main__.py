@@ -4,6 +4,7 @@
     python -m scripts.yahoo leagues   # mes ligues NBA de la saison, avec leur ID
     python -m scripts.yahoo check     # réglages, équipes et ordre de draft de la ligue configurée
     python -m scripts.yahoo draft     # choix de draft effectués (+ exports/yahoo_draft_<saison>.csv)
+    python -m scripts.yahoo rankings  # pré-classement (O-Rank) et ADP Yahoo -> base (+ exports/yahoo_rankings_<saison>.csv)
 """
 
 import argparse
@@ -43,7 +44,8 @@ def _key(client, league):
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description="API Yahoo Fantasy")
-    parser.add_argument("command", choices=["auth", "leagues", "check", "draft"])
+    parser.add_argument("command", choices=["auth", "leagues", "check", "draft", "rankings"])
+    parser.add_argument("--count", type=int, help="rankings : nombre de joueurs (défaut 300)")
     parser.add_argument("--no-browser", action="store_true", help="ne pas ouvrir le navigateur (auth)")
     parser.add_argument("--league", help="ID de la ligue Yahoo (sinon onglet settings)")
     parser.add_argument("-v", "--verbose", action="store_true")
@@ -52,7 +54,7 @@ def main(argv=None):
                         format="%(asctime)s %(levelname)s %(message)s", datefmt="%H:%M:%S")
     settings, league = load_settings(), load_league()
     client = YahooClient(settings)
-    if args.command in ("check", "draft"):
+    if args.command in ("check", "draft", "rankings"):
         league = _sync_config(settings, league) if not args.league else league
         if args.league:
             league.setdefault("yahoo", {})["league_id"] = args.league
@@ -97,6 +99,31 @@ def main(argv=None):
                                 p["player"], p["positions"], p["nba_team"]])
                     print(f"{p['pick']:>3} (tour {p['round']:>2}) {t.get('name', p['team_key']):<28} {p['player']}")
             print(f"{len(picks)} choix écrits dans {path}")
+        elif args.command == "rankings":
+            from scripts.db import init_db
+            from scripts.yahoo import rankings
+
+            init_db()
+            key = _key(client, league)
+            count = args.count or int((league.get("yahoo") or {}).get("rankings_count") or 300)
+            rows = rankings.fetch_rankings(client, key, count)
+            if not rows:
+                raise YahooError("Classement Yahoo vide.")
+            rankings.save_rankings(rows, settings["active_season"])
+            os.makedirs(EXPORTS_DIR, exist_ok=True)
+            path = os.path.join(EXPORTS_DIR, f"yahoo_rankings_{settings['active_season']}.csv")
+            with open(path, "w", encoding="utf-8-sig", newline="") as fh:
+                w = csv.writer(fh, delimiter=";")
+                w.writerow(["rank", "player", "nba_team", "positions", "adp", "avg_round", "pct_drafted", "player_id"])
+                for r in rows:
+                    w.writerow([r["rank"], r["player"], r["nba_team"], r["positions"],
+                                "" if r["adp"] is None else str(r["adp"]).replace(".", ","),
+                                "" if r["avg_round"] is None else str(r["avg_round"]).replace(".", ","),
+                                "" if r["pct_drafted"] is None else str(r["pct_drafted"]).replace(".", ","),
+                                r.get("player_id") or ""])
+            for r in rows[:15]:
+                print(f"{r['rank']:>3}. {r['player']:<28} {r['positions']:<10} ADP {r['adp'] if r['adp'] is not None else '-'}")
+            print(f"{len(rows)} joueurs écrits dans {path}")
     except YahooError as exc:
         logging.error("%s", exc)
         return 1

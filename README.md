@@ -30,6 +30,38 @@ python -m scripts.sources.cbs           # une source seule
 python -m scripts.player_linker         # relancer le rapprochement
 ```
 
+## Récapitulatif des commandes
+
+Toutes se lancent depuis la racine du projet, venv activé. L'onglet `settings` est relu à chaque
+lancement (saison, étape `Actual Phase`, sources, grilles).
+
+| Quand | Commande | À quoi elle sert |
+|---|---|---|
+| Une fois | `python -m scripts.yahoo auth` | autorise l'accès à l'API Yahoo (jeton dans `credentials/`) |
+| Une fois par saison | `python -m scripts.yahoo leagues` | affiche l'ID de mes ligues, à reporter dans `Settings \| League \| League ID` |
+| Contrôle | `python -m scripts.yahoo check` | réglages, équipes, managers et nombre de choix de la ligue |
+| Contrôle | `python -m scripts.config_sheet check` | vérifie l'onglet settings sans rien écrire |
+| Préparation | `python main.py --push-sheet` | **commande principale** : importe les sources actives de l'étape, rapproche les joueurs, récupère le pré-classement et l'ADP Yahoo (étape draft), calcule les phases de l'étape (draft ; ou lt / st en ros), puis écrit `bdd` et `bdd_detail` |
+| Préparation | `python main.py --skip-import --push-sheet` | recalcule seulement (après un changement de grille ou d'alias) |
+| Préparation | `python main.py --sources ninecat --push-sheet` | réimporte une seule source |
+| Préparation | `python -m scripts.yahoo rankings` | seulement le pré-classement / ADP Yahoo (+ `exports/yahoo_rankings_<saison>.csv`) |
+| Préparation | `python -m scripts.draft push-projections` | seulement l'envoi de la base vers `bdd` et `bdd_detail` |
+| Avant la draft | `python -m scripts.lottery [--draw]` | tirage au sort de l'ordre de draft (onglet lottery) |
+| Avant la draft | `python -m scripts.draft reco --xlsx <fichier> --until N --no-sheet` | test sur une mock draft, sans toucher au classeur |
+| Pendant la draft | `python -m scripts.draft watch` | relit les choix (Yahoo ou bdd) et met à jour `draft_reco` à chaque nouveau choix |
+| Pendant la draft | `python -m scripts.draft reco` | un seul recalcul |
+| Après la draft | `python -m scripts.yahoo draft` | choix effectués (+ `exports/yahoo_draft_<saison>.csv`) |
+| En saison | `python main.py --push-sheet` avec `Actual Phase = ros` | projections ROS + stats par période, phases lt / st |
+| En saison | `python -m scripts.season update` | classement projeté et effectifs, onglet `season` |
+| Maintenance | `python -m scripts.player_linker` | relance le rapprochement des joueurs |
+| Maintenance | `python -m scripts.config_sheet push` | réécrit les onglets settings / players depuis la configuration locale (remise à plat) |
+| Maintenance | `python -m pytest -q` | tests |
+
+Étape active (`Actual Phase`) : `draft` n'importe que les sources actives en draft et ne recalcule
+que la phase draft ; `ros` importe les projections ros et les stats par période, et ne recalcule
+que lt / st. Les autres phases restent telles quelles en base et sont réécrites à l'identique dans
+`bdd`. Une phase sans aucune donnée garde son calcul précédent.
+
 ## Configuration
 
 L'onglet `settings` du classeur Google Sheets fait foi : on ne modifie plus de JSON à la main.
@@ -257,6 +289,13 @@ Lecture seule, via l'application déclarée sur developer.yahoo.com (redirect UR
    l'onglet settings (« ID de la ligue Yahoo »).
 4. `python -m scripts.yahoo check` : réglages, équipes et managers, nombre de choix de draft.
    `python -m scripts.yahoo draft` : choix effectués (+ `exports/yahoo_draft_<saison>.csv`).
+5. `python -m scripts.yahoo rankings` : pré-classement Yahoo (O-Rank, l'ordre de la salle de draft
+   de ma ligue) et ADP Yahoo (`average_pick`) des `Yahoo rankings count` (300) premiers joueurs,
+   enregistrés en base (table `yahoo_rankings`) et dans `exports/yahoo_rankings_<saison>.csv`.
+   Fait aussi par `python main.py` à l'étape draft (`--skip-yahoo` pour s'en passer ; sans jeton
+   ou sans accès, simple avertissement). Colonnes `Yahoo` (rang) et `ADP Yahoo` de `bdd` (BK, BL) ;
+   sans classement récupéré, `Yahoo` reprend l'ordre ADP des sources. Joueurs absents des
+   projections : listés dans le log (alias à ajouter dans l'onglet players si le nom diffère).
 
 Tant que Yahoo n'a pas validé l'accès à l'API (erreur 403), la ligue étant publique, les choix
 sont lus sur la page `basketball.fantasysports.yahoo.com/nba/<ID>/draftresults` : aucun réglage
