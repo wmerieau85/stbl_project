@@ -77,6 +77,14 @@ def load_config():
     data = _read_json(path) if os.path.exists(path) else {}
     for key, empty in (("league", {}), ("settings", {}), ("sources", {}), ("grids", {}), ("aliases", {})):
         data.setdefault(key, empty)
+    if path != DEFAULTS_PATH and os.path.exists(DEFAULTS_PATH):
+        # copie locale créée avant l'ajout d'une source : la source (et ses nouveaux réglages) viennent
+        # des valeurs livrées
+        delivered = _read_json(DEFAULTS_PATH).get("sources", {})
+        for name, conf in delivered.items():
+            local = data["sources"].setdefault(name, copy.deepcopy(conf))
+            for key, value in conf.items():      # réglages ajoutés depuis (ex. players_url)
+                local.setdefault(key, copy.deepcopy(value))
     return data
 
 
