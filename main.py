@@ -7,6 +7,7 @@ Exemples :
     python main.py --file fanscout=C:/chemin/table.csv   # fichier CSV précis
     python main.py --skip-import          # recalcule seulement la pondération
     python main.py --push-sheet           # ... puis envoie les projections (toutes phases) dans l'onglet bdd
+    python main.py --skip-yahoo           # sans le pré-classement / ADP Yahoo (étape draft)
 """
 
 import argparse
@@ -36,6 +37,8 @@ def parse_args():
     )
     parser.add_argument("--skip-import", action="store_true", help="ne pas réimporter les sources")
     parser.add_argument("--skip-link", action="store_true", help="ne pas lancer le rapprochement des joueurs")
+    parser.add_argument("--skip-yahoo", action="store_true",
+                        help="ne pas récupérer le pré-classement et l'ADP Yahoo (étape draft)")
     parser.add_argument("--skip-weighting", action="store_true", help="ne pas calculer les projections finales")
     parser.add_argument("--push-sheet", action="store_true",
                         help="écrire les projections finales (toutes phases) dans Google Sheets (onglet bdd)")
@@ -61,6 +64,22 @@ def sync_config():
         raise SystemExit(f"Onglet config : {exc}") from None
     except Exception as exc:  # classeur inaccessible : fichiers locaux
         log.warning("Onglet config non relu (%s) : fichiers de config/ utilisés tels quels.", exc)
+
+
+def update_yahoo_rankings(settings):
+    """Pré-classement et ADP Yahoo de ma ligue (colonnes Yahoo / ADP Yahoo de bdd). Non bloquant."""
+    from scripts.config import load_league
+    from scripts.yahoo import rankings
+    from scripts.yahoo.client import YahooError
+
+    league = load_league()
+    if not str((league.get("yahoo") or {}).get("league_id") or "").strip():
+        log.info("[Yahoo] Pas d'ID de ligue : pré-classement Yahoo non récupéré.")
+        return
+    try:
+        rankings.update(settings, league)
+    except (YahooError, OSError, ValueError, KeyError) as exc:
+        log.warning("[Yahoo] Pré-classement non mis à jour (%s) ; si besoin : python -m scripts.yahoo auth.", exc)
 
 
 def run_pipeline(args):
@@ -108,6 +127,9 @@ def run_pipeline(args):
 
     if not args.skip_link:
         link_players(season=settings["active_season"], stage=settings["active_stage"])
+
+    if settings["active_stage"] == "draft" and not args.skip_yahoo and not args.skip_import:
+        update_yahoo_rankings(settings)
 
     export_raw_projections(settings=settings)
 

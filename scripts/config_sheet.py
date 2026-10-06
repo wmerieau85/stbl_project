@@ -53,6 +53,8 @@ PARAMS = [
     ("Settings | League", "Number of teams", "league", "teams", "int", "doit correspondre au nombre de managers (Draft | Order)"),
     ("Settings | League", "League ID", "league", "yahoo.league_id", "optstr",
      "basketball.fantasysports.yahoo.com/nba/<ID> (change chaque saison)"),
+    ("Settings | League", "Yahoo rankings count", "league", "yahoo.rankings_count", "int",
+     "joueurs du pré-classement Yahoo récupérés (colonnes Yahoo / ADP Yahoo de bdd)"),
     ("Settings | League", "My team", "league", "draft.my_team", "str", "nom du manager, identique à Draft | Order"),
     ("Settings | League", "Maximum games", "league", "games.per_slot", "int", "82 x postes titulaires = plafond"),
     ("Settings | League", "Roster changes", "league", "games.lineup", "choice:daily,weekly", "daily ou weekly"),

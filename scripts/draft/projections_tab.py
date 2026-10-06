@@ -5,7 +5,10 @@ build_all_rows : toutes les phases de la saison dans un seul bloc (onglet bdd), 
 (draft, lt, st), puis la disposition historique décalée d'une colonne (joueur en B, A:BI).
 
 Colonnes (disposition historique) : A-R stats par match, T-AD z-scores AVG + EFF + RANG, AF-AT totaux,
-AV-BF z-scores TOT + EFF + RANG, BH rang Yahoo (ordre ADP, puis rang TOT sans ADP).
+AV-BF z-scores TOT + EFF + RANG, BH rang Yahoo, BI ADP Yahoo.
+Rang et ADP Yahoo : pré-classement (O-Rank) et ADP de ma ligue lus par l'API (python -m scripts.yahoo
+rankings, ou main.py à l'étape draft) ; sans classement récupéré, rang = ordre ADP des sources puis
+rang TOT, ADP vide.
 EFF = somme pondérée des z-scores / somme des poids (moyenne des 9 catégories).
 """
 
@@ -19,8 +22,12 @@ HEADER = (
     + ["FG%", "3P", "FT%", "TRB", "AST", "STL", "BLK", "TO", "PTS", "EFF", "RANG", ""]
     + ["G", "MIN", "FG", "FGA", "FG%", "3P", "FT", "FTA", "FT%", "TRB", "AST", "STL", "BLK", "TO", "PTS", ""]
     + ["FG%", "3P", "FT%", "TRB", "AST", "STL", "BLK", "TO", "PTS", "EFF", "RANG", ""]
-    + ["Yahoo"]
+    + ["Yahoo", "ADP Yahoo"]
 )
+
+
+def _adp(value):
+    return "" if value is None else round(value, 1)
 
 
 def build_rows(season=None, phase=None):
@@ -35,9 +42,17 @@ def build_rows(season=None, phase=None):
         names = [d[0] for d in cursor.description]
         players = [dict(zip(names, r)) for r in cursor.fetchall()]
 
-    with_adp = sorted((p for p in players if p["adp"] is not None), key=lambda p: p["adp"])
-    without = [p for p in players if p["adp"] is None]  # déjà triés par rang TOT
-    yahoo = {p["player_id"]: i for i, p in enumerate(with_adp + without, 1)}
+    from scripts.yahoo.rankings import rankings_by_player
+
+    real = rankings_by_player(season)
+    if real:
+        yahoo = {pid: r["rank"] for pid, r in real.items()}
+        yahoo_adp = {pid: r["adp"] for pid, r in real.items()}
+    else:  # classement Yahoo pas encore récupéré : ordre ADP des sources, puis rang TOT
+        with_adp = sorted((p for p in players if p["adp"] is not None), key=lambda p: p["adp"])
+        without = [p for p in players if p["adp"] is None]  # déjà triés par rang TOT
+        yahoo = {p["player_id"]: i for i, p in enumerate(with_adp + without, 1)}
+        yahoo_adp = {}
 
     rows = [HEADER]
     for p in players:
@@ -56,7 +71,8 @@ def build_rows(season=None, phase=None):
                   tot("fta"), p["ftp"], tot("reb"), tot("ast"), tot("stl"), tot("blk"), tot("tov"), tot("pts")]
         z_tot = [p[f"z_{c}_tot"] for c in Z_CATS] + [(p["z_sum_tot"] or 0) / weight_sum, p["rank_tot"]]
         rows.append([p["player"], p["positions"], p["team"]] + per_game + [""] + z_avg + [""]
-                    + totals + [""] + z_tot + [""] + [yahoo[p["player_id"]]])
+                    + totals + [""] + z_tot + [""] + [yahoo.get(p["player_id"], ""),
+                                                      _adp(yahoo_adp.get(p["player_id"]))])
     return rows
 
 
