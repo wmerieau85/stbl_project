@@ -97,7 +97,14 @@ def parse_code(code, phase, active_season):
         raise WeightsError(f"Code site inconnu : '{site}' (codes connus : {', '.join(sorted(codes))})")
     season = season_from_year(yy) if yy else active_season
     stage = window or ("draft" if yy else ("draft" if phase == "draft" else "ros"))
-    return {"code": code, "source": codes[site], "season": season, "stage": stage, "final": False}
+    source_label = codes[site]
+    from scripts.sources import SOURCES
+
+    allow_per_game_without_gp = any(
+        cls.label == source_label and cls.per_game for cls in SOURCES.values()
+    )
+    return {"code": code, "source": source_label, "season": season, "stage": stage, "final": False,
+            "allow_per_game_without_gp": allow_per_game_without_gp}
 
 
 def parse_weight(text):

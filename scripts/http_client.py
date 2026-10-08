@@ -33,12 +33,12 @@ class HttpClient:
         if elapsed < self.pause_seconds:
             time.sleep(self.pause_seconds - elapsed)
 
-    def get_text(self, url):
+    def get_text(self, url, headers=None):
         """Retourne le HTML de la page, ou None après échec de toutes les tentatives."""
         for attempt in range(1, self.retries + 2):
             self._wait_politely()
             try:
-                response = self._session.get(url, timeout=self.timeout)
+                response = self._session.get(url, timeout=self.timeout, headers=headers)
                 self._last_request = time.monotonic()
                 if response.status_code == 200:
                     return response.text
