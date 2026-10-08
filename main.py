@@ -14,7 +14,7 @@ import argparse
 import logging
 import sys
 
-from scripts.config import enabled_sources, load_settings
+from scripts.config import enabled_sources, load_bootstrap, load_settings
 from scripts.db import init_db
 from scripts.exports import export_raw_projections
 from scripts.http_client import HttpClient
@@ -50,18 +50,17 @@ def parse_args():
 
 def sync_config():
     """Relit l'onglet settings (paramètres, sources, grilles, alias) avant le calcul, si le classeur est accessible."""
-    from scripts.config import load_league
-
-    gs = load_league().get("google_sheets", {})
-    if not (gs.get("draft_spreadsheet_id") and gs.get("config_tab")):
+    boot = load_bootstrap()
+    if not (boot.get("spreadsheet_id") and boot.get("config_tab")):
         return
     try:
         from scripts import config_sheet
         from scripts.sheets import open_spreadsheet
 
-        config_sheet.pull(open_spreadsheet(gs["draft_spreadsheet_id"], load_settings()), gs["config_tab"])
+        sheets_settings = {"google": boot["google"]}
+        config_sheet.pull(open_spreadsheet(boot["spreadsheet_id"], sheets_settings), boot["config_tab"])
     except ValueError as exc:  # contenu de l'onglet incohérent : on s'arrête, pour ne pas calculer à tort
-        raise SystemExit(f"Onglet config : {exc}") from None
+        raise ValueError(f"Onglet config : {exc}") from None
     except Exception as exc:  # classeur inaccessible : fichiers locaux
         log.warning("Onglet config non relu (%s) : fichiers de config/ utilisés tels quels.", exc)
 
@@ -83,9 +82,13 @@ def update_yahoo_rankings(settings):
 
 
 def run_pipeline(args):
-    if not args.no_sync_config:
-        sync_config()
-    settings = load_settings()
+    try:
+        if not args.no_sync_config:
+            sync_config()
+        settings = load_settings()
+    except ValueError as exc:
+        log.error("Configuration invalide : %s", exc)
+        return 2
     if args.season:
         settings["active_season"] = args.season
     if args.stage:

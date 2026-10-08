@@ -35,7 +35,8 @@ import logging
 import re
 import sys
 
-from scripts.config import (CATEGORY_LABELS_SHEET, load_bootstrap, load_config, save_bootstrap, save_config)
+from scripts.config import (CATEGORY_LABELS_SHEET, load_bootstrap, load_config, load_default_config, save_bootstrap,
+                            save_config, validate_runtime_config)
 
 log = logging.getLogger(__name__)
 
@@ -614,15 +615,23 @@ def pull(spreadsheet, tab=None):
     Renvoie la configuration de la ligue à jour (comme load_league)."""
     from scripts.config import load_league
 
-    current, boot_now = load_config(), load_bootstrap()
+    local_config_invalid = False
+    try:
+        current = load_config()
+    except ValueError as exc:
+        log.warning("[Config] Copie locale invalide (%s) : reconstruction depuis l'onglet Sheets.", exc)
+        current = load_default_config()
+        local_config_invalid = True
+    boot_now = load_bootstrap()
     tab = tab or boot_now.get("config_tab") or "settings"
     cfg, boot = parse_rows(_read_tab(spreadsheet, tab), current, boot_now)
     aliases = _read_aliases(spreadsheet, cfg["league"].get("google_sheets", {}).get("alias_tab") or "players")
     if aliases:
         cfg["aliases"] = dict(sorted(aliases.items()))
+    validate_runtime_config(cfg, boot)
     _check_tabs(spreadsheet, cfg["league"].get("google_sheets", {}))
     changed = []
-    if cfg != current:
+    if local_config_invalid or cfg != current:
         save_config(cfg)
         changed.append("config.json")
     if boot != boot_now:
