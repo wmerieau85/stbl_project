@@ -5,6 +5,10 @@ Une ligne par joueur et par source (et par étape : draft, ros, sea, l30...), pl
 calculés avec le même groupe de référence que la phase pondérée correspondante (draft pour
 l'étape draft, lt sinon) : une source plus optimiste sur un joueur lui donne un meilleur rang.
 
+Source en moyennes par match sans nombre de matchs (RotoBaller) : ses moyennes sont ramenées
+aux matchs de la projection pondérée (colonne G), comme dans le calcul, pour que ses totaux,
+z-scores et rangs soient comparables aux autres sources.
+
 Sans tirs tentés (FantasyPros, DraftKick, Fantasy Nerds...), les tentatives par match de la
 projection pondérée sont reprises avec le pourcentage de la source (colonne « Tirs estimés »).
 """
@@ -35,6 +39,23 @@ def _per_game(p, field):
 
 def _r(value, digits):
     return round(value, digits) if isinstance(value, (int, float)) else ""
+
+
+def _per_game_labels():
+    from scripts.sources import SOURCES
+
+    return {cls.label for cls in SOURCES.values() if cls.per_game}
+
+
+def _games_from_final(row, final):
+    """Moyennes par match sans matchs projetés -> totaux sur les matchs de la projection pondérée."""
+    from scripts.sources.base import COUNTING_COLUMNS
+
+    games = final["gp"]
+    for col in COUNTING_COLUMNS:
+        if row.get(col) is not None:
+            row[col] = row[col] * games
+    row["gp"] = games
 
 
 def _estimate_shots(row, final):
@@ -81,10 +102,13 @@ def build_detail_rows(season=None):
             return stage if stage in by_phase else main_phase
         return "lt" if "lt" in by_phase else main_phase
 
+    per_game_labels = _per_game_labels()
     rows = []
     for r in raws:
         phase = phase_of(r["stage"])
         final = finals_by_id[phase].get(r["player_id"])
+        if not r.get("gp") and r["source"] in per_game_labels and final and final.get("gp"):
+            _games_from_final(r, final)
         estimated = _estimate_shots(r, final)
         for mode in ("avg", "tot"):
             apply_params([r], refs[phase][mode], weights, mode)

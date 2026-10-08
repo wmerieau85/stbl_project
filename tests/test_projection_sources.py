@@ -170,3 +170,14 @@ def test_draft_grid_assigns_requested_new_source_weights():
     assert slots["rb26"]["weights"]["stats"]["pts"] == 0.1
     assert slots["es26"]["weights"]["gp"] == pytest.approx(0.1667, abs=0.0001)
     assert slots["es26"]["weights"]["stats"]["pts"] == 0.1
+
+
+def test_detail_per_game_source_without_games_uses_weighted_games():
+    """bdd_detail : moyennes RotoBaller (sans GP) ramenées aux matchs de la projection pondérée."""
+    from scripts.draft import detail_tab
+
+    row = {"source": "RotoBaller", "gp": None, "pts": 26.4, "reb": 12.5, "fgp": 0.57}
+    detail_tab._games_from_final(row, {"gp": 74.0})
+    assert row["gp"] == 74.0 and round(row["pts"], 1) == 1953.6 and row["fgp"] == 0.57
+    assert detail_tab._per_game(row, "pts") == 26.4
+    assert "RotoBaller" in detail_tab._per_game_labels()
