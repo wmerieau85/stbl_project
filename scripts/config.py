@@ -2,6 +2,7 @@
 
 import copy
 import json
+import math
 import os
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -55,6 +56,199 @@ def _deep_merge(base, override):
     return result
 
 
+def _validate_mapping(value, label, *, allow_empty=False):
+    if not isinstance(value, dict):
+        raise ValueError(f"{label} doit être un dictionnaire.")
+    if not allow_empty and not value:
+        raise ValueError(f"{label} ne peut pas être vide.")
+    return value
+
+
+def _is_number(value):
+    return isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value)
+
+
+def _normalize_source_flags(sources):
+    normalized = {}
+    for name, flags in sources.items():
+        if not isinstance(name, str) or not name.strip():
+            raise ValueError("settings.sources contient un nom de source invalide.")
+        label = f"settings.sources['{name}']"
+        if isinstance(flags, bool):
+            normalized[name] = _stage_flags(flags)
+            continue
+        stage_map = _validate_mapping(flags, label, allow_empty=True)
+        for stage, value in stage_map.items():
+            if stage not in {"draft", "ros"}:
+                raise ValueError(f"{label} contient un stage inconnu : '{stage}'.")
+            if not isinstance(value, bool):
+                raise ValueError(f"{label}['{stage}'] doit être un booléen.")
+        normalized[name] = _stage_flags(stage_map)
+    return normalized
+
+
+def validate_settings(settings):
+    """Vérifie les réglages actifs de l'application."""
+    settings = _validate_mapping(settings, "settings")
+    active_season = settings.get("active_season")
+    if not isinstance(active_season, str) or not active_season.strip():
+        raise ValueError("settings.active_season doit être une chaîne non vide.")
+    active_stage = settings.get("active_stage")
+    if active_stage not in {"draft", "ros"}:
+        raise ValueError("settings.active_stage doit être 'draft' ou 'ros'.")
+
+    if "sources" in settings:
+        _validate_mapping(settings["sources"], "settings.sources", allow_empty=True)
+
+    if "phases" in settings:
+        phases = _validate_mapping(settings["phases"], "settings.phases")
+        for stage, phase_list in phases.items():
+            if stage not in {"draft", "ros"}:
+                raise ValueError(f"settings.phases['{stage}'] est invalide : stage inconnu.")
+            if not isinstance(phase_list, list) or not phase_list:
+                raise ValueError(f"settings.phases['{stage}'] doit être une liste non vide.")
+            if not all(isinstance(item, str) and item.strip() for item in phase_list):
+                raise ValueError(f"settings.phases['{stage}'] doit contenir uniquement des chaînes non vides.")
+
+    if "export" in settings:
+        export_cfg = _validate_mapping(settings["export"], "settings.export")
+        delimiter = export_cfg.get("delimiter")
+        decimal = export_cfg.get("decimal")
+        if not isinstance(delimiter, str) or len(delimiter) != 1:
+            raise ValueError("settings.export.delimiter doit être un unique caractère.")
+        if not isinstance(decimal, str) or len(decimal) != 1:
+            raise ValueError("settings.export.decimal doit être un unique caractère.")
+
+    if "http" in settings:
+        http_cfg = _validate_mapping(settings["http"], "settings.http")
+        for key in ("timeout", "retries", "pause_seconds"):
+            if key not in http_cfg:
+                continue
+            value = http_cfg[key]
+            if key == "retries":
+                if not isinstance(value, int) or isinstance(value, bool) or value < 0:
+                    raise ValueError("settings.http.retries doit être un entier positif ou nul.")
+            elif key == "timeout":
+                if not _is_number(value) or value <= 0:
+                    raise ValueError("settings.http.timeout doit être un nombre strictement positif.")
+            elif not _is_number(value) or value < 0:
+                raise ValueError("settings.http.pause_seconds doit être un nombre positif ou nul.")
+
+    if "stats_windows" in settings:
+        stats_windows = _validate_mapping(settings["stats_windows"], "settings.stats_windows")
+        for source_name, windows in stats_windows.items():
+            if not isinstance(source_name, str) or not source_name.strip():
+                raise ValueError("settings.stats_windows contient un nom de source invalide.")
+            if not isinstance(windows, list) or not windows:
+                raise ValueError(f"settings.stats_windows['{source_name}'] doit être une liste non vide.")
+            if not all(isinstance(item, str) and item.strip() for item in windows):
+                raise ValueError(f"settings.stats_windows['{source_name}'] doit contenir uniquement des noms valides.")
+
+    return settings
+
+
+def validate_sources_config(sources):
+    """Vérifie la configuration des sources importées."""
+    sources_cfg = _validate_mapping(sources, "sources", allow_empty=True)
+    for name, conf in sources_cfg.items():
+        if not isinstance(name, str) or not name.strip():
+            raise ValueError("sources contient un nom de source invalide.")
+        conf_map = _validate_mapping(conf, f"sources['{name}']", allow_empty=True)
+        if "code" in conf_map and (not isinstance(conf_map["code"], str) or not conf_map["code"].strip()):
+            raise ValueError(f"sources['{name}'].code doit être une chaîne non vide.")
+        for key in ("urls", "files"):
+            if key in conf_map:
+                entries = _validate_mapping(conf_map[key], f"sources['{name}'].{key}", allow_empty=True)
+                for entry, value in entries.items():
+                    if not isinstance(entry, str) or not entry.strip():
+                        raise ValueError(f"sources['{name}'].{key} contient une clé invalide.")
+                    if not isinstance(value, str) or not value.strip():
+                        raise ValueError(f"sources['{name}'].{key}[{entry!r}] doit être une chaîne non vide.")
+        if "columns" in conf_map:
+            columns = _validate_mapping(conf_map["columns"], f"sources['{name}'].columns", allow_empty=True)
+            for key, value in columns.items():
+                if not isinstance(key, str) or not key.strip():
+                    raise ValueError(f"sources['{name}'].columns contient une clé invalide.")
+                if not isinstance(value, str) or not value.strip():
+                    raise ValueError(f"sources['{name}'].columns[{key!r}] doit être une chaîne non vide.")
+        if "positions" in conf_map:
+            positions = conf_map["positions"]
+            if not isinstance(positions, list) or not positions:
+                raise ValueError(f"sources['{name}'].positions doit être une liste non vide.")
+            if not all(isinstance(item, str) and item.strip() for item in positions):
+                raise ValueError(f"sources['{name}'].positions doit contenir uniquement des chaînes valides.")
+        if "percent_scale" in conf_map:
+            scale = conf_map["percent_scale"]
+            if not _is_number(scale) or scale <= 0:
+                raise ValueError(f"sources['{name}'].percent_scale doit être un nombre strictement positif.")
+    return sources_cfg
+
+
+def validate_league(league):
+    """Vérifie la configuration de la ligue."""
+    league_map = _validate_mapping(league, "league")
+    if "teams" in league_map and (
+        not isinstance(league_map["teams"], int) or isinstance(league_map["teams"], bool) or league_map["teams"] <= 0
+    ):
+        raise ValueError("league.teams doit être un entier strictement positif.")
+    if "roster" in league_map:
+        roster = _validate_mapping(league_map["roster"], "league.roster")
+        for pos, count in roster.items():
+            if not isinstance(pos, str) or not pos.strip():
+                raise ValueError("league.roster contient un poste invalide.")
+            if not isinstance(count, int) or isinstance(count, bool) or count < 0:
+                raise ValueError(f"league.roster['{pos}'] doit être un entier positif ou nul.")
+    if "categories" in league_map:
+        categories = _validate_mapping(league_map["categories"], "league.categories")
+        for cat, weight in categories.items():
+            if not isinstance(cat, str) or not cat.strip():
+                raise ValueError("league.categories contient une clé invalide.")
+            if not _is_number(weight) or weight < 0:
+                raise ValueError(f"league.categories['{cat}'] doit être un nombre positif.")
+    return league_map
+
+
+def _validate_config_structure(data):
+    if not isinstance(data, dict):
+        raise ValueError("La configuration doit être un objet JSON.")
+    for key in ("league", "settings", "sources", "grids", "aliases"):
+        if key in data and not isinstance(data[key], dict):
+            raise ValueError(f"{key} doit être un dictionnaire.")
+    return data
+
+
+def _effective_settings(config, bootstrap=None):
+    settings = _deep_merge(DEFAULT_SETTINGS, config.get("settings", {}))
+    settings["sources"] = _normalize_source_flags(settings["sources"])
+    boot = bootstrap or load_bootstrap()
+    settings["google"] = boot["google"]
+    settings["yahoo"] = boot["yahoo"]
+    return validate_settings(settings)
+
+
+def _effective_league(config, bootstrap=None):
+    supplied = config.get("league", {})
+    league = _deep_merge(DEFAULT_LEAGUE, supplied)
+    for key in ("roster", "categories"):
+        if key in supplied:
+            league[key] = supplied[key]
+    boot = bootstrap or load_bootstrap()
+    league["google_sheets"]["draft_spreadsheet_id"] = boot.get("spreadsheet_id", "")
+    league["google_sheets"]["config_tab"] = boot.get("config_tab") or "settings"
+    return validate_league(league)
+
+
+def validate_runtime_config(data, bootstrap=None):
+    """Valide les valeurs effectives fusionnées avec les valeurs par défaut."""
+    _validate_config_structure(data)
+    _effective_settings(data, bootstrap)
+    _effective_league(data, bootstrap)
+    validate_sources_config(data.get("sources", {}))
+    for key in ("grids", "aliases"):
+        _validate_mapping(data.get(key, {}), key, allow_empty=True)
+    return data
+
+
 def load_bootstrap():
     data = {"spreadsheet_id": "", "config_tab": "settings",
             "google": {"service_account_file": "credentials/service_account.json"},
@@ -70,22 +264,37 @@ def save_bootstrap(data):
     _write_json(BOOTSTRAP_PATH, data)
 
 
+def load_default_config():
+    """Charge et valide la configuration livrée, sans consulter la copie locale."""
+    data = _read_json(DEFAULTS_PATH) if os.path.exists(DEFAULTS_PATH) else {}
+    _validate_config_structure(data)
+    validate_sources_config(data.get("sources", {}))
+    for key in ("league", "settings", "sources", "grids", "aliases"):
+        data.setdefault(key, {})
+    return data
+
+
 def load_config():
     """Configuration complète {league, settings, sources, grids, aliases} : copie locale de l'onglet
     config (config/config.json), sinon valeurs livrées (config/defaults.json)."""
     path = CONFIG_PATH if os.path.exists(CONFIG_PATH) else DEFAULTS_PATH
     data = _read_json(path) if os.path.exists(path) else {}
+    _validate_config_structure(data)
+    validate_sources_config(data.get("sources", {}))
     for key, empty in (("league", {}), ("settings", {}), ("sources", {}), ("grids", {}), ("aliases", {})):
         data.setdefault(key, empty)
     if path != DEFAULTS_PATH and os.path.exists(DEFAULTS_PATH):
         # copie locale créée avant l'ajout d'une source : la source (et ses nouveaux réglages) viennent
         # des valeurs livrées
-        delivered = _read_json(DEFAULTS_PATH).get("sources", {})
+        delivered_data = _read_json(DEFAULTS_PATH)
+        _validate_config_structure(delivered_data)
+        validate_sources_config(delivered_data.get("sources", {}))
+        delivered = delivered_data.get("sources", {})
         for name, conf in delivered.items():
             local = data["sources"].setdefault(name, copy.deepcopy(conf))
             for key, value in conf.items():      # réglages ajoutés depuis (ex. players_url)
                 local.setdefault(key, copy.deepcopy(value))
-    return data
+    return _validate_config_structure(data)
 
 
 def save_config(data):
@@ -106,12 +315,7 @@ def _stage_flags(value):
 
 def load_settings():
     """Réglages actifs : valeurs par défaut + configuration + chemins locaux (bootstrap)."""
-    settings = _deep_merge(DEFAULT_SETTINGS, load_config()["settings"])
-    boot = load_bootstrap()
-    settings["google"] = boot["google"]
-    settings["yahoo"] = boot["yahoo"]
-    settings["sources"] = {name: _stage_flags(v) for name, v in settings["sources"].items()}
-    return settings
+    return _effective_settings(load_config())
 
 
 def enabled_sources(settings, stage=None):
@@ -160,20 +364,12 @@ NON_STARTING_SLOTS = ("BN", "IL", "IL+")
 
 def load_league():
     """Paramètres de la ligue complétés par les valeurs par défaut et le bootstrap (ID du classeur)."""
-    league = load_config()["league"]
-    merged = _deep_merge(DEFAULT_LEAGUE, league)
-    # roster et catégories : la liste de la configuration remplace entièrement celle par défaut
-    for key in ("roster", "categories"):
-        if key in league:
-            merged[key] = league[key]
-    boot = load_bootstrap()
-    merged["google_sheets"]["draft_spreadsheet_id"] = boot.get("spreadsheet_id", "")
-    merged["google_sheets"]["config_tab"] = boot.get("config_tab") or "settings"
-    return merged
+    return _effective_league(load_config())
 
 
 def load_sources_config():
-    return load_config()["sources"]
+    sources = load_config()["sources"]
+    return validate_sources_config(sources)
 
 
 def load_aliases():

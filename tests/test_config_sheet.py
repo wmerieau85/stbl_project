@@ -93,3 +93,179 @@ def test_old_local_config_gets_new_sources(tmp_path, monkeypatch):
     rows = [config_sheet.HEADER, ["Sources | Types", "nc", "URL", ""], ["Sources | Active", "draft", "nc", ""]]
     cfg, _ = config_sheet.parse_rows(rows, cfg=data)
     assert cfg["settings"]["sources"]["ninecat"]["draft"] is True
+
+
+def test_invalid_active_stage_rejected(tmp_path, monkeypatch):
+    from scripts import config
+
+    path = tmp_path / "config.json"
+    path.write_text(json.dumps({
+        "settings": {"active_stage": "invalid"}
+    }), encoding="utf-8")
+    monkeypatch.setattr(config, "CONFIG_PATH", str(path))
+    with pytest.raises(ValueError, match="active_stage"):
+        config.load_settings()
+
+
+def test_default_configuration_is_accepted(tmp_path, monkeypatch):
+    from scripts import config
+
+    monkeypatch.setattr(config, "CONFIG_PATH", str(tmp_path / "missing-config.json"))
+    settings = config.load_settings()
+    league = config.load_league()
+    assert settings["active_stage"] in {"draft", "ros"}
+    assert league["teams"] > 0
+
+
+@pytest.mark.parametrize(
+    "payload,match",
+    [
+        ([], "objet JSON"),
+        ({"settings": []}, "settings doit être un dictionnaire"),
+        ({"sources": []}, "sources doit être un dictionnaire"),
+        ({"league": "invalid"}, "league doit être un dictionnaire"),
+    ],
+)
+def test_invalid_config_structure_is_rejected_cleanly(tmp_path, monkeypatch, payload, match):
+    from scripts import config
+
+    path = tmp_path / "config.json"
+    path.write_text(json.dumps(payload), encoding="utf-8")
+    monkeypatch.setattr(config, "CONFIG_PATH", str(path))
+
+    with pytest.raises(ValueError, match=match):
+        config.load_config()
+
+
+@pytest.mark.parametrize(
+    "sources,match",
+    [
+        ({"": {}}, "nom de source invalide"),
+        ({"cbs": {"urls": {"draft": ""}}}, "chaîne non vide"),
+        ({"cbs": {"files": {"draft": None}}}, "chaîne non vide"),
+    ],
+)
+def test_invalid_source_configuration_is_rejected(sources, match):
+    from scripts.config import validate_sources_config
+
+    with pytest.raises(ValueError, match=match):
+        validate_sources_config(sources)
+
+
+def test_partial_settings_inherit_defaults(tmp_path, monkeypatch):
+    from scripts import config
+
+    path = tmp_path / "config.json"
+    path.write_text(json.dumps({
+        "settings": {
+            "active_stage": "ros",
+            "export": {"delimiter": "|"},
+        }
+    }), encoding="utf-8")
+    monkeypatch.setattr(config, "CONFIG_PATH", str(path))
+
+    loaded = config.load_settings()
+    assert loaded["active_stage"] == "ros"
+    assert loaded["active_season"] == config.DEFAULT_SETTINGS["active_season"]
+    assert loaded["export"] == {"delimiter": "|", "decimal": ","}
+    assert loaded["http"] == config.DEFAULT_SETTINGS["http"]
+
+
+def test_legacy_boolean_source_activation_is_normalized(tmp_path, monkeypatch):
+    from scripts import config
+
+    path = tmp_path / "config.json"
+    path.write_text(json.dumps({"settings": {"sources": {"cbs": True}}}), encoding="utf-8")
+    monkeypatch.setattr(config, "CONFIG_PATH", str(path))
+
+    assert config.load_settings()["sources"]["cbs"] == {"draft": True, "ros": True}
+
+
+@pytest.mark.parametrize(
+    "http,valid",
+    [
+        ({"retries": 0}, True),
+        ({"retries": 1.5}, False),
+        ({"retries": True}, False),
+        ({"pause_seconds": 0}, True),
+        ({"pause_seconds": True}, False),
+        ({"timeout": 0}, False),
+        ({"timeout": True}, False),
+    ],
+)
+def test_http_settings_types_and_bounds(tmp_path, monkeypatch, http, valid):
+    from scripts import config
+
+    path = tmp_path / "config.json"
+    path.write_text(json.dumps({"settings": {"http": http}}), encoding="utf-8")
+    monkeypatch.setattr(config, "CONFIG_PATH", str(path))
+
+    if valid:
+        config.load_settings()
+    else:
+        with pytest.raises(ValueError, match="settings.http"):
+            config.load_settings()
+
+
+def test_invalid_sheet_config_does_not_overwrite_local_config(tmp_path, monkeypatch):
+    from scripts import config, config_sheet
+
+    path = tmp_path / "config.json"
+    current = config._read_json(config.DEFAULTS_PATH)
+    path.write_text(json.dumps(current), encoding="utf-8")
+    original = path.read_text(encoding="utf-8")
+    monkeypatch.setattr(config, "CONFIG_PATH", str(path))
+
+    invalid = json.loads(json.dumps(current))
+    invalid["settings"]["active_stage"] = "invalid"
+    monkeypatch.setattr(config_sheet, "parse_rows", lambda *args, **kwargs: (invalid, config.load_bootstrap()))
+    monkeypatch.setattr(config_sheet, "_read_tab", lambda *args, **kwargs: [])
+    monkeypatch.setattr(config_sheet, "_read_aliases", lambda *args, **kwargs: None)
+    monkeypatch.setattr(config_sheet, "_check_tabs", lambda *args, **kwargs: None)
+
+    with pytest.raises(ValueError, match="active_stage"):
+        config_sheet.pull(object())
+    assert path.read_text(encoding="utf-8") == original
+
+
+def test_valid_sheet_config_repairs_invalid_local_config(tmp_path, monkeypatch):
+    from scripts import config, config_sheet
+
+    path = tmp_path / "config.json"
+    path.write_text('{"sources": []}', encoding="utf-8")
+    monkeypatch.setattr(config, "CONFIG_PATH", str(path))
+
+    valid = config.load_default_config()
+    monkeypatch.setattr(
+        config_sheet, "parse_rows", lambda *args, **kwargs: (valid, config.load_bootstrap())
+    )
+    monkeypatch.setattr(config_sheet, "_read_tab", lambda *args, **kwargs: [])
+    monkeypatch.setattr(config_sheet, "_read_aliases", lambda *args, **kwargs: None)
+    monkeypatch.setattr(config_sheet, "_check_tabs", lambda *args, **kwargs: None)
+
+    config_sheet.pull(object())
+
+    repaired = json.loads(path.read_text(encoding="utf-8"))
+    assert isinstance(repaired["sources"], dict)
+    assert repaired["settings"]["active_stage"] in {"draft", "ros"}
+
+
+def test_pipeline_returns_configuration_error_for_sheet_validation(monkeypatch, caplog):
+    from types import SimpleNamespace
+
+    from scripts import config_sheet, sheets
+    import main
+
+    def reject_sheet_config(*args, **kwargs):
+        raise ValueError("invalid sheet")
+
+    monkeypatch.setattr(main, "load_bootstrap", lambda: {
+        "spreadsheet_id": "spreadsheet",
+        "config_tab": "settings",
+        "google": {},
+    })
+    monkeypatch.setattr(sheets, "open_spreadsheet", lambda *args: object())
+    monkeypatch.setattr(config_sheet, "pull", reject_sheet_config)
+
+    assert main.run_pipeline(SimpleNamespace(no_sync_config=False)) == 2
+    assert "Configuration invalide : Onglet config : invalid sheet" in caplog.text
