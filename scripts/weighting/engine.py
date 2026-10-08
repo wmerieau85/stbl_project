@@ -139,9 +139,9 @@ def compute_player(entries):
         pairs = []
         for s, r in entries:
             total, games = r[cat], r["gp"]
-            if total is None or not games:
+            if total is None or (not games and not s.get("allow_per_game_without_gp")):
                 continue
-            value = total / games
+            value = total / games if games else total
             source_mpg = r["mpg"] or (r["min"] / games if r["min"] else None)
             if mpg:
                 # production par minute (ou par match ramenée au MPG final si la source n'a pas de minutes)

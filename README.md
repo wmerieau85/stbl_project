@@ -74,7 +74,7 @@ Une ligne par information, quatre colonnes `Section | Paramètre | Valeur | Aide
 | `Optim \| Draft / Season` | z-scores, veille, candidats, simulations, horizon court terme |
 | `Pipeline \| Import / Export` | réglages HTTP, séparateur et décimale des CSV |
 | `Draft \| Order`, `Draft \| Keepers`, `Transco \| Managers` | ordre du 1er tour, keepers (mode `sheet` seulement : sinon Yahoo fait foi), équipes Yahoo |
-| `Sources \| Types / Draft / RoS / Active / Import Files / Sea / L30 / L15 / L07` | par code de site (`cbs`, `fp`, `fs`, `dk`, `le`) : URL ou fichier par étape, sources actives par étape, dossiers d'import, fenêtres de stats réelles |
+| `Sources \| Types / Draft / RoS / Active / Import Files / Sea / L30 / L15 / L07` | par code de site (`cbs`, `fp`, `fs`, `dk`, `le`, `nc`, `fn`, `es`, `rb`) : URL ou fichier par étape, sources actives par étape, dossiers d'import, fenêtres de stats réelles |
 | `Grid <phase> \| GP / MIN / STATS / <catégorie>` | grilles de pondération : code de la ligne « site » -> poids (chaque niveau = 100 %) |
 | `Transco \| <colonne> / percent_scale / Player / Team / Positions...` | lecture des sites : colonne du site pour chaque colonne standard, options de lecture |
 
@@ -105,15 +105,30 @@ Codes de la ligne « site » des grilles : `fs26` (FanScout 2026-27, pré-saison
 |---|---|---|
 | CBS | web | automatique, une page par poste |
 | FantasyPros | web | automatique |
+| ESPN (code `es`) | API publique | automatique, projections de saison complètes |
+| RotoBaller (code `rb`) | API publique | automatique, projections 9-cat par match ; stats pondérées à 10 %, GP à 0 % |
 | FanScout | fichier CSV | export manuel depuis [fanscout.pro/projections](https://fanscout.pro/projections), déposé dans `data/imports/fanscout/` sous le nom `fanscout_<étape>_AAAA-MM-JJ.csv` |
 | LineupExperts | export navigateur | protégé par Cloudflare : favori `tools/lineupexperts_export.js` (voir `tools/README.md`) qui télécharge `lineupexperts_<étape>_AAAA-MM-JJ.csv`, à déposer dans `data/imports/lineupexperts/` |
 | DraftKick | fichier CSV | export manuel, déposé dans `data/imports/draftkick/` sous le nom `draftkick_<étape>_AAAA-MM-JJ.csv` |
 | 9cat (9 Fantasy, code `nc`) | API JSON | automatique : projections « Expected » de [9cat.co.il](https://9cat.co.il/en/basketball/players/nba-103) (API publique 365scores, moyennes par match + matchs projetés, FGM/FGA et FTM/FTA fournis) ; `nc.sea` = stats réelles de la saison, une fois celle-ci commencée |
 | Fantasy Nerds (code `fn`) | API payante | clé personnelle dans `credentials/fantasynerds_key.txt` (une ligne, ignoré par git) ou variable `FANTASYNERDS_API_KEY` ; projections de draft en totaux, FG% / FT% sans tentatives (estimées). Désactivée par défaut (`Sources | Active`) |
 
+ESPN et RotoBaller sont activés pour la draft, pas pour le RoS. RotoBaller publie des moyennes
+par match sans nombre de matchs projeté : elles sont donc converties en totaux avec les GP
+pondérés des autres sources. Son poids GP reste à 0 % ; ses stats ont 10 % de poids chacune.
+Les poids des cinq sources existantes sont réduits proportionnellement pour préserver leurs
+poids relatifs. ESPN reçoit 16,67 % du poids GP et des minutes, et 10 % du poids des stats.
+
 Pour les sources CSV, l'import prend le fichier le plus récent de l'étape active
 (ou celui passé avec `--file`). Totaux ou moyennes par match : détection
 automatique. Les CSV déposés ne sont pas versionnés.
+
+Lorsqu'un onglet `settings` existant ne connaît pas encore les codes `es` et `rb`, sa lecture
+(`python -m scripts.config_sheet pull`, ou la synchronisation habituelle du pipeline) ajoute automatiquement
+les deux sources et les poids livrés à la copie locale, en conservant les poids relatifs des sources
+déjà configurées. Cela ne modifie pas le classeur Google Sheets. Pour y faire apparaître les nouveaux
+réglages, utilisez `python -m scripts.config_sheet push` après avoir vérifié la copie locale : cette
+commande réécrit tout l'onglet `settings` et `players`.
 
 ## Structure
 

@@ -189,6 +189,10 @@
         "draft": true,
         "ros": true
       },
+      "espn": {
+        "draft": true,
+        "ros": false
+      },
       "fanscout": {
         "draft": true,
         "ros": true
@@ -207,6 +211,10 @@
       },
       "fantasynerds": {
         "draft": false,
+        "ros": false
+      },
+      "rotoballer": {
+        "draft": true,
         "ros": false
       }
     },
@@ -304,6 +312,31 @@
         "TO": "tov",
         "FTM": "ftm",
         "FGM": "fgm"
+      }
+    },
+    "espn": {
+      "code": "es",
+      "urls": {
+        "draft": "https://lm-api-reads.fantasy.espn.com/apis/v3/games/fba/seasons/{year}/segments/0/leaguedefaults/1?view=kona_player_info"
+      },
+      "percent_scale": 1,
+      "columns": {
+        "0": "pts",
+        "1": "blk",
+        "2": "stl",
+        "3": "ast",
+        "6": "reb",
+        "11": "tov",
+        "13": "fgm",
+        "14": "fga",
+        "15": "ftm",
+        "16": "fta",
+        "17": "fg3m",
+        "18": "fg3a",
+        "19": "fgp",
+        "20": "ftp",
+        "28": "mpg",
+        "42": "gp"
       }
     },
     "fanscout": {
@@ -449,6 +482,24 @@
         "fg": "fgp",
         "ft": "ftp"
       }
+    },
+    "rotoballer": {
+      "code": "rb",
+      "urls": {
+        "draft": "https://www.rotoballer.com/wp-json/rb/v1/sheet-rankings?sport=nba&format=9cat"
+      },
+      "percent_scale": 100,
+      "columns": {
+        "pts": "pts",
+        "reb": "reb",
+        "ast": "ast",
+        "stl": "stl",
+        "blk": "blk",
+        "3pm": "fg3m",
+        "fg_pct": "fgp",
+        "ft_pct": "ftp",
+        "to": "tov"
+      }
     }
   },
   "grids": {
@@ -459,7 +510,9 @@
         "lt02",
         "lt03",
         "lt04",
-        "lt05"
+        "lt05",
+        "lt06",
+        "lt07"
       ],
       [
         "site",
@@ -467,31 +520,39 @@
         "fp26",
         "cbs26",
         "le26",
-        "dk26"
+        "dk26",
+        "es26",
+        "rb26"
       ],
       [
         "GP",
-        "22,50%",
-        "22,50%",
-        "10,00%",
-        "22,50%",
-        "22,50%"
+        "18,75%",
+        "18,75%",
+        "8,33%",
+        "18,75%",
+        "18,75%",
+        "16,67%",
+        "0,00%"
       ],
       [
         "MIN",
-        "20,00%",
-        "20,00%",
-        "20,00%",
-        "20,00%",
-        "20,00%"
+        "16,67%",
+        "16,67%",
+        "16,67%",
+        "16,67%",
+        "16,67%",
+        "16,67%",
+        "0,00%"
       ],
       [
         "STATS",
-        "20,00%",
-        "20,00%",
-        "20,00%",
-        "20,00%",
-        "20,00%"
+        "16,00%",
+        "16,00%",
+        "16,00%",
+        "16,00%",
+        "16,00%",
+        "10,00%",
+        "10,00%"
       ]
     ],
     "lt": [

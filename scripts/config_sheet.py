@@ -494,8 +494,11 @@ def parse_rows(rows, cfg=None, bootstrap=None):
                                           if name not in listed}, **{name: list(w) for name, w in windows.items()})
     if "sources | active" in grouped:
         previous = settings.get("sources") or {}
+        default_active = load_default_config().get("settings", {}).get("sources", {})
         settings["sources"] = {name: ({s: s in active.get(name, set()) for s in MAIN_STAGES}
-                                      if name in _sheet_codes else previous.get(name, {s: False for s in MAIN_STAGES}))
+                                      if name in _sheet_codes else previous.get(
+                                          name, default_active.get(name, {s: False for s in MAIN_STAGES}))
+                                      )
                                for name in sources}
     for name, folder in dirs.items():
         sources[name]["import_dir"] = folder
@@ -504,8 +507,15 @@ def parse_rows(rows, cfg=None, bootstrap=None):
     for name, entries in transco.items():
         _apply_transco(sources[name], entries)
 
+    delivered_grids = load_default_config().get("grids", {})
+    new_sources = set(sources) - _sheet_codes
     for phase, cells in grids.items():
-        cfg["grids"][phase] = _grid_from_cells(phase, cells, settings.get("active_season"))
+        migrate_sources = phase in delivered_grids and new_sources
+        grid = _grid_from_cells(phase, cells, settings.get("active_season"), validate=not migrate_sources)
+        if phase in delivered_grids and new_sources:
+            grid = _add_default_source_weights(phase, grid, delivered_grids[phase], sources, new_sources)
+            _validate_grid(phase, grid, settings.get("active_season"))
+        cfg["grids"][phase] = grid
 
     season = league.get("season", {})
     ros = [season.get("lt_phase", "lt"), season.get("st_phase", "st")]
@@ -561,9 +571,8 @@ def _maybe_number(text):
         return str(text).strip()
 
 
-def _grid_from_cells(phase, cells, season):
+def _grid_from_cells(phase, cells, season, validate=True):
     """[(niveau, code, poids)] -> grille (disposition CSV), contrôlée avant d'être retenue."""
-    from scripts.weighting.weights import WeightsError, load_grid
 
     levels, codes = [], []
     weights = {}
@@ -576,6 +585,14 @@ def _grid_from_cells(phase, cells, season):
     prefix = "lt" if phase == "draft" else phase
     grid = ([[""] + [f"{prefix}{i:02d}" for i in range(1, len(codes) + 1)], ["site"] + codes]
             + [[level] + [weights.get((level, c), "") for c in codes] for level in levels])
+    if validate:
+        _validate_grid(phase, grid, season)
+    return grid
+
+
+def _validate_grid(phase, grid, season):
+    from scripts.weighting.weights import WeightsError, load_grid
+
     import tempfile
     import csv
     import os
@@ -588,7 +605,58 @@ def _grid_from_cells(phase, cells, season):
         raise ValueError(f"Onglet config, Grid {phase} : {str(exc).replace(tmp.name + ' : ', '')}") from None
     finally:
         os.unlink(tmp.name)
-    return grid
+
+
+def _add_default_source_weights(phase, grid, delivered_grid, sources, new_sources):
+    """Ajoute à une ancienne grille les emplacements livrés pour des sources absentes de l'onglet."""
+    from scripts.weighting.weights import parse_weight
+
+    def site_codes(rows):
+        row = next((r for r in rows if r and r[0].strip().lower() in ("site", "source", "code")), None)
+        return row, [c.strip() for c in row[1:]] if row else []
+
+    current_site, current_codes = site_codes(grid)
+    default_site, default_codes = site_codes(delivered_grid)
+    if current_site is None or default_site is None:
+        return grid
+
+    source_codes = {sources[name].get("code") for name in new_sources if name in sources}
+    additions = [
+        code for code in default_codes
+        if any(code == source_code or re.match(rf"^{re.escape(source_code)}\d{{2}}(?:\.|$)", code)
+               for source_code in source_codes if source_code)
+        and code not in current_codes
+    ]
+    if not additions:
+        return grid
+
+    default_rows = {row[0].strip().upper(): row for row in delivered_grid[2:] if row}
+    updated = [row[:] for row in grid]
+    current_site = updated[1]
+    current_site.extend(additions)
+    prefix = "lt" if phase == "draft" else phase
+    start = len(updated[0])
+    updated[0].extend(f"{prefix}{i:02d}" for i in range(start, start + len(additions)))
+
+    for row in updated[2:]:
+        label = row[0].strip().upper()
+        default_row = default_rows.get(label) or default_rows.get("STATS")
+        if default_row is None:
+            continue
+        new_weights = [
+            parse_weight(default_row[default_codes.index(code) + 1])
+            if default_codes.index(code) + 1 < len(default_row) else 0.0
+            for code in additions
+        ]
+        remaining = 1.0 - sum(new_weights)
+        old_weights = [parse_weight(value) for value in row[1:len(current_codes) + 1]]
+        old_total = sum(old_weights)
+        if remaining < 0 or (old_total <= 0 and remaining > 0):
+            raise ValueError(f"Grid : impossible d'ajouter les nouvelles sources à la ligne {row[0]}.")
+        scaled = [weight * remaining / old_total for weight in old_weights] if old_total else old_weights
+        row[1:] = [f"{weight * 100:.2f}%" for weight in scaled + new_weights]
+
+    return updated
 
 
 # --------------------------------------------------------------------------- synchronisation

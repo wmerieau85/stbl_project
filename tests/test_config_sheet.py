@@ -53,6 +53,46 @@ def test_per_stage_activation(cfg):
     assert c2["settings"]["sources"]["cbs"] == {"draft": True, "ros": False}
 
 
+def test_old_sheet_gets_new_draft_sources_and_weights(cfg):
+    config, boot = cfg
+    rows = _cells(C.build_rows(config, boot))
+    old_rows = [
+        row for row in rows
+        if not (
+            (row[0] in ("Sources | Types", "Sources | Draft", "Sources | Active")
+             and (row[1] in ("es", "rb") or row[2] in ("es", "rb")))
+            or (row[0].startswith("Transco |") and row[1] in ("es", "rb"))
+            or (row[0].startswith("Grid Draft |") and row[1] in ("es26", "rb26"))
+        )
+    ]
+    for row in old_rows:
+        if row[0] == "Grid Draft | GP":
+            row[2] = {"fs26": "22,50%", "fp26": "22,50%", "cbs26": "10,00%",
+                      "le26": "22,50%", "dk26": "22,50%"}.get(row[1], row[2])
+        elif row[0] in ("Grid Draft | MIN", "Grid Draft | STATS"):
+            row[2] = {"fs26": "20,00%", "fp26": "20,00%", "cbs26": "20,00%",
+                      "le26": "20,00%", "dk26": "20,00%"}.get(row[1], row[2])
+
+    updated, _ = C.parse_rows(old_rows, config, boot)
+    settings = updated["settings"]["sources"]
+    assert settings["espn"] == {"draft": True, "ros": False}
+    assert settings["rotoballer"] == {"draft": True, "ros": False}
+    assert updated["sources"]["espn"]["urls"]["draft"].endswith("view=kona_player_info")
+    assert updated["sources"]["rotoballer"]["urls"]["draft"].endswith("format=9cat")
+
+    draft = updated["grids"]["draft"]
+    codes = draft[1][1:]
+    rows_by_level = {row[0]: dict(zip(codes, row[1:])) for row in draft[2:]}
+    from scripts.weighting.weights import parse_weight
+
+    assert parse_weight(rows_by_level["GP"]["es26"]) == pytest.approx(0.1667, abs=0.0001)
+    assert parse_weight(rows_by_level["GP"]["rb26"]) == 0
+    assert parse_weight(rows_by_level["GP"]["fs26"]) == pytest.approx(0.1875)
+    assert parse_weight(rows_by_level["STATS"]["fs26"]) == pytest.approx(0.16)
+    assert parse_weight(rows_by_level["STATS"]["es26"]) == pytest.approx(0.1)
+    assert parse_weight(rows_by_level["STATS"]["rb26"]) == pytest.approx(0.1)
+
+
 def test_wrong_manager_count_rejected(cfg):
     config, boot = cfg
     rows = [r for r in _cells(C.build_rows(config, boot)) if not (r[0] == "Draft | Order" and r[1] == "15")]
