@@ -185,6 +185,20 @@ def validate_sources_config(sources):
     return sources_cfg
 
 
+def _column_number(value):
+    if not isinstance(value, str):
+        raise ValueError("Colonne Google Sheets invalide : une chaîne de lettres attendue.")
+    letters = value.strip().upper()
+    if not letters or not letters.isalpha():
+        raise ValueError(f"Colonne Google Sheets invalide : {value!r}.")
+    index = 0
+    for char in letters:
+        if not ("A" <= char <= "Z"):
+            raise ValueError(f"Colonne Google Sheets invalide : {value!r}.")
+        index = index * 26 + (ord(char) - ord("A") + 1)
+    return index
+
+
 def validate_league(league):
     """Vérifie la configuration de la ligue."""
     league_map = _validate_mapping(league, "league")
@@ -206,6 +220,17 @@ def validate_league(league):
                 raise ValueError("league.categories contient une clé invalide.")
             if not _is_number(weight) or weight < 0:
                 raise ValueError(f"league.categories['{cat}'] doit être un nombre positif.")
+    if "google_sheets" in league_map:
+        gs = _validate_mapping(league_map["google_sheets"], "league.google_sheets", allow_empty=True)
+        start_col = gs.get("projections_start_col", "C")
+        if not isinstance(start_col, str) or not start_col.strip():
+            raise ValueError("league.google_sheets.projections_start_col doit être une chaîne non vide.")
+        start_col = start_col.strip()
+        if _column_number(start_col) < 3:
+            raise ValueError(
+                "league.google_sheets.projections_start_col doit être une colonne à partir de C; "
+                "A et B sont réservés aux formules de l'onglet bdd."
+            )
     return league_map
 
 
@@ -229,6 +254,8 @@ def _effective_settings(config, bootstrap=None):
 
 def _effective_league(config, bootstrap=None):
     supplied = config.get("league", {})
+    if "google_sheets" in supplied:
+        _validate_mapping(supplied["google_sheets"], "league.google_sheets", allow_empty=True)
     league = _deep_merge(DEFAULT_LEAGUE, supplied)
     for key in ("roster", "categories"):
         if key in supplied:
@@ -350,7 +377,8 @@ DEFAULT_LEAGUE = {
     },
     "google_sheets": {
         "draft_spreadsheet_id": "", "config_tab": "settings",
-        "reco_tab": "draft_reco", "projections_spreadsheet_id": "", "projections_tab": "bdd", "detail_tab": "bdd_detail",
+        "reco_tab": "draft_reco", "projections_spreadsheet_id": "", "projections_tab": "bdd",
+        "yahoo_tab": "yahoo", "detail_tab": "bdd_detail",
         "projections_start_col": "C", "poll_seconds": 10, "write_picks_to_sheet": True, "season_tab": "season",
         "alias_tab": "players",
     },
