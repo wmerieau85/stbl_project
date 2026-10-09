@@ -337,11 +337,27 @@ def push_projections(session=None, season=None, phase=None):
     book = open_spreadsheet(gs.get("projections_spreadsheet_id") or gs.get("draft_spreadsheet_id"), settings)
     tab = gs.get("projections_tab") or "bdd"
     cols = bdd.layout(gs)
-    teams = bdd.team_map(bdd.read_rows(book, gs), gs) if cols["team_draft"] is not None else None
+    teams = formulas = None
+    if cols["team_draft"] is not None:
+        formulas = bdd.formula_columns(book, gs)
+        teams = bdd.team_map(bdd.read_rows(book, gs), gs)
     write_block(book, tab, rows, first_col=gs.get("projections_start_col") or "C")
-    if teams is not None:   # Team Draft / Team Season suivent leur joueur (le bloc a pu être retrié)
-        write_block(book, tab, bdd.team_columns(rows, teams), first_col=bdd._col_letter(cols["team_draft"]))
-    print(f"{len(rows) - 1} lignes écrites dans l'onglet '{tab}' (phases : {', '.join(phases)}).")
+    if teams is not None:
+        # Team Draft / Team Season : une colonne de formules n'est jamais écrite (formule recopiée sur
+        # les lignes ajoutées) ; une colonne de valeurs saisies suit son joueur (le bloc a pu être retrié)
+        columns = bdd.team_columns(rows, teams)
+        for i, key in enumerate(("team_draft", "team_season")):
+            if formulas[key]:
+                bdd.extend_formulas(book, gs, key, len(rows))
+            elif any(r[i] for r in columns[1:]):
+                write_block(book, tab, [[r[i]] for r in columns], first_col=bdd._col_letter(cols[key]))
+    stage = settings.get("active_stage")
+    computed = [p for p in phases if p in (settings.get("phases") or {}).get(stage, [])]
+    copied = [p for p in phases if p not in computed]
+    detail = f"recalculées à l'étape {stage} : {', '.join(computed) or 'aucune'}"
+    if copied:
+        detail += f" ; recopiées telles quelles depuis la base : {', '.join(copied)}"
+    print(f"{len(rows) - 1} lignes écrites dans l'onglet '{tab}' ({detail}).")
     detail = gs.get("detail_tab")
     if detail and not phase:
         push_detail(book, detail, season)
