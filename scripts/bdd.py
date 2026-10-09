@@ -10,6 +10,9 @@ Disposition (colonne de départ C par défaut, réglable : Sheets | Projections 
 
 Ce sont des propriétés du joueur : à chaque réécriture du bloc, elles sont reportées sur toutes les
 lignes du joueur (toutes phases), y compris s'il change de rang.
+
+Colonne calculée par formule (ex. Team Draft = XLOOKUP sur l'onglet rosters) : le programme
+n'y écrit jamais ; il recopie seulement la formule de la 1re ligne sur les lignes ajoutées.
 """
 
 import logging
@@ -55,6 +58,42 @@ def read_rows(book, gs):
     except Exception as exc:  # onglet absent
         log.warning("Onglet %s illisible (%s).", tab, exc)
         return []
+
+
+def formula_columns(book, gs):
+    """{"team_draft": bool, "team_season": bool} : colonne remplie par des formules (non écrite)."""
+    cols = layout(gs)
+    out = {"team_draft": False, "team_season": False}
+    if cols["team_draft"] is None:
+        return out
+    tab = gs.get("projections_tab") or "bdd"
+    try:
+        rows = book.worksheet(tab).get(
+            f"{_col_letter(cols['team_draft'])}2:{_col_letter(cols['team_season'])}",
+            value_render_option="FORMULA")
+    except Exception as exc:  # onglet absent ou illisible
+        log.debug("Formules de %s non lues (%s).", tab, exc)
+        return out
+    for key, i in (("team_draft", 0), ("team_season", 1)):
+        out[key] = any(len(r) > i and str(r[i]).startswith("=") for r in rows)
+    return out
+
+
+def extend_formulas(book, gs, key, last_row):
+    """Recopie la formule de la ligne 2 de la colonne `key` jusqu'à `last_row` (références relatives
+    ajustées par Sheets, comme une poignée de recopie)."""
+    cols = layout(gs)
+    tab = gs.get("projections_tab") or "bdd"
+    ws = book.worksheet(tab)
+    col = cols[key]
+    if last_row <= 2:
+        return
+    book.batch_update({"requests": [{"copyPaste": {
+        "source": {"sheetId": ws.id, "startRowIndex": 1, "endRowIndex": 2,
+                   "startColumnIndex": col, "endColumnIndex": col + 1},
+        "destination": {"sheetId": ws.id, "startRowIndex": 2, "endRowIndex": last_row,
+                        "startColumnIndex": col, "endColumnIndex": col + 1},
+        "pasteType": "PASTE_FORMULA"}}]})
 
 
 def _cell(row, index):
@@ -125,6 +164,9 @@ def write_team_draft(book, gs, picks_by_player):
     Les autres valeurs de la colonne (saisies manuelles) sont conservées. Renvoie le nombre de cellules modifiées."""
     cols = layout(gs)
     if cols["team_draft"] is None:
+        return 0
+    if formula_columns(book, gs)["team_draft"]:
+        log.info("[bdd] Team Draft est calculée par formule : choix non recopiés dans bdd.")
         return 0
     rows = read_rows(book, gs)
     wanted = {name_key(p): m for p, m in picks_by_player.items()}

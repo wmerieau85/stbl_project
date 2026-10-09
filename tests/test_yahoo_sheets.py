@@ -81,3 +81,69 @@ def test_validate_league_accepts_c_and_after():
     assert validate_league({"google_sheets": {"projections_start_col": "C"}})["google_sheets"]["projections_start_col"] == "C"
     assert validate_league({"google_sheets": {"projections_start_col": "D"}})["google_sheets"]["projections_start_col"] == "D"
     assert validate_league({"google_sheets": {"projections_start_col": "AA"}})["google_sheets"]["projections_start_col"] == "AA"
+
+
+class _FakeWs:
+    id = 7
+
+    def __init__(self, formulas):
+        self.formulas = formulas
+
+    def get(self, rng, value_render_option=None):
+        return self.formulas
+
+
+class _FakeBook:
+    def __init__(self, formulas):
+        self.ws, self.requests = _FakeWs(formulas), []
+
+    def worksheet(self, tab):
+        return self.ws
+
+    def batch_update(self, body):
+        self.requests += body["requests"]
+
+
+def _setup_push(monkeypatch, book, current_rows):
+    writes = []
+    projections = [["Phase", "Player"], ["draft", "Player A"], ["draft", "Player B"], ["lt", "Player A"]]
+    monkeypatch.setattr(draft_main, "load_league", lambda: {
+        "google_sheets": {"projections_tab": "bdd", "projections_start_col": "C", "detail_tab": ""}})
+    monkeypatch.setattr(draft_main, "load_settings", lambda: {
+        "active_season": "2026-27", "active_stage": "draft", "phases": {"draft": ["draft"], "ros": ["lt", "st"]}})
+    monkeypatch.setattr(draft_main, "build_all_rows", lambda season, phases: (projections, ["draft", "lt"]))
+    monkeypatch.setattr(draft_main, "open_spreadsheet", lambda spreadsheet_id, settings: book)
+    monkeypatch.setattr(draft_main, "write_block",
+                        lambda b, tab, rows, first_col: writes.append((first_col, rows)))
+    from scripts import bdd
+    monkeypatch.setattr(bdd, "read_rows", lambda b, gs: current_rows)
+    return writes
+
+
+def test_push_projections_keeps_team_draft_formulas_and_extends_them(monkeypatch, capsys):
+    book = _FakeBook([['=XLOOKUP($D2;rosters!$C:$C;rosters!$A:$A)', ""]])
+    writes = _setup_push(monkeypatch, book, [["Team Draft", "Team Season", "Phase", "Player"],
+                                             ["Arno", "", "draft", "Player A"]])
+    draft_main.push_projections()
+    assert [w[0] for w in writes] == ["C"]          # ni A (formules) ni B (vide)
+    req = book.requests[0]["copyPaste"]
+    assert req["pasteType"] == "PASTE_FORMULA" and req["destination"]["endRowIndex"] == 4
+    assert req["destination"]["startColumnIndex"] == 0
+    out = capsys.readouterr().out
+    assert "recalculées à l'étape draft : draft" in out and "recopiées telles quelles depuis la base : lt" in out
+
+
+def test_push_projections_values_still_follow_their_player(monkeypatch):
+    book = _FakeBook([["Arno", ""]])
+    writes = _setup_push(monkeypatch, book, [["Team Draft", "Team Season", "Phase", "Player"],
+                                             ["Arno", "", "draft", "Player A"]])
+    draft_main.push_projections()
+    assert writes[1] == ("A", [["Team Draft"], ["Arno"], [""], ["Arno"]]) and len(writes) == 2
+    assert not book.requests
+
+
+def test_write_team_draft_skips_formula_column():
+    from scripts import bdd
+
+    book = _FakeBook([['=XLOOKUP($D2;rosters!$C:$C;rosters!$A:$A)']])
+    assert bdd.write_team_draft(book, {"projections_tab": "bdd"}, {"Player A": "Arno"}) == 0
