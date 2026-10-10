@@ -32,8 +32,23 @@ class PublicPageError(RuntimeError):
     pass
 
 
-def fetch(path, league_id, timeout=30, session=None):
-    url = f"{BASE}/{league_id}/{path}"
+def _season_year(season):
+    if season is None:
+        return None
+    match = re.fullmatch(r"(\d{4})(?:-\d{2})?", str(season))
+    if not match:
+        raise ValueError(f"Saison Yahoo invalide : {season!r}")
+    return match.group(1)
+
+
+def fetch(path, league_id, timeout=30, session=None, season=None):
+    season_year = _season_year(season)
+    url = f"https://basketball.fantasysports.yahoo.com/{season_year}/nba/{league_id}/{path}" \
+        if season_year else f"{BASE}/{league_id}/{path}"
+    return _fetch_url(url, timeout, session)
+
+
+def _fetch_url(url, timeout=30, session=None):
     resp = (session or requests).get(url, headers=HEADERS, timeout=timeout, allow_redirects=True)
     if "login.yahoo.com" in resp.url:
         raise PublicPageError(f"{url} demande une connexion : la ligue n'est pas (ou plus) publique.")
@@ -42,6 +57,81 @@ def fetch(path, league_id, timeout=30, session=None):
     if "There was a problem" in resp.text[:5000]:
         raise PublicPageError(f"{url} : Yahoo signale un problème (ID de ligue incorrect ?)")
     return resp.text
+
+
+_TEAM_LOG_STATS = {
+    "gp*": "gp", "fgm/a*": "fgm_a", "fg%": "fgp", "ftm/a*": "ftm_a",
+    "ft%": "ftp", "3ptm": "fg3m", "pts": "pts", "reb": "reb", "ast": "ast",
+    "st": "stl", "blk": "blk", "to": "tov",
+}
+
+
+def parse_team_log(html):
+    """[{player, player_id, gp, fgm, fga, fgp, ftm, fta, ftp, fg3m, pts, reb, ast, stl, blk, tov}]."""
+    soup = BeautifulSoup(html, "html.parser")
+    table = None
+    indices = {}
+    for candidate in soup.find_all("table"):
+        header_rows = candidate.select("thead tr")
+        for header_row in reversed(header_rows):
+            cells = header_row.find_all(["th", "td"], recursive=False)
+            labels = [cell.get_text(" ", strip=True).lower() for cell in cells]
+            found = {key: labels.index(label) for label, key in _TEAM_LOG_STATS.items() if label in labels}
+            if "name" in labels and "gp" in found and "fgm_a" in found and "ftm_a" in found:
+                table, indices = candidate, found
+                indices["name"] = labels.index("name")
+                break
+        if table is not None:
+            break
+    if table is None:
+        return []
+
+    players = []
+    for row in table.select("tbody tr"):
+        cells = row.find_all(["td", "th"], recursive=False)
+        name_index = indices["name"]
+        if len(cells) <= name_index:
+            continue
+        link = row.select_one('a[href*="/players/"]')
+        if link is None:
+            continue
+        name_cell = cells[name_index]
+        name = link.get("title") or link.get_text(" ", strip=True) or name_cell.get_text(" ", strip=True)
+        if not name:
+            continue
+        href = link.get("href", "")
+        player_id_match = re.search(r"/players/(\d+)", href)
+        row_data = {
+            "player": name,
+            "player_id": player_id_match.group(1) if player_id_match else "",
+        }
+        for key, field in (("gp", "gp"), ("fgp", "fgp"), ("ftp", "ftp"), ("fg3m", "fg3m"),
+                           ("pts", "pts"), ("reb", "reb"), ("ast", "ast"), ("stl", "stl"),
+                           ("blk", "blk"), ("tov", "tov")):
+            index = indices.get(key)
+            row_data[field] = _num(cells[index].get_text(" ", strip=True)) if index is not None and index < len(cells) else None
+        for source, made_key, attempt_key in (("fgm_a", "fgm", "fga"), ("ftm_a", "ftm", "fta")):
+            index = indices[source]
+            ratio = cells[index].get_text(" ", strip=True) if index < len(cells) else ""
+            match = re.fullmatch(r"\s*([\d,]+)\s*/\s*([\d,]+)\s*", ratio)
+            row_data[made_key] = _num(match.group(1)) if match else None
+            row_data[attempt_key] = _num(match.group(2)) if match else None
+        players.append(row_data)
+    return players
+
+
+def team_log(league_id, team_id, season, timeout=30, session=None):
+    """Statistiques cumulées des joueurs ayant rapporté des points à une équipe."""
+    season_year = _season_year(season)
+    if not season_year:
+        raise ValueError("Une saison est obligatoire pour lire un Team Log Yahoo.")
+    url = f"https://basketball.fantasysports.yahoo.com/{season_year}/nba/{league_id}/{team_id}/teamlog"
+    players = parse_team_log(_fetch_url(url, timeout, session))
+    if not players:
+        raise PublicPageError(
+            f"{url} : aucun joueur dans le Team Log (Yahoo ne le publie qu'après la fin de la première semaine)."
+        )
+    return players
 
 
 def _player_name(cell):
@@ -117,9 +207,9 @@ def _num(text):
         return None
 
 
-def teams(league_id, timeout=30, session=None):
+def teams(league_id, timeout=30, session=None, season=None):
     """[{team_id, name}] d'après les liens de la page de classement."""
-    soup = BeautifulSoup(fetch("standings?opt_out=1", league_id, timeout, session), "html.parser")
+    soup = BeautifulSoup(fetch("standings?opt_out=1", league_id, timeout, session, season), "html.parser")
     out, seen = [], set()
     for a in soup.find_all("a", href=True):
         m = _TEAM_LINK.search(a["href"].split("?")[0])
@@ -176,13 +266,13 @@ STANDINGS_STATS = {"fg%": "fgp", "ft%": "ftp", "3ptm": "fg3m", "pts": "pts", "re
                    "st": "stl", "blk": "blk", "to": "tov", "gp": "gp", "total": "total"}
 
 
-def standings(league_id, timeout=30, session=None):
+def standings(league_id, timeout=30, session=None, season=None):
     """{nom d'équipe: {"points": {cat: pts, "total": x}, "stats": {cat: valeur, "gp": n}, "rank": r}}.
 
     Page classement : 1er tableau = points roto par catégorie, 2e = stats (avec GP).
     Valeurs None tant que la saison n'a pas commencé.
     """
-    soup = BeautifulSoup(fetch("standings?opt_out=1", league_id, timeout, session), "html.parser")
+    soup = BeautifulSoup(fetch("standings?opt_out=1", league_id, timeout, session, season), "html.parser")
     out = {}
     tables = [t for t in soup.find_all("table") if t.select("tbody tr a")]
     for k, table in enumerate(tables[:2]):

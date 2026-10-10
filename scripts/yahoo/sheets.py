@@ -5,6 +5,8 @@ from scripts.sheets import write_block
 DRAFT_START_COL = "A"
 ROSTERS_START_COL = "L"
 RANKINGS_START_COL = "V"
+STANDINGS_START_COL = "AH"
+TEAM_LOG_START_COL = "AO"
 
 DRAFT_HEADER = [
     "pick", "round", "pick_in_round", "team", "manager", "player", "positions", "nba_team",
@@ -16,6 +18,15 @@ ROSTERS_HEADER = [
 RANKINGS_HEADER = [
     "season", "rank", "player", "player_key", "player_id", "nba_team", "positions", "adp",
     "avg_round", "pct_drafted", "avg_cost",
+]
+STANDINGS_HEADER = ["rank", "team", "manager", "category", "stat", "points"]
+TEAM_LOG_HEADER = [
+    "team_id", "team", "manager", "player", "player_id", "GP", "FGM", "FGA", "FG%", "FTM", "FTA", "FT%",
+    "3PTM", "PTS", "REB", "AST", "ST", "BLK", "TO",
+]
+STANDINGS_CATEGORIES = [
+    ("fgp", "FG%"), ("ftp", "FT%"), ("fg3m", "3PTM"), ("pts", "PTS"), ("reb", "REB"),
+    ("ast", "AST"), ("stl", "ST"), ("blk", "BLK"), ("tov", "TO"),
 ]
 
 
@@ -61,3 +72,36 @@ def write_rankings(book, tab, rankings, season):
         for row in rankings
     ])
     write_block(book, tab, rows, first_col=RANKINGS_START_COL)
+
+
+def write_standings(book, tab, teams, standings):
+    """Écrit une ligne par équipe et catégorie, avec la statistique et les points roto Yahoo."""
+    rows = [STANDINGS_HEADER]
+    for team in teams:
+        result = standings.get(team.get("team", ""), {})
+        stats, points = result.get("stats", {}), result.get("points", {})
+        for category, label in STANDINGS_CATEGORIES:
+            if category not in stats and category not in points:
+                continue
+            rows.append([
+                result.get("rank", ""), team.get("team", ""), team.get("manager", ""), label,
+                stats.get(category, ""), points.get(category, ""),
+            ])
+    write_block(book, tab, rows, first_col=STANDINGS_START_COL)
+
+
+def write_team_log(book, tab, teams):
+    """Écrit les cumuls de saison du Team Log, y compris les joueurs hors roster actuel."""
+    rows = [TEAM_LOG_HEADER]
+    for team in teams:
+        for player in team.get("players", []):
+            rows.append([
+                team.get("team_id", ""), team.get("team", ""), team.get("manager", ""),
+                player.get("player", ""), player.get("player_id", ""), player.get("gp", ""),
+                player.get("fgm", ""), player.get("fga", ""), player.get("fgp", ""),
+                player.get("ftm", ""), player.get("fta", ""), player.get("ftp", ""),
+                player.get("fg3m", ""), player.get("pts", ""), player.get("reb", ""),
+                player.get("ast", ""), player.get("stl", ""), player.get("blk", ""),
+                player.get("tov", ""),
+            ])
+    write_block(book, tab, rows, first_col=TEAM_LOG_START_COL)

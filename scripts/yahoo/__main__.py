@@ -13,9 +13,13 @@ import logging
 import os
 import sys
 
+import requests
+
 from scripts.config import EXPORTS_DIR, load_league, load_settings
+from scripts.sheets import SheetsError, open_spreadsheet
 from scripts.yahoo.client import YahooClient, YahooError
 from scripts.yahoo.league import draft_results, league_key, league_settings, my_leagues, teams
+from scripts.yahoo import public, sheets as yahoo_sheets
 
 
 def _sync_config(settings, league):
@@ -44,7 +48,7 @@ def _key(client, league):
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description="API Yahoo Fantasy")
-    parser.add_argument("command", choices=["auth", "leagues", "check", "draft", "rankings"])
+    parser.add_argument("command", choices=["auth", "leagues", "check", "draft", "rankings", "stats"])
     parser.add_argument("--count", type=int, help="rankings : nombre de joueurs (défaut 300)")
     parser.add_argument("--no-browser", action="store_true", help="ne pas ouvrir le navigateur (auth)")
     parser.add_argument("--league", help="ID de la ligue Yahoo (sinon onglet settings)")
@@ -54,7 +58,7 @@ def main(argv=None):
                         format="%(asctime)s %(levelname)s %(message)s", datefmt="%H:%M:%S")
     settings, league = load_settings(), load_league()
     client = YahooClient(settings)
-    if args.command in ("check", "draft", "rankings"):
+    if args.command in ("check", "draft", "rankings", "stats"):
         league = _sync_config(settings, league) if not args.league else league
         if args.league:
             league.setdefault("yahoo", {})["league_id"] = args.league
@@ -119,7 +123,42 @@ def main(argv=None):
             for r in rows[:15]:
                 print(f"{r['rank']:>3}. {r['player']:<28} {r['positions']:<10} ADP {r['adp'] if r['adp'] is not None else '-'}")
             print(f"{len(rows)} joueurs écrits dans {path}")
+        elif args.command == "stats":
+            league_id = str(league.get("yahoo", {}).get("league_id") or "").strip()
+            if not league_id:
+                raise YahooError("ID de ligue Yahoo absent. Renseignez « ID de la ligue Yahoo » dans l'onglet settings.")
+            gs = league.get("google_sheets", {})
+            book = open_spreadsheet(gs.get("draft_spreadsheet_id"), settings)
+            tab = gs.get("yahoo_tab", "yahoo")
+            timeout = settings.get("http", {}).get("timeout", 30)
+            season = settings["active_season"]
+            team_names = public.teams(league_id, timeout, season=season)
+            if not team_names:
+                raise public.PublicPageError("Aucune équipe trouvée dans le classement public Yahoo.")
+
+            manager_by_team = {
+                team_name.strip().casefold(): manager
+                for manager, team_name in (league.get("yahoo", {}).get("teams") or {}).items()
+                if isinstance(team_name, str)
+            }
+            team_rows = []
+            for team in team_names:
+                name = team["name"]
+                manager = manager_by_team.get(name.strip().casefold(), "")
+                if not manager:
+                    logging.warning("Équipe Yahoo non reliée à un manager : %s", name)
+                team_rows.append({
+                    "team_id": team["team_id"], "team": name, "manager": manager,
+                    "players": public.team_log(league_id, team["team_id"], season, timeout),
+                })
+            standings = public.standings(league_id, timeout, season=season)
+            yahoo_sheets.write_standings(book, tab, team_rows, standings)
+            yahoo_sheets.write_team_log(book, tab, team_rows)
+            print(f"Standings et Team Log de {len(team_rows)} équipes écrits dans l'onglet {tab}.")
     except YahooError as exc:
+        logging.error("%s", exc)
+        return 1
+    except (public.PublicPageError, requests.RequestException, SheetsError, OSError, ValueError) as exc:
         logging.error("%s", exc)
         return 1
     return 0
