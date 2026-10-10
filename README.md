@@ -314,7 +314,8 @@ Lecture seule, via l'application déclarée sur developer.yahoo.com (redirect UR
 6. `python -m scripts.yahoo stats` : standings Yahoo (statistiques et points roto par catégorie)
    et Team Log (cumuls de saison de chaque joueur ayant rapporté des points à chaque équipe,
    y compris les joueurs qui ne sont plus dans son roster) dans l'onglet `yahoo`. Le Team Log
-   n'est disponible qu'après la fin de la première semaine de matchs. Les deux blocs sont écrits
+   n'est disponible qu'après la fin de la première semaine de matchs : d'ici là, les standings sont
+   écrits quand même et le bloc Team Log reste vide (simple avertissement). Les deux blocs sont écrits
    à droite des résultats de draft, rosters et rankings déjà présents.
 
 Tant que Yahoo n'a pas validé l'accès à l'API (erreur 403), la ligue étant publique, les choix

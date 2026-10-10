@@ -141,20 +141,28 @@ def main(argv=None):
                 for manager, team_name in (league.get("yahoo", {}).get("teams") or {}).items()
                 if isinstance(team_name, str)
             }
-            team_rows = []
+            team_rows, without_log = [], []
             for team in team_names:
                 name = team["name"]
                 manager = manager_by_team.get(name.strip().casefold(), "")
                 if not manager:
                     logging.warning("Équipe Yahoo non reliée à un manager : %s", name)
-                team_rows.append({
-                    "team_id": team["team_id"], "team": name, "manager": manager,
-                    "players": public.team_log(league_id, team["team_id"], season, timeout),
-                })
+                try:
+                    players = public.team_log(league_id, team["team_id"], season, timeout)
+                except public.TeamLogNotPublished:
+                    players = []
+                    without_log.append(name)
+                team_rows.append({"team_id": team["team_id"], "team": name, "manager": manager, "players": players})
             standings = public.standings(league_id, timeout, season=season)
             yahoo_sheets.write_standings(book, tab, team_rows, standings)
             yahoo_sheets.write_team_log(book, tab, team_rows)
-            print(f"Standings et Team Log de {len(team_rows)} équipes écrits dans l'onglet {tab}.")
+            if len(without_log) == len(team_rows):
+                logging.warning("Team Log pas encore publié par Yahoo (après la première semaine de jeu) : "
+                                "bloc Team Log vide, standings écrits.")
+            elif without_log:
+                logging.warning("Team Log vide pour %d équipe(s) : %s", len(without_log), ", ".join(without_log))
+            print(f"Standings de {len(team_rows)} équipes et Team Log de {len(team_rows) - len(without_log)} "
+                  f"équipe(s) écrits dans l'onglet {tab}.")
     except YahooError as exc:
         logging.error("%s", exc)
         return 1
