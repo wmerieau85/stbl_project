@@ -32,6 +32,10 @@ class PublicPageError(RuntimeError):
     pass
 
 
+class TeamLogNotPublished(PublicPageError):
+    """Team Log vide : Yahoo ne le publie qu'après la fin de la première semaine de jeu."""
+
+
 def _season_year(season):
     if season is None:
         return None
@@ -128,7 +132,7 @@ def team_log(league_id, team_id, season, timeout=30, session=None):
     url = f"https://basketball.fantasysports.yahoo.com/{season_year}/nba/{league_id}/{team_id}/teamlog"
     players = parse_team_log(_fetch_url(url, timeout, session))
     if not players:
-        raise PublicPageError(
+        raise TeamLogNotPublished(
             f"{url} : aucun joueur dans le Team Log (Yahoo ne le publie qu'après la fin de la première semaine)."
         )
     return players

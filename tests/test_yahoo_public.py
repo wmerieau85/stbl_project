@@ -99,3 +99,46 @@ def test_stats_command_writes_both_blocks_and_maps_manager(monkeypatch):
     assert writes[0][0:3] == ("standings", "book", "yahoo")
     assert writes[0][3][0]["manager"] == "Manager A"
     assert writes[1][0:3] == ("team_log", "book", "yahoo")
+
+
+def test_stats_command_writes_standings_before_team_log_is_published(monkeypatch, capsys):
+    """Avant la fin de la 1re semaine : standings écrits, bloc Team Log vide, code retour 0."""
+    settings = {"active_season": "2026-27", "http": {"timeout": 10}}
+    league = {"yahoo": {"league_id": "4205", "teams": {"Manager A": "Team A", "Manager B": "Team B"}},
+              "google_sheets": {"draft_spreadsheet_id": "book", "yahoo_tab": "yahoo"}}
+    writes = []
+    monkeypatch.setattr(yahoo_main, "load_settings", lambda: settings)
+    monkeypatch.setattr(yahoo_main, "load_league", lambda: league)
+    monkeypatch.setattr(yahoo_main, "YahooClient", lambda _: object())
+    monkeypatch.setattr(yahoo_main, "_sync_config", lambda _settings, current: current)
+    monkeypatch.setattr(yahoo_main, "open_spreadsheet", lambda _spreadsheet_id, _settings: "book")
+    monkeypatch.setattr(public, "teams", lambda *a, **k: [{"team_id": 1, "name": "Team A"},
+                                                          {"team_id": 2, "name": "Team B"}])
+    monkeypatch.setattr(public, "_fetch_url", lambda *a, **k: "<html></html>")
+    monkeypatch.setattr(public, "standings", lambda *a, **k: {"Team A": {"rank": None}})
+    monkeypatch.setattr(yahoo_main.yahoo_sheets, "write_standings",
+                        lambda book, tab, teams, standings: writes.append(("standings", teams)))
+    monkeypatch.setattr(yahoo_main.yahoo_sheets, "write_team_log",
+                        lambda book, tab, teams: writes.append(("team_log", teams)))
+
+    assert yahoo_main.main(["stats"]) == 0
+    assert [w[0] for w in writes] == ["standings", "team_log"]
+    assert all(t["players"] == [] for t in writes[1][1])
+    assert "Team Log de 0 équipe(s)" in capsys.readouterr().out
+
+
+def test_stats_command_still_fails_on_other_page_errors(monkeypatch):
+    settings = {"active_season": "2026-27", "http": {"timeout": 10}}
+    league = {"yahoo": {"league_id": "4205", "teams": {}}, "google_sheets": {"draft_spreadsheet_id": "book"}}
+    monkeypatch.setattr(yahoo_main, "load_settings", lambda: settings)
+    monkeypatch.setattr(yahoo_main, "load_league", lambda: league)
+    monkeypatch.setattr(yahoo_main, "YahooClient", lambda _: object())
+    monkeypatch.setattr(yahoo_main, "_sync_config", lambda _settings, current: current)
+    monkeypatch.setattr(yahoo_main, "open_spreadsheet", lambda _spreadsheet_id, _settings: "book")
+    monkeypatch.setattr(public, "teams", lambda *a, **k: [{"team_id": 1, "name": "Team A"}])
+
+    def boom(*a, **k):
+        raise public.PublicPageError("demande une connexion")
+
+    monkeypatch.setattr(public, "team_log", boom)
+    assert yahoo_main.main(["stats"]) == 1
