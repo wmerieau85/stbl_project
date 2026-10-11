@@ -368,7 +368,8 @@ DEFAULT_LEAGUE = {
     "platform": "yahoo",
     "yahoo": {"league_id": ""},
     "season": {"st_days": 15, "lt_phase": "lt", "st_phase": "st", "simulations": 2000,
-               "roster_source": "yahoo"},
+               "roster_source": "yahoo", "opponent_model": "usage", "opponent_default_rate": 0.95,
+               "opponent_ramp_days": 42},
     "games": {"per_slot": 82, "lineup": "daily"},
     "draft": {
         "type": "snake", "rounds": 12, "my_team": "", "order": [], "keepers": {}, "keeper_rounds": [], "picks_source": "sheet",
@@ -379,7 +380,7 @@ DEFAULT_LEAGUE = {
         "draft_spreadsheet_id": "", "config_tab": "settings",
         "reco_tab": "draft_reco", "projections_spreadsheet_id": "", "projections_tab": "bdd",
         "yahoo_tab": "yahoo", "detail_tab": "bdd_detail",
-        "projections_start_col": "C", "poll_seconds": 10, "write_picks_to_sheet": True, "season_tab": "season",
+        "projections_start_col": "C", "poll_seconds": 10, "write_picks_to_sheet": True, "season_reco_tab": "season_reco",
         "alias_tab": "players",
     },
     # tirage au sort de l'ordre de draft (onglet board)
@@ -409,6 +410,13 @@ def load_aliases():
 def load_grid_rows(phase):
     """Grille de pondération d'une phase, sous forme de lignes (disposition CSV historique)."""
     return load_config()["grids"].get(phase)
+
+
+def season_reco_tab(league):
+    """Onglet de la projection de saison : season_reco (ancien réglage season_tab / « season » accepté)."""
+    gs = league.get("google_sheets", {})
+    tab = str(gs.get("season_reco_tab") or gs.get("season_tab") or "").strip()
+    return "season_reco" if tab in ("", "season") else tab
 
 
 def starting_slots(league):

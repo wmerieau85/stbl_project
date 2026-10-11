@@ -70,7 +70,8 @@ PARAMS = [
     ("Sheets | Settings", "Projections ID", "league", "google_sheets.projections_spreadsheet_id", "optstr",
      "autre classeur pour l'onglet des projections (vide = ce classeur)"),
     ("Sheets | Tab", "Config", "bootstrap", "config_tab", "str", "cet onglet (indicatif : nom lu dans config/bootstrap.json)"),
-    ("Sheets | Tab", "Season", "league", "google_sheets.season_tab", "str", "classement réel et projeté, mon effectif"),
+    ("Sheets | Tab", "Season Reco", "league", "google_sheets.season_reco_tab", "str",
+     "projection de saison : classement, mon effectif, adversaires, effectifs des 15 équipes"),
     ("Sheets | Tab", "Players source", "league", "google_sheets.alias_tab", "str",
      "alias : noms lus dans les sources -> nom de référence"),
     ("Sheets | Tab", "Draft reco", "league", "google_sheets.reco_tab", "str", "réécrit à chaque recalcul"),
@@ -113,6 +114,12 @@ PARAMS = [
     ("Optim | Season", "Short-term horizon (days)", "league", "season.st_days", "int",
      "jours projetés avec la phase st, ensuite lt"),
     ("Optim | Season", "Simulations", "league", "season.simulations", "int", "tirages pour les probabilités de classement"),
+    ("Optim | Season", "Opponent model", "league", "season.opponent_model", "choice:usage,value",
+     "usage = taux d'alignement calibré sur chaque adversaire ; value = tous les matchs attendus alignés"),
+    ("Optim | Season", "Opponent default rate", "league", "season.opponent_default_rate", "float",
+     "taux d'alignement de départ (avant assez de données), ex. 0,95"),
+    ("Optim | Season", "Opponent ramp (days)", "league", "season.opponent_ramp_days", "int",
+     "jours avant de se fier entièrement au comportement propre de chaque manager"),
     ("Pipeline | Import", "Maximum time per page (s)", "settings", "http.timeout", "int", ""),
     ("Pipeline | Import", "Attempts", "settings", "http.retries", "int", "nouvelles tentatives en cas d'échec"),
     ("Pipeline | Import", "Pause between pages (s)", "settings", "http.pause_seconds", "float", ""),
@@ -135,6 +142,7 @@ OBSOLETE = {("sheets | tab", "draft results"), ("sheets | tab", "rosters"), ("sh
 PARAM_ALIASES = {
     ("sheets | season", "choices source"): ("Sheets | Season", "Rosters Source"),
     ("settings | days", "st"): ("Optim | Season", "Short-term horizon (days)"),
+    ("sheets | tab", "season"): ("Sheets | Tab", "Season Reco"),
 }
 
 ROSTER_SECTION = "Settings | Roster Positions"

@@ -158,7 +158,7 @@
       "poll_seconds": 10,
       "write_picks_to_sheet": true,
       "yahoo_tab": "yahoo",
-      "season_tab": "season",
+      "season_reco_tab": "season_reco",
       "alias_tab": "players",
       "board_tab": "board",
       "detail_tab": "bdd_detail"
@@ -168,7 +168,10 @@
       "lt_phase": "lt",
       "st_phase": "st",
       "simulations": 2000,
-      "roster_source": "yahoo"
+      "roster_source": "yahoo",
+      "opponent_model": "usage",
+      "opponent_default_rate": 0.95,
+      "opponent_ramp_days": 42
     },
     "lottery": {
       "balls_range": "board!N8:O22",

@@ -1,4 +1,4 @@
-"""Mise en forme du module saison : onglet season, détail des effectifs (CSV), résumé console."""
+"""Mise en forme du module saison : onglet season_reco, détail des effectifs (aussi en CSV), résumé console."""
 
 from scripts.draft.engine import S, category_values
 from scripts.draft.pool import CATEGORY_LABELS
@@ -29,10 +29,11 @@ def season_rows(result, league):
     rows = [[f"Saison - projection au {result['today'].isoformat()}"],
             ["Calcul", f"stats réelles + phase {conf.get('st_phase', 'st')} sur {st_days} jours + phase "
                        f"{conf.get('lt_phase', 'lt')} sur le reste de la saison"],
-            ["Hypothèses", "les 14 rosters adverses sont affectés selon la valeur par match ; seul mon roster "
-                           "est optimisé par gain marginal de points roto face à eux, sous les plafonds "
-                           "G / F / C / Util (un match ST peut être laissé au profit d'un meilleur match LT, "
-                           "ce qui revient à garder du plafond pour plus tard) ; effectifs figés à la date du "
+            ["Hypothèses", "adversaires : lineup standard (meilleurs joueurs par match d'abord, sous les "
+                           "plafonds G / F / C / Util), chaque match attendu n'étant aligné qu'avec le taux "
+                           "d'alignement du manager (calibré sur ses GP réels, voir bloc Adversaires) ; mon "
+                           "roster : optimisé par gain marginal de points roto face à eux (un match ST peut "
+                           "être laissé au profit d'un meilleur match LT) ; effectifs figés à la date du "
                            "calcul"],
             ["Ce n'est pas", "une optimisation de l'alignement quotidien ni des ajouts / retraits de joueurs "
                              "(modules rotation et waivers, à venir)"],
@@ -72,6 +73,43 @@ def season_rows(result, league):
     for i in order:
         rows.append([teams[i].manager, teams[i].actual_gp or ""] +
                     [_fmt(c, proj["values"][i, j]) for j, c in enumerate(cats)])
+    rows.append([])
+    rows += opponents_rows(result, order)
+    rows.append([])
+    rows.append(["Effectifs des 15 équipes : matchs ST / LT par joueur"])
+    rows += roster_rows(result)
+    return rows
+
+
+def _pct(value):
+    return round(100 * float(value), 1) if value is not None else ""
+
+
+def opponents_rows(result, order=None):
+    """Bloc « Adversaires » : taux d'alignement et matchs ST / LT de chaque équipe."""
+    teams = result["teams"]
+    order = order if order is not None else range(len(teams))
+    rows = [["Adversaires : taux d'alignement (part des matchs attendus réellement alignés)",
+             "taux retenu = confiance x taux observé + (1 - confiance) x taux de la ligue"],
+            ["Manager", "Équipe Yahoo", "GP réels", "GP possibles à date", "Taux observé %", "Confiance %",
+             "Taux ligue %", "Taux retenu %", "Taux appliqué %", "Modèle",
+             "Matchs attendus ST", "Matchs affectés ST", "Matchs attendus LT", "Matchs affectés LT",
+             "Perdus (plafonds)", "Laissés volontairement", "Plafond restant", "Plafond non utilisé"]]
+    for i in order:
+        t = teams[i]
+        info = t.lineup or {}
+        caps = sum(t.caps.get(b, 0.0) for b in BUCKETS)
+        used = sum(t.used.get(b, 0.0) for b in BUCKETS)
+        rows.append([t.manager, t.team_name, t.actual_gp or "", round(info.get("possible", 0.0), 1),
+                     _pct(info.get("observed")), _pct(info.get("confidence")), _pct(info.get("league")),
+                     _pct(info.get("retained")), _pct(info.get("applied", t.lineup_rate)), info.get("model", ""),
+                     round(sum(p.games_st_expected for p in t.players), 1),
+                     round(sum(p.games_st_used for p in t.players), 1),
+                     round(sum(p.games_lt_expected for p in t.players), 1),
+                     round(sum(p.games_lt_used for p in t.players), 1),
+                     round(sum(p.games_lost_caps for p in t.players), 1),
+                     round(sum(p.games_left_voluntarily for p in t.players), 1),
+                     round(caps, 1), round(caps - used, 1)])
     return rows
 
 
@@ -112,7 +150,7 @@ def roster_rows(result):
              "Matchs calendrier ST", "Matchs attendus ST", "Matchs affectés ST",
              "Matchs calendrier LT", "Matchs attendus LT", "Matchs affectés LT",
              "Matchs attendus total", "Matchs affectés total", "Perdus (plafonds)",
-             "Laissés volontairement", "Valeur/match (lt)", "Valeur/match (st)"]]
+             "Laissés volontairement", "Valeur/match (lt)", "Valeur/match (st)", "Taux d'alignement %"]]
     for t in result["teams"]:
         for p in sorted(t.players, key=lambda x: -x.value):
             rows.append([t.manager, t.team_name, p.display, p.positions, p.nba_team, p.slot,
@@ -120,7 +158,8 @@ def roster_rows(result):
                          round(p.games_st_used, 1), p.games_lt_sched, round(p.games_lt_expected, 1),
                          round(p.games_lt_used, 1), round(p.games_expected, 1), round(p.games_used, 1),
                          round(p.games_lost_caps, 1), round(p.games_left_voluntarily, 1),
-                         round(p.value, 2), round(p.value_st, 2) if p.value_st is not None else ""])
+                         round(p.value, 2), round(p.value_st, 2) if p.value_st is not None else "",
+                         _pct(t.lineup_rate)])
     return rows
 
 

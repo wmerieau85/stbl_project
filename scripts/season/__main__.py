@@ -1,6 +1,6 @@
 """Module saison : classement réel et projeté en fin de saison.
 
-    python -m scripts.season update             # lit Yahoo, projette, écrit l'onglet season (détail des effectifs en CSV)
+    python -m scripts.season update             # lit Yahoo, projette, écrit l'onglet season_reco (+ CSV)
     python -m scripts.season update --no-sheet  # console + CSV seulement
     python -m scripts.season update --rosters sheet   # effectifs de l'onglet bdd (Team Season, sinon Team Draft)
 
@@ -15,9 +15,9 @@ import os
 import sys
 from datetime import date, datetime
 
-from scripts.config import EXPORTS_DIR, load_league, load_settings
+from scripts.config import EXPORTS_DIR, load_league, load_settings, season_reco_tab
 from scripts.draft.pool import load_pool
-from scripts.season import report
+from scripts.season import opponents, report
 from scripts.season.engine import CATEGORY_ORDER, optimize_team, project_team, standings_projection, gp_inconsistencies
 from scripts.season.schedule import load_games
 from scripts.yahoo import public
@@ -118,6 +118,9 @@ def compute(settings, league, today=None, book=None, roster_source=None):
     cats = [c for c in CATEGORY_ORDER if float(league["categories"].get(c, 0) or 0) > 0]
     weights = [float(league["categories"][c]) for c in cats]
     manager = league["draft"].get("my_team")
+    league_rate = opponents.calibrate(teams, games, today, manager, conf)
+    log.info("[Saison] Taux d'alignement des adversaires : ligue %.0f %% (%s).", 100 * league_rate,
+             ", ".join(f"{t.manager} {100 * t.lineup['applied']:.0f} %" for t in teams if t.manager != manager))
     my_team = next((team for team in teams if team.manager == manager), None)
     if my_team is not None:
         optimize_team(my_team, [team for team in teams if team is not my_team], cats, weights)
@@ -125,7 +128,7 @@ def compute(settings, league, today=None, book=None, roster_source=None):
         log.warning("Manager %r absent des rosters Yahoo : optimisation du roster ignorée.", manager)
     proj = standings_projection(teams, cats, weights, sims=int(conf.get("simulations", 2000)))
     return {"teams": teams, "categories": cats, "projection": proj, "today": today,
-            "my_team": league["draft"].get("my_team"), "unknown": unknown}
+            "my_team": league["draft"].get("my_team"), "unknown": unknown, "league_rate": league_rate}
 
 
 def main(argv=None):
@@ -157,13 +160,16 @@ def main(argv=None):
     season_rows = report.season_rows(result, league)
     roster_rows = report.roster_rows(result)
     os.makedirs(EXPORTS_DIR, exist_ok=True)
-    for name, rows in (("season", season_rows), ("season_rosters", roster_rows)):
+    for name, rows in (("season_reco", season_rows), ("season_reco_rosters", roster_rows)):
         path = os.path.join(EXPORTS_DIR, f"{name}_{settings['active_season']}.csv")
         with open(path, "w", encoding="utf-8-sig", newline="") as fh:
             csv.writer(fh, delimiter=";").writerows(rows)
     if book is not None:
-        from scripts.sheets import write_tab
-        write_tab(book, gs.get("season_tab") or "season", season_rows)
+        from scripts.sheets import rename_tab, write_tab
+        tab = season_reco_tab(league)
+        if tab == "season_reco":
+            rename_tab(book, "season", tab)     # ancien nom de l'onglet : renommé, pas dupliqué
+        write_tab(book, tab, season_rows)
     print(report.console(result))
     return 0
 
