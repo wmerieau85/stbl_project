@@ -204,7 +204,7 @@ def test_roster_report_includes_st_and_lt_allocations():
     assert rows[0][15:17] == ["Perdus (plafonds)", "Laissés volontairement"]
 
 
-def test_season_report_does_not_duplicate_all_rosters():
+def test_season_reco_shows_all_rosters_once_and_opponents_block():
     pool = Pool([_player(1, "Center", 10, 5.0)])
     roster = {"players": [{"player": "Center", "nba_team": "DEN", "positions": "C", "slot": "C"}],
               "games": {"C": {"remaining": 6}}}
@@ -221,8 +221,10 @@ def test_season_report_does_not_duplicate_all_rosters():
         {"season": {"st_days": 5}},
     )
 
-    assert not any(row and row[0] == "Matchs ST/LT affectés par joueur - tous les rosters" for row in rows)
-    assert not any("Matchs calendrier ST" in row for row in rows)
+    titles = [row[0] for row in rows if row]
+    assert titles.count("Effectifs des 15 équipes : matchs ST / LT par joueur") == 1
+    assert sum("Matchs calendrier ST" in row for row in rows) == 1
+    assert any(str(t).startswith("Adversaires : taux d'alignement") for t in titles)
 
 
 def test_gp_inconsistency_detected():

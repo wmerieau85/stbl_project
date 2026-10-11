@@ -78,7 +78,7 @@ PARAMS = [
     ("Saison", "Phase long terme", "league", "season.lt_phase", "str", "grille utilisée pour le reste de la saison"),
     ("Saison", "Phase court terme", "league", "season.st_phase", "str", "grille utilisée pour l'horizon court terme"),
     ("Saison", "Simulations", "league", "season.simulations", "int", "tirages pour les probabilités de classement"),
-    ("Saison", "Onglet saison", "league", "google_sheets.season_tab", "str", "classement réel et projeté, mon effectif"),
+    ("Saison", "Onglet saison", "league", "google_sheets.season_reco_tab", "str", "classement réel et projeté, mon effectif"),
     ("Import", "Délai max par page (s)", "settings", "http.timeout", "int", ""),
     ("Import", "Tentatives", "settings", "http.retries", "int", "nouvelles tentatives en cas d'échec"),
     ("Import", "Pause entre pages (s)", "settings", "http.pause_seconds", "float", ""),

@@ -334,7 +334,7 @@ directement dans Yahoo, les recopie dans la colonne `Team Draft` de `bdd` (régl
 
 ```
 python main.py --stage ros                 # projections ROS (lt) + stats par période (st)
-python -m scripts.season update            # onglet season (+ exports/season_rosters_<saison>.csv)
+python -m scripts.season update            # onglet season_reco (+ exports/season_reco_<saison>.csv et season_reco_rosters_<saison>.csv)
 python -m scripts.season update --no-sheet # console + exports/season_<saison>.csv
 python -m scripts.season update --rosters sheet  # effectifs de bdd : Team Season (sinon Team Draft)
 ```
@@ -345,11 +345,17 @@ fixturedownload.com) et les plafonds de matchs restants par poste (G, F, C, Util
 de chaque équipe. Onglet season : classement projeté (points espérés, chances de titre et de
 podium), mes catégories (ce qu'il faut pour gagner un point, marge avant d'en perdre un), mes
 matchs par poste, stats projetées de toutes les équipes et matchs ST/LT attendus et affectés par
-joueur dans chacun des 15 rosters. Les 14 autres équipes servent de référence : leurs rosters sont
-projetés avec la valeur par match, puis seule l'affectation ST/LT de mon équipe maximise le gain
-marginal de points roto attendu face à elles, sous les plafonds G / F / C / Util. Les matchs écartés
+joueur dans chacun des 15 rosters. Les 14 autres équipes servent de référence : lineup standard (valeur par match
+d'abord, sous les plafonds), chaque match attendu n'étant aligné qu'avec le taux d'alignement du
+manager (`scripts/season/opponents.py` : GP réels / GP possibles à date, mélangé au taux médian de la
+ligue tant que la saison est jeune ; réglages `Optim | Season | Opponent model / Opponent default
+rate / Opponent ramp (days)`). Seule l'affectation ST/LT de mon équipe maximise ensuite le gain
+marginal de points roto attendu face à elles, sous les plafonds G / F / C / Util. L'onglet
+s'appelle désormais `season_reco` (`Sheets | Tab | Season Reco` ; l'ancien libellé `Season` et
+l'ancien onglet `season` sont repris et renommés) ; il contient aussi le bloc Adversaires et les
+effectifs des 15 équipes. Les matchs écartés
 par cette optimisation sont distingués des matchs perdus faute de plafond. Le détail des 15 rosters
-est dans l'export `exports/season_rosters_<saison>.csv`.
+est aussi dans l'export `exports/season_reco_rosters_<saison>.csv`.
 Sans projections lt, la phase draft est utilisée. Effectifs : Yahoo par défaut, ou le classeur
 (`Sheets | Season | Rosters Source` =
 `sheet` : colonne `Team Season` de `bdd`, sinon `Team Draft`) ; les plafonds de

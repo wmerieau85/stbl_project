@@ -142,3 +142,21 @@ def write_block(spreadsheet, tab, rows, first_col="A", last_col=None):
     log.info("[Sheets] Onglet '%s', colonnes %s:%s mises à jour (%d lignes).", tab, first_col,
              rowcol_to_a1(1, end_col).rstrip("1"), len(rows))
     return ws
+
+
+def rename_tab(spreadsheet, old, new):
+    """Renomme l'onglet `old` en `new` s'il existe et que `new` n'existe pas encore. True si renommé."""
+    import gspread
+
+    try:
+        spreadsheet.worksheet(new)
+        return False
+    except gspread.WorksheetNotFound:
+        pass
+    try:
+        ws = spreadsheet.worksheet(old)
+    except gspread.WorksheetNotFound:
+        return False
+    ws.update_title(new)
+    log.info("[Sheets] Onglet '%s' renommé en '%s'.", old, new)
+    return True

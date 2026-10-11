@@ -65,6 +65,8 @@ class PlayerProjection:
     games_used: float = 0.0      # après plafonds par poste
     games_st_used: float = 0.0   # matchs affectés à ST après plafonds
     games_lt_used: float = 0.0   # matchs affectés à LT après plafonds
+    games_past_sched: int = 0    # matchs NBA déjà joués par son équipe depuis le début de saison
+    p_play: float = 0.0          # probabilité de jouer un match (matchs projetés lt / matchs restants)
     games_lost_caps: float = 0.0          # matchs non joués faute de plafond
     games_left_voluntarily: float = 0.0   # matchs écartés par l'optimisation (plafond encore libre)
     value: float = 0.0
@@ -87,6 +89,8 @@ class TeamProjection:
     remaining: np.ndarray
     actual_points: dict
     actual_rank: float | None
+    lineup_rate: float = 1.0          # part des matchs attendus réellement alignés (adversaires)
+    lineup: dict = field(default_factory=dict)   # calibrage du taux : observé, possible, confiance...
 
     @property
     def final(self):
@@ -101,6 +105,8 @@ def project_team(manager, team_name, roster, standing, lt_pool, st_pool, games, 
     end_st = today + timedelta(days=horizon_days)
     sched_st = games_by_team(games, today, end_st)
     sched_lt = games_by_team(games, end_st)
+    season_start = min((g[0] for g in games), default=today.isoformat())
+    sched_past = games_by_team(games, season_start, today)
     players = []
     for entry in roster["players"]:
         lt = lt_pool.find(entry["player"])
@@ -110,11 +116,13 @@ def project_team(manager, team_name, roster, standing, lt_pool, st_pool, games, 
         pp = PlayerProjection(entry["player"], nba, entry["positions"] or (lt.positions if lt else ""),
                               entry["slot"], lt is not None,
                               display=lt.name if lt else strip_accents(entry["player"]), games_sched=g_st + g_lt,
-                              games_st_sched=g_st, games_lt_sched=g_lt)
+                              games_st_sched=g_st, games_lt_sched=g_lt,
+                              games_past_sched=sched_past.get(nba, 0))
         pp.per_game_st = _per_game(st if st is not None else lt)
         pp.per_game_lt = _per_game(lt)
         if lt is not None and pp.games_sched:
             p_play = min(1.0, lt.gp / pp.games_sched) if lt.gp else 0.0
+            pp.p_play = p_play
             e_st, e_lt = g_st * p_play, g_lt * p_play
             pp.games_st_expected = e_st
             pp.games_lt_expected = e_lt
@@ -128,6 +136,15 @@ def project_team(manager, team_name, roster, standing, lt_pool, st_pool, games, 
         players.append(pp)
 
     caps = _caps(roster, league)
+    used = _allocate_by_value(players, caps)
+    remaining = sum((p.totals for p in players), np.zeros(len(STATS)))
+    actual, actual_gp = _actual_totals(standing, players)
+    return TeamProjection(manager, team_name, players, caps, used, actual, actual_gp, remaining,
+                          (standing or {}).get("points", {}), (standing or {}).get("rank"))
+
+
+def _allocate_by_value(players, caps):
+    """Lineup « standard » : les meilleurs joueurs par match d'abord, ST puis LT, sous les plafonds."""
     used = {b: 0.0 for b in BUCKETS}
     left = dict(caps)
     _allocate_period(players, "games_st_expected", "games_st_used",
@@ -137,11 +154,21 @@ def project_team(manager, team_name, roster, standing, lt_pool, st_pool, games, 
         pp.games_used = pp.games_st_used + pp.games_lt_used
         pp.totals = pp.per_game_st * pp.games_st_used + pp.per_game_lt * pp.games_lt_used
         pp.games_lost_caps = max(0.0, pp.games_expected - pp.games_used)
+        pp.games_left_voluntarily = 0.0
+    return used
 
-    remaining = sum((p.totals for p in players), np.zeros(len(STATS)))
-    actual, actual_gp = _actual_totals(standing, players)
-    return TeamProjection(manager, team_name, players, caps, used, actual, actual_gp, remaining,
-                          (standing or {}).get("points", {}), (standing or {}).get("rank"))
+
+def apply_lineup_rate(team, rate):
+    """Projette une équipe adverse avec son taux d'alignement : chaque match attendu n'est aligné qu'avec
+    la probabilité `rate` (manager plus ou moins attentif), puis lineup standard sous les plafonds."""
+    rate = max(0.0, min(1.0, float(rate)))
+    team.lineup_rate = rate
+    for p in team.players:
+        p.games_st_expected = p.games_st_sched * p.p_play * rate
+        p.games_lt_expected = p.games_lt_sched * p.p_play * rate
+        p.games_expected = p.games_st_expected + p.games_lt_expected
+    team.used = _allocate_by_value(team.players, team.caps)
+    team.remaining = sum((p.totals for p in team.players), np.zeros(len(STATS)))
 
 
 def _allocate_period(players, expected_attr, used_attr, value, left, used):
