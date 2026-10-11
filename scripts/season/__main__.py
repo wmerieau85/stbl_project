@@ -18,7 +18,7 @@ from datetime import date, datetime
 from scripts.config import EXPORTS_DIR, load_league, load_settings
 from scripts.draft.pool import load_pool
 from scripts.season import report
-from scripts.season.engine import CATEGORY_ORDER, project_team, standings_projection, gp_inconsistencies
+from scripts.season.engine import CATEGORY_ORDER, optimize_team, project_team, standings_projection, gp_inconsistencies
 from scripts.season.schedule import load_games
 from scripts.yahoo import public
 
@@ -117,6 +117,12 @@ def compute(settings, league, today=None, book=None, roster_source=None):
         log.warning("%d joueur(s) sans projection (ignorés) : %s", len(unknown), ", ".join(unknown[:15]))
     cats = [c for c in CATEGORY_ORDER if float(league["categories"].get(c, 0) or 0) > 0]
     weights = [float(league["categories"][c]) for c in cats]
+    manager = league["draft"].get("my_team")
+    my_team = next((team for team in teams if team.manager == manager), None)
+    if my_team is not None:
+        optimize_team(my_team, [team for team in teams if team is not my_team], cats, weights)
+    else:
+        log.warning("Manager %r absent des rosters Yahoo : optimisation du roster ignorée.", manager)
     proj = standings_projection(teams, cats, weights, sims=int(conf.get("simulations", 2000)))
     return {"teams": teams, "categories": cats, "projection": proj, "today": today,
             "my_team": league["draft"].get("my_team"), "unknown": unknown}

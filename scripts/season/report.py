@@ -29,8 +29,11 @@ def season_rows(result, league):
     rows = [[f"Saison - projection au {result['today'].isoformat()}"],
             ["Calcul", f"stats réelles + phase {conf.get('st_phase', 'st')} sur {st_days} jours + phase "
                        f"{conf.get('lt_phase', 'lt')} sur le reste de la saison"],
-            ["Hypothèses", "chaque match joué est compté en priorité pour les meilleurs joueurs (valeur par match), "
-                           "dans la limite des plafonds G / F / C / Util ; effectifs figés à la date du calcul"],
+            ["Hypothèses", "les 14 rosters adverses sont affectés selon la valeur par match ; seul mon roster "
+                           "est optimisé par gain marginal de points roto face à eux, sous les plafonds "
+                           "G / F / C / Util (un match ST peut être laissé au profit d'un meilleur match LT, "
+                           "ce qui revient à garder du plafond pour plus tard) ; effectifs figés à la date du "
+                           "calcul"],
             ["Ce n'est pas", "une optimisation de l'alignement quotidien ni des ajouts / retraits de joueurs "
                              "(modules rotation et waivers, à venir)"],
             []]
@@ -86,12 +89,16 @@ def my_roster_rows(team, cats):
     rows = [[f"Mon effectif ({team.manager}) : matchs et apport d'ici la fin de la saison",
              "écart st - lt > 0 : forme récente au-dessus du long terme (rôle en hausse ou risque de "
              "régression) ; < 0 : en dessous"],
-            ["Joueur", "Postes", "NBA", "Poste Yahoo", "Matchs au calendrier", "Matchs attendus", "Matchs retenus",
-             "Perdus (plafonds)", "Valeur/match (lt)", "Valeur/match (st)", "Écart st - lt"] + labels]
+            ["Joueur", "Postes", "NBA", "Poste Yahoo", "Matchs calendrier ST", "Matchs attendus ST",
+             "Matchs affectés ST", "Matchs calendrier LT", "Matchs attendus LT", "Matchs affectés LT",
+             "Matchs attendus total", "Matchs affectés total", "Perdus (plafonds)",
+             "Laissés volontairement", "Valeur/match (lt)", "Valeur/match (st)", "Écart st - lt"] + labels]
     for p in sorted(team.players, key=lambda x: -x.value):
-        lost = max(0.0, p.games_expected - p.games_used)
-        rows.append([p.display or p.name, p.positions, p.nba_team, p.slot, p.games_sched,
-                     round(p.games_expected, 1), round(p.games_used, 1), round(lost, 1),
+        rows.append([p.display or p.name, p.positions, p.nba_team, p.slot,
+                     p.games_st_sched, round(p.games_st_expected, 1), round(p.games_st_used, 1),
+                     p.games_lt_sched, round(p.games_lt_expected, 1), round(p.games_lt_used, 1),
+                     round(p.games_expected, 1), round(p.games_used, 1), round(p.games_lost_caps, 1),
+                     round(p.games_left_voluntarily, 1),
                      round(p.value, 2) if p.found else "sans projection",
                      round(p.value_st, 2) if p.value_st is not None else "",
                      round(p.value_st - p.value, 2) if p.value_st is not None and p.found else ""]
@@ -100,13 +107,20 @@ def my_roster_rows(team, cats):
 
 
 def roster_rows(result):
+    """Détail projeté et matchs attendus/affectés pour chaque joueur des rosters."""
     rows = [["Manager", "Équipe Yahoo", "Joueur", "Postes", "NBA", "Poste Yahoo", "Projection trouvée",
-             "Matchs au calendrier", "Matchs attendus", "Matchs retenus", "Valeur/match (lt)"]]
+             "Matchs calendrier ST", "Matchs attendus ST", "Matchs affectés ST",
+             "Matchs calendrier LT", "Matchs attendus LT", "Matchs affectés LT",
+             "Matchs attendus total", "Matchs affectés total", "Perdus (plafonds)",
+             "Laissés volontairement", "Valeur/match (lt)", "Valeur/match (st)"]]
     for t in result["teams"]:
         for p in sorted(t.players, key=lambda x: -x.value):
             rows.append([t.manager, t.team_name, p.display, p.positions, p.nba_team, p.slot,
-                         "oui" if p.found else "non", p.games_sched, round(p.games_expected, 1),
-                         round(p.games_used, 1), round(p.value, 2)])
+                         "oui" if p.found else "non", p.games_st_sched, round(p.games_st_expected, 1),
+                         round(p.games_st_used, 1), p.games_lt_sched, round(p.games_lt_expected, 1),
+                         round(p.games_lt_used, 1), round(p.games_expected, 1), round(p.games_used, 1),
+                         round(p.games_lost_caps, 1), round(p.games_left_voluntarily, 1),
+                         round(p.value, 2), round(p.value_st, 2) if p.value_st is not None else ""])
     return rows
 
 
