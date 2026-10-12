@@ -88,12 +88,51 @@ def extend_formulas(book, gs, key, last_row):
     col = cols[key]
     if last_row <= 2:
         return
-    book.batch_update({"requests": [{"copyPaste": {
+    copy = {"copyPaste": {
         "source": {"sheetId": ws.id, "startRowIndex": 1, "endRowIndex": 2,
                    "startColumnIndex": col, "endColumnIndex": col + 1},
         "destination": {"sheetId": ws.id, "startRowIndex": 2, "endRowIndex": last_row,
                         "startColumnIndex": col, "endColumnIndex": col + 1},
-        "pasteType": "PASTE_FORMULA"}}]})
+        "pasteType": "PASTE_FORMULA"}}
+    flt = _basic_filter(book, ws.id)
+    if flt is None:
+        book.batch_update({"requests": [copy]})
+        return
+    # Sheets refuse de coller sur des lignes masquées par un filtre : filtre retiré, formules recopiées,
+    # puis même filtre remis (étendu aux nouvelles lignes), en une seule requête.
+    book.batch_update({"requests": [{"clearBasicFilter": {"sheetId": ws.id}}, copy,
+                                    {"setBasicFilter": {"filter": _restored_filter(flt, ws.id, last_row)}}]})
+    log.info("[Sheets] Filtre de l'onglet %s retiré le temps de recopier les formules, puis remis.", tab)
+
+
+def _basic_filter(book, sheet_id):
+    """Filtre de base de l'onglet (dict de l'API Sheets) ou None."""
+    try:
+        meta = book.fetch_sheet_metadata({"fields": "sheets(properties.sheetId,basicFilter)"})
+    except Exception as exc:  # classeur factice (tests) ou erreur réseau : on tente sans filtre
+        log.debug("Filtre non lu (%s).", exc)
+        return None
+    for sheet in meta.get("sheets", []):
+        if sheet.get("properties", {}).get("sheetId", 0) == sheet_id:
+            return sheet.get("basicFilter")
+    return None
+
+
+def _restored_filter(flt, sheet_id, last_row):
+    """Filtre à remettre : mêmes critères, plage étendue jusqu'à la dernière ligne écrite."""
+    rng = dict(flt.get("range", {}))
+    rng["sheetId"] = sheet_id
+    rng["startRowIndex"] = rng.get("startRowIndex", 0)
+    if "endRowIndex" in rng:
+        rng["endRowIndex"] = max(rng["endRowIndex"], last_row)
+    out = {"range": rng}
+    if flt.get("filterSpecs"):
+        out["filterSpecs"] = flt["filterSpecs"]
+    elif flt.get("criteria"):
+        out["criteria"] = flt["criteria"]
+    if flt.get("sortSpecs"):
+        out["sortSpecs"] = flt["sortSpecs"]
+    return out
 
 
 def _cell(row, index):
