@@ -3,7 +3,11 @@
     python -m scripts.yahoo auth      # autorisation (une seule fois)
     python -m scripts.yahoo leagues   # mes ligues NBA de la saison, avec leur ID
     python -m scripts.yahoo check     # réglages, équipes et ordre de draft de la ligue configurée
-    python -m scripts.yahoo draft     # choix de draft effectués (+ exports/yahoo_draft_<saison>.csv)
+    python -m scripts.yahoo draft     # choix de draft effectués (+ exports/yahoo_draft_<saison>.csv, onglet yahoo)
+    python -m scripts.yahoo rosters   # effectifs actuels des équipes (+ exports/yahoo_rosters_<saison>.csv, onglet yahoo)
+    python -m scripts.yahoo stats     # standings et Team Log (onglet yahoo)
+
+Sans accès à l'API (erreur 403), draft, rosters, rankings et stats lisent les pages publiques de la ligue.
     python -m scripts.yahoo rankings  # pré-classement (O-Rank) et ADP Yahoo -> base (+ exports/yahoo_rankings_<saison>.csv)
 """
 
@@ -46,9 +50,59 @@ def _key(client, league):
     return league_key(client, league_id)
 
 
+def _league_id(league):
+    league_id = str(league.get("yahoo", {}).get("league_id") or "").strip()
+    if not league_id:
+        raise YahooError("ID de ligue Yahoo absent. Renseignez « ID de la ligue Yahoo » dans l'onglet settings.")
+    return league_id
+
+
+def _team_to_manager(league):
+    """{nom d'équipe Yahoo: manager} d'après Transco | Managers (onglet settings)."""
+    return {name: manager for manager, name in (league.get("yahoo", {}).get("teams") or {}).items()
+            if isinstance(name, str)}
+
+
+def _manager_by_team(league):
+    return {name.strip().casefold(): manager for name, manager in _team_to_manager(league).items()}
+
+
+def _draft_picks(client, league, settings):
+    """Choix effectués : API Yahoo, sinon (accès refusé, pas de jeton...) page publique de la ligue."""
+    try:
+        key = _key(client, league)
+        names = {t["team_key"]: t for t in teams(client, key)}
+        picks = []
+        for p in draft_results(client, key):
+            if not p["player"]:
+                continue
+            t = names.get(p["team_key"], {})
+            picks.append({**p, "team": t.get("name", p["team_key"]), "manager": t.get("manager", "")})
+        return picks, "API"
+    except (YahooError, OSError) as exc:
+        league_id = _league_id(league)
+        logging.info("API Yahoo indisponible (%s) : lecture de la page publique des choix de draft.",
+                     str(exc).splitlines()[0])
+        picks = public.draft_results(league_id, settings.get("http", {}).get("timeout", 30))
+        return [p for p in picks if p["player"]], "page publique"
+
+
+def _yahoo_book(settings, league):
+    """(classeur, onglet yahoo) ou (None, onglet) si le classeur n'est pas accessible (CSV seulement)."""
+    gs = league.get("google_sheets", {})
+    tab = gs.get("yahoo_tab") or "yahoo"
+    if not gs.get("draft_spreadsheet_id"):
+        return None, tab
+    try:
+        return open_spreadsheet(gs["draft_spreadsheet_id"], settings), tab
+    except SheetsError as exc:
+        logging.warning("Classeur inaccessible (%s) : export CSV seulement.", exc)
+        return None, tab
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description="API Yahoo Fantasy")
-    parser.add_argument("command", choices=["auth", "leagues", "check", "draft", "rankings", "stats"])
+    parser.add_argument("command", choices=["auth", "leagues", "check", "draft", "rosters", "rankings", "stats"])
     parser.add_argument("--count", type=int, help="rankings : nombre de joueurs (défaut 300)")
     parser.add_argument("--no-browser", action="store_true", help="ne pas ouvrir le navigateur (auth)")
     parser.add_argument("--league", help="ID de la ligue Yahoo (sinon onglet settings)")
@@ -58,7 +112,7 @@ def main(argv=None):
                         format="%(asctime)s %(levelname)s %(message)s", datefmt="%H:%M:%S")
     settings, league = load_settings(), load_league()
     client = YahooClient(settings)
-    if args.command in ("check", "draft", "rankings", "stats"):
+    if args.command in ("check", "draft", "rosters", "rankings", "stats"):
         league = _sync_config(settings, league) if not args.league else league
         if args.league:
             league.setdefault("yahoo", {})["league_id"] = args.league
@@ -89,20 +143,56 @@ def main(argv=None):
             picks = draft_results(client, key)
             print(f"\nChoix de draft déjà effectués : {sum(1 for p in picks if p['player'])} / {len(picks)}")
         elif args.command == "draft":
-            key = _key(client, league)
-            names = {t["team_key"]: t for t in teams(client, key)}
-            picks = [p for p in draft_results(client, key) if p["player"]]
+            picks, source = _draft_picks(client, league, settings)
+            manager_of = _manager_by_team(league)
             os.makedirs(EXPORTS_DIR, exist_ok=True)
             path = os.path.join(EXPORTS_DIR, f"yahoo_draft_{settings['active_season']}.csv")
             with open(path, "w", encoding="utf-8-sig", newline="") as fh:
                 w = csv.writer(fh, delimiter=";")
                 w.writerow(["pick", "round", "team", "manager", "player", "positions", "nba_team"])
                 for p in picks:
-                    t = names.get(p["team_key"], {})
-                    w.writerow([p["pick"], p["round"], t.get("name", p["team_key"]), t.get("manager", ""),
-                                p["player"], p["positions"], p["nba_team"]])
-                    print(f"{p['pick']:>3} (tour {p['round']:>2}) {t.get('name', p['team_key']):<28} {p['player']}")
-            print(f"{len(picks)} choix écrits dans {path}")
+                    manager = p.get("manager") or manager_of.get(p["team"].strip().casefold(), "")
+                    w.writerow([p["pick"], p["round"], p["team"], manager, p["player"], p.get("positions", ""),
+                                p.get("nba_team", "")])
+                    print(f"{p['pick']:>3} (tour {p['round']:>2}) {p['team']:<28} {p['player']}")
+            print(f"{len(picks)} choix ({source}) écrits dans {path}")
+            book, tab = _yahoo_book(settings, league)
+            if book is not None:
+                yahoo_sheets.write_draft(book, tab, picks, {t: m for t, m in _team_to_manager(league).items()})
+                print(f"Bloc draft de l'onglet {tab} mis à jour.")
+        elif args.command == "rosters":
+            league_id = _league_id(league)
+            timeout = settings.get("http", {}).get("timeout", 30)
+            manager_of = _manager_by_team(league)
+            team_rows, games_rows = [], []
+            for team in public.teams(league_id, timeout):
+                roster = public.roster(league_id, team["team_id"], timeout)
+                manager = manager_of.get(team["name"].strip().casefold(), "")
+                if not manager:
+                    logging.warning("Équipe Yahoo non reliée à un manager : %s", team["name"])
+                team_rows.append({"team_id": team["team_id"], "team": team["name"], "manager": manager,
+                                  "players": roster["players"]})
+                games_rows.append((team["name"], roster["games"]))
+            if not team_rows:
+                raise public.PublicPageError("Aucune équipe trouvée dans le classement public Yahoo.")
+            os.makedirs(EXPORTS_DIR, exist_ok=True)
+            path = os.path.join(EXPORTS_DIR, f"yahoo_rosters_{settings['active_season']}.csv")
+            with open(path, "w", encoding="utf-8-sig", newline="") as fh:
+                w = csv.writer(fh, delimiter=";")
+                w.writerow(yahoo_sheets.ROSTERS_HEADER)
+                for t in team_rows:
+                    for p in t["players"]:
+                        w.writerow([t["team_id"], t["team"], t["manager"], p["player"], p["player_id"],
+                                    p["nba_team"], p["positions"], p["slot"], p["status"]])
+            for name, games in games_rows:
+                left = ", ".join(f"{b} {g.get('remaining') or 0:.0f}" for b, g in games.items())
+                print(f"{name:<30} matchs restants : {left or 'compteur absent'}")
+            total = sum(len(t["players"]) for t in team_rows)
+            print(f"{total} joueurs de {len(team_rows)} équipes écrits dans {path}")
+            book, tab = _yahoo_book(settings, league)
+            if book is not None:
+                yahoo_sheets.write_rosters(book, tab, team_rows)
+                print(f"Bloc rosters de l'onglet {tab} mis à jour.")
         elif args.command == "rankings":
             from scripts.db import init_db
             from scripts.yahoo import rankings
