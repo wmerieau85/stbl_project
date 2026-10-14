@@ -67,6 +67,26 @@ def _manager_by_team(league):
     return {name.strip().casefold(): manager for name, manager in _team_to_manager(league).items()}
 
 
+def _uniform_names(players):
+    """Remplace le nom Yahoo par le nom de référence (base + alias de l'onglet players) ; nom Yahoo gardé
+    dans yahoo_name. Joueur inconnu de la base : nom Yahoo sans accents, signalé."""
+    from scripts.db import init_db
+    from scripts.names import strip_accents
+    from scripts.player_linker import canonical_names
+
+    init_db()
+    names = canonical_names({p["player"] for p in players if p.get("player")})
+    missing = sorted(n for n, c in names.items() if c is None)
+    for p in players:
+        if p.get("player"):
+            p["yahoo_name"] = p["player"]
+            p["player"] = names.get(p["player"]) or strip_accents(p["player"])
+    if missing:
+        logging.warning("%d joueur(s) Yahoo absents de la base (alias à ajouter dans l'onglet players si le nom "
+                        "diffère) : %s", len(missing), ", ".join(missing[:30]) + (" ..." if len(missing) > 30 else ""))
+    return players
+
+
 def _draft_picks(client, league, settings):
     """Choix effectués : API Yahoo, sinon (accès refusé, pas de jeton...) page publique de la ligue."""
     try:
@@ -144,16 +164,17 @@ def main(argv=None):
             print(f"\nChoix de draft déjà effectués : {sum(1 for p in picks if p['player'])} / {len(picks)}")
         elif args.command == "draft":
             picks, source = _draft_picks(client, league, settings)
+            _uniform_names(picks)
             manager_of = _manager_by_team(league)
             os.makedirs(EXPORTS_DIR, exist_ok=True)
             path = os.path.join(EXPORTS_DIR, f"yahoo_draft_{settings['active_season']}.csv")
             with open(path, "w", encoding="utf-8-sig", newline="") as fh:
                 w = csv.writer(fh, delimiter=";")
-                w.writerow(["pick", "round", "team", "manager", "player", "positions", "nba_team"])
+                w.writerow(["pick", "round", "team", "manager", "player", "positions", "nba_team", "yahoo_name"])
                 for p in picks:
                     manager = p.get("manager") or manager_of.get(p["team"].strip().casefold(), "")
                     w.writerow([p["pick"], p["round"], p["team"], manager, p["player"], p.get("positions", ""),
-                                p.get("nba_team", "")])
+                                p.get("nba_team", ""), p.get("yahoo_name", p["player"])])
                     print(f"{p['pick']:>3} (tour {p['round']:>2}) {p['team']:<28} {p['player']}")
             print(f"{len(picks)} choix ({source}) écrits dans {path}")
             book, tab = _yahoo_book(settings, league)
@@ -175,6 +196,7 @@ def main(argv=None):
                 games_rows.append((team["name"], roster["games"]))
             if not team_rows:
                 raise public.PublicPageError("Aucune équipe trouvée dans le classement public Yahoo.")
+            _uniform_names([p for t in team_rows for p in t["players"]])
             os.makedirs(EXPORTS_DIR, exist_ok=True)
             path = os.path.join(EXPORTS_DIR, f"yahoo_rosters_{settings['active_season']}.csv")
             with open(path, "w", encoding="utf-8-sig", newline="") as fh:
@@ -183,7 +205,7 @@ def main(argv=None):
                 for t in team_rows:
                     for p in t["players"]:
                         w.writerow([t["team_id"], t["team"], t["manager"], p["player"], p["player_id"],
-                                    p["nba_team"], p["positions"], p["slot"], p["status"]])
+                                    p["nba_team"], p["positions"], p["slot"], p["status"], p.get("yahoo_name", "")])
             for name, games in games_rows:
                 left = ", ".join(f"{b} {g.get('remaining') or 0:.0f}" for b, g in games.items())
                 print(f"{name:<30} matchs restants : {left or 'compteur absent'}")
