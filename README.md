@@ -50,7 +50,8 @@ lancement (saison, étape `Actual Phase`, sources, grilles).
 | Avant la draft | `python -m scripts.draft reco --xlsx <fichier> --until N --no-sheet` | test sur une mock draft, sans toucher au classeur |
 | Pendant la draft | `python -m scripts.draft watch` | relit les choix (Yahoo ou bdd) et met à jour `draft_reco` à chaque nouveau choix |
 | Pendant la draft | `python -m scripts.draft reco` | un seul recalcul |
-| Après la draft | `python -m scripts.yahoo draft` | choix effectués (+ `exports/yahoo_draft_<saison>.csv`) |
+| Après la draft | `python -m scripts.yahoo draft` | choix effectués (+ `exports/yahoo_draft_<saison>.csv`, bloc draft de l'onglet `yahoo`) |
+| En saison | `python -m scripts.yahoo rosters` | effectifs actuels des 15 équipes (+ `exports/yahoo_rosters_<saison>.csv`, bloc rosters de l'onglet `yahoo`) |
 | En saison | `python main.py --push-sheet` avec `Actual Phase = ros` | projections ROS + stats par période, phases lt / st |
 | En saison | `python -m scripts.season update` | classement projeté et effectifs, onglet `season` |
 | Maintenance | `python -m scripts.player_linker` | relance le rapprochement des joueurs |
@@ -303,7 +304,10 @@ Lecture seule, via l'application déclarée sur developer.yahoo.com (redirect UR
 3. `python -m scripts.yahoo leagues` : liste mes ligues NBA avec leur ID, à reporter dans
    l'onglet settings (« ID de la ligue Yahoo »).
 4. `python -m scripts.yahoo check` : réglages, équipes et managers, nombre de choix de draft.
-   `python -m scripts.yahoo draft` : choix effectués (+ `exports/yahoo_draft_<saison>.csv`).
+   `python -m scripts.yahoo draft` : choix effectués (+ `exports/yahoo_draft_<saison>.csv` et bloc draft
+   de l'onglet `yahoo`). `python -m scripts.yahoo rosters` : effectif actuel de chaque équipe (poste,
+   statut, équipe NBA ; matchs restants par poste affichés dans la console), dans
+   `exports/yahoo_rosters_<saison>.csv` et le bloc rosters de l'onglet `yahoo`.
 5. `python -m scripts.yahoo rankings` : pré-classement Yahoo (O-Rank, l'ordre de la salle de draft
    de ma ligue) et ADP Yahoo (`average_pick`) des `Yahoo rankings count` (300) premiers joueurs,
    enregistrés en base (table `yahoo_rankings`) et dans `exports/yahoo_rankings_<saison>.csv`.
@@ -319,8 +323,9 @@ Lecture seule, via l'application déclarée sur developer.yahoo.com (redirect UR
    à droite des résultats de draft, rosters et rankings déjà présents.
 
 Tant que Yahoo n'a pas validé l'accès à l'API (erreur 403), la ligue étant publique, les choix
-sont lus sur la page `basketball.fantasysports.yahoo.com/nba/<ID>/draftresults` : aucun réglage
-à faire, le programme bascule tout seul. La colonne « Équipe Yahoo » de l'onglet settings relie
+sont lus sur la page `basketball.fantasysports.yahoo.com/nba/<ID>/draftresults` (assistant de draft,
+`watch` et `python -m scripts.yahoo draft`) : aucun réglage à faire, le programme bascule tout seul.
+`rosters`, `rankings` et `stats` passent toujours par les pages publiques. La colonne « Équipe Yahoo » de l'onglet settings relie
 chaque équipe Yahoo à un manager ; l'ordre réel de Yahoo (choix par choix) remplace alors l'ordre
 snake de la config, avec une alerte en cas d'écart et si un choix des tours keepers ne correspond
 pas aux keepers déclarés.

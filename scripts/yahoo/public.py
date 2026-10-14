@@ -239,9 +239,10 @@ def roster(league_id, team_id, timeout=30, session=None):
             continue
         name = link.get("title") or link.get_text(" ", strip=True)   # le texte est abrégé (« N. Alexander-Walker »)
         pid = link.get("data-ys-playerid", "")
-        info = row.select_one("span.Fz-xxs")
+        # « CHA - G,F » ; le statut de blessure (« Q ») a la même classe Fz-xxs et vient avant
+        info = next((s for s in row.select("span.Fz-xxs") if " - " in s.get_text()), None)
         nba_team, positions = "", ""
-        if info and " - " in info.get_text():
+        if info is not None:
             nba_team, positions = [x.strip() for x in info.get_text(" ", strip=True).split(" - ", 1)]
         slot = ""
         first = row.find("td")

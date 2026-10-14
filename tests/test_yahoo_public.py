@@ -142,3 +142,71 @@ def test_stats_command_still_fails_on_other_page_errors(monkeypatch):
 
     monkeypatch.setattr(public, "team_log", boom)
     assert yahoo_main.main(["stats"]) == 1
+
+
+ROSTER_HTML = """<table><tbody>
+<tr><td>G</td><td><div class="ysf-player-name"><a class="name" title="Kon Knueppel" data-ys-playerid="10450">K. Knueppel</a>
+<span class="ysf-player-status Nowrap F-injury Fz-xxs">Q</span><span class="Fz-xxs">CHA - G,F</span></div></td></tr>
+<tr class="bench"><td>BN</td><td><a class="name" title="Trey Murphy III" data-ys-playerid="6559">T. Murphy</a>
+<span class="Fz-xxs">NOP - G,F</span></td></tr>
+</tbody></table>"""
+
+
+def test_roster_reads_team_and_positions_after_injury_status(monkeypatch):
+    monkeypatch.setattr(public, "fetch", lambda *a, **k: ROSTER_HTML)
+    players = public.roster("4205", 1)["players"]
+    assert players[0] == {"player": "Kon Knueppel", "player_id": "10450", "nba_team": "CHA", "positions": "G,F",
+                          "slot": "G", "status": "Q"}
+    assert players[1]["nba_team"] == "NOP" and players[1]["slot"] == "BN"
+
+
+def _yahoo_env(monkeypatch, tmp_path):
+    settings = {"active_season": "2026-27", "http": {"timeout": 10}}
+    league = {"yahoo": {"league_id": "4205", "teams": {"Manager A": "Team A"}},
+              "google_sheets": {"draft_spreadsheet_id": "book", "yahoo_tab": "yahoo"}}
+    writes = []
+    monkeypatch.setattr(yahoo_main, "load_settings", lambda: settings)
+    monkeypatch.setattr(yahoo_main, "load_league", lambda: league)
+    monkeypatch.setattr(yahoo_main, "YahooClient", lambda _: object())
+    monkeypatch.setattr(yahoo_main, "_sync_config", lambda _settings, current: current)
+    monkeypatch.setattr(yahoo_main, "open_spreadsheet", lambda _spreadsheet_id, _settings: "book")
+    monkeypatch.setattr(yahoo_main, "EXPORTS_DIR", str(tmp_path))
+    return writes
+
+
+def test_draft_command_falls_back_to_public_page_on_403(monkeypatch, tmp_path):
+    writes = _yahoo_env(monkeypatch, tmp_path)
+
+    def denied(*a, **k):
+        raise yahoo_main.YahooError("Accès refusé par Yahoo (403).")
+
+    monkeypatch.setattr(yahoo_main, "league_key", denied)
+    monkeypatch.setattr(public, "draft_results", lambda *a, **k: [
+        {"pick": 1, "round": 1, "pick_in_round": 1, "team": "Team A", "player": "Player A", "player_id": "1"},
+        {"pick": 2, "round": 1, "pick_in_round": 2, "team": "Team B", "player": "", "player_id": ""}])
+    monkeypatch.setattr(yahoo_main.yahoo_sheets, "write_draft",
+                        lambda book, tab, picks, managers: writes.append((tab, picks, managers)))
+
+    assert yahoo_main.main(["draft"]) == 0
+    tab, picks, managers = writes[0]
+    assert tab == "yahoo" and [p["player"] for p in picks] == ["Player A"]
+    assert managers == {"Team A": "Manager A"}
+    csv_text = (tmp_path / "yahoo_draft_2026-27.csv").read_text(encoding="utf-8-sig")
+    assert "1;1;Team A;Manager A;Player A" in csv_text
+
+
+def test_rosters_command_writes_block_and_csv(monkeypatch, tmp_path):
+    writes = _yahoo_env(monkeypatch, tmp_path)
+    monkeypatch.setattr(public, "teams", lambda *a, **k: [{"team_id": 1, "name": "Team A"}])
+    monkeypatch.setattr(public, "roster", lambda *a, **k: {
+        "players": [{"player": "Player A", "player_id": "1", "nba_team": "DEN", "positions": "C", "slot": "C",
+                     "status": ""}],
+        "games": {"C": {"played": 0.0, "remaining": 82.0, "max": 82.0}}})
+    monkeypatch.setattr(yahoo_main.yahoo_sheets, "write_rosters",
+                        lambda book, tab, teams: writes.append((tab, teams)))
+
+    assert yahoo_main.main(["rosters"]) == 0
+    tab, teams = writes[0]
+    assert tab == "yahoo" and teams[0]["manager"] == "Manager A"
+    assert "1;Team A;Manager A;Player A;1;DEN;C;C;" in (tmp_path / "yahoo_rosters_2026-27.csv").read_text(
+        encoding="utf-8-sig")
