@@ -171,6 +171,8 @@ def _yahoo_env(monkeypatch, tmp_path):
     monkeypatch.setattr(yahoo_main, "_sync_config", lambda _settings, current: current)
     monkeypatch.setattr(yahoo_main, "open_spreadsheet", lambda _spreadsheet_id, _settings: "book")
     monkeypatch.setattr(yahoo_main, "EXPORTS_DIR", str(tmp_path))
+    from scripts import db
+    monkeypatch.setattr(db, "DB_PATH", str(tmp_path / "t.sqlite"))
     return writes
 
 
@@ -205,8 +207,13 @@ def test_rosters_command_writes_block_and_csv(monkeypatch, tmp_path):
     monkeypatch.setattr(yahoo_main.yahoo_sheets, "write_rosters",
                         lambda book, tab, teams: writes.append((tab, teams)))
 
+    from scripts import db
+    db.init_db()
+    with db.get_connection() as conn, conn:
+        conn.execute("INSERT INTO players (canonical_name, name_key) VALUES ('Player A.', 'player a')")
     assert yahoo_main.main(["rosters"]) == 0
     tab, teams = writes[0]
+    assert teams[0]["players"][0]["player"] == "Player A." and teams[0]["players"][0]["yahoo_name"] == "Player A"
     assert tab == "yahoo" and teams[0]["manager"] == "Manager A"
-    assert "1;Team A;Manager A;Player A;1;DEN;C;C;" in (tmp_path / "yahoo_rosters_2026-27.csv").read_text(
+    assert "1;Team A;Manager A;Player A.;1;DEN;C;C;;Player A" in (tmp_path / "yahoo_rosters_2026-27.csv").read_text(
         encoding="utf-8-sig")
