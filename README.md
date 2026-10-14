@@ -53,7 +53,8 @@ lancement (saison, étape `Actual Phase`, sources, grilles).
 | Après la draft | `python -m scripts.yahoo draft` | choix effectués (+ `exports/yahoo_draft_<saison>.csv`, bloc draft de l'onglet `yahoo`) |
 | En saison | `python -m scripts.yahoo rosters` | effectifs actuels des 15 équipes (+ `exports/yahoo_rosters_<saison>.csv`, bloc rosters de l'onglet `yahoo`) |
 | En saison | `python main.py --push-sheet` avec `Actual Phase = ros` | projections ROS + stats par période, phases lt / st |
-| En saison | `python -m scripts.season update` | classement projeté et effectifs, onglet `season` |
+| En saison | `python -m scripts.season update` | classement projeté et effectifs, onglet `season_reco` |
+| En saison | `python -m scripts.season moves` | échanges ou joueurs libres simulés (lignes `Moves | ...`), onglet `moves_reco` |
 | Maintenance | `python -m scripts.player_linker` | relance le rapprochement des joueurs |
 | Maintenance | `python -m scripts.config_sheet push` | réécrit les onglets settings / players depuis la configuration locale (remise à plat) |
 | Maintenance | `python -m pytest -q` | tests |
@@ -372,6 +373,33 @@ matchs sont alors ceux de la saison complète (82 x postes).
 Limites : les tentatives de tirs réelles (FGA, FTA) ne sont pas publiées par Yahoo et sont
 estimées ; l'alignement jour par jour (plus de joueurs que de postes certains soirs) sera traité
 par le module rotation.
+
+### Simulation de mouvements (moves_reco)
+
+`python -m scripts.season moves` (option `--no-sheet` : console + `exports/moves_reco_<saison>.csv`).
+Réglages dans l'onglet settings :
+
+| Ligne | Colonne 2 | Colonne 3 |
+|---|---|---|
+| `Moves | Player 1` à `4` | manager : le mien (je cède ces joueurs) ou celui de `Moves | Compare` (je les reçois) | joueur (vide = ignoré) |
+| `Moves | Compare` | `manager` | nom du manager |
+| `Moves | Compare` | `free agent` | (vide) : je lâche les joueurs listés, qui doivent être les miens |
+| `Optim | Moves` | `Value tolerance` | écart de valeur accepté, 10 % par défaut |
+| `Optim | Moves` | `Max results` / `Free agent results` / `Free agent shortlist` | 20 / 6 / 15 |
+
+- Échange : autant de joueurs reçus que cédés. Toutes les combinaisons de l'autre effectif sont
+  testées ; celles dont la valeur s'écarte de plus de la tolérance sont écartées, les autres classées
+  par gain de points roto attendus pour moi, avec le gain de l'autre manager (un échange qui le fait
+  perdre a peu de chances d'être accepté), le rang projeté, les chances de titre / podium et l'effet
+  par catégorie.
+- Joueurs libres (joueurs des projections absents de tous les effectifs Yahoo, statut waivers non
+  vérifié) : chacun est testé à la place des joueurs lâchés ; si plusieurs sont lâchés, les 15
+  meilleurs sont combinés. Les 6 meilleures options sont affichées, même si elles font perdre des points.
+- Valeur d'un joueur : valeur par match au-dessus du niveau de remplacement (dernier joueur d'effectif
+  de la ligue, 180e pour 15 x 12 ; phase st sur l'horizon court, lt ensuite) x matchs attendus d'ici la
+  fin de saison. Les stats réelles restent à l'équipe qui les a faites ; mon lineup est réoptimisé,
+  l'autre équipe garde son taux d'alignement. « Matchs joués (reçus) » : matchs que mon lineup donnerait
+  aux joueurs reçus (0 = il ne jouerait pas, faute de place sous les plafonds de matchs par poste).
 
 ## Limites connues
 

@@ -3,6 +3,8 @@
     python -m scripts.season update             # lit Yahoo, projette, écrit l'onglet season_reco (+ CSV)
     python -m scripts.season update --no-sheet  # console + CSV seulement
     python -m scripts.season update --rosters sheet   # effectifs de l'onglet bdd (Team Season, sinon Team Draft)
+    python -m scripts.season moves              # échanges / joueurs libres (lignes Moves | ... de settings) :
+                                                # onglet moves_reco (+ CSV)
 
 Données : pages publiques de la ligue Yahoo (effectifs, compteur de matchs par poste, classement),
 calendrier NBA, projections lt (reste de la saison) et st (forme récente, 15 prochains jours).
@@ -128,12 +130,15 @@ def compute(settings, league, today=None, book=None, roster_source=None):
         log.warning("Manager %r absent des rosters Yahoo : optimisation du roster ignorée.", manager)
     proj = standings_projection(teams, cats, weights, sims=int(conf.get("simulations", 2000)))
     return {"teams": teams, "categories": cats, "projection": proj, "today": today,
-            "my_team": league["draft"].get("my_team"), "unknown": unknown, "league_rate": league_rate}
+            "my_team": league["draft"].get("my_team"), "unknown": unknown, "league_rate": league_rate,
+            "weights": weights,
+            "context": {"lt_pool": lt_pool, "st_pool": st_pool, "games": games, "today": today, "horizon": horizon,
+                        "league": league}}
 
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description="Module saison STBL")
-    parser.add_argument("command", choices=["update"])
+    parser.add_argument("command", choices=["update", "moves"])
     parser.add_argument("--no-sheet", action="store_true", help="ne pas écrire dans Google Sheets")
     parser.add_argument("--date", help="date de calcul AAAA-MM-JJ (défaut : aujourd'hui)")
     parser.add_argument("--rosters", choices=["yahoo", "sheet"],
@@ -157,6 +162,8 @@ def main(argv=None):
     except (ValueError, RuntimeError, public.PublicPageError) as exc:
         log.error("%s", exc)
         return 1
+    if args.command == "moves":
+        return _moves(result, settings, league, book)
     season_rows = report.season_rows(result, league)
     roster_rows = report.roster_rows(result)
     os.makedirs(EXPORTS_DIR, exist_ok=True)
@@ -171,6 +178,26 @@ def main(argv=None):
             rename_tab(book, "season", tab)     # ancien nom de l'onglet : renommé, pas dupliqué
         write_tab(book, tab, season_rows)
     print(report.console(result))
+    return 0
+
+
+def _moves(result, settings, league, book):
+    from scripts.season import moves
+
+    try:
+        out = moves.simulate(result, league)
+    except moves.MovesError as exc:
+        log.error("%s", exc)
+        return 1
+    rows = moves.rows(out)
+    os.makedirs(EXPORTS_DIR, exist_ok=True)
+    path = os.path.join(EXPORTS_DIR, f"moves_reco_{settings['active_season']}.csv")
+    with open(path, "w", encoding="utf-8-sig", newline="") as fh:
+        csv.writer(fh, delimiter=";").writerows(rows)
+    if book is not None:
+        from scripts.sheets import write_tab
+        write_tab(book, league.get("google_sheets", {}).get("moves_reco_tab") or "moves_reco", rows)
+    print(moves.console(out))
     return 0
 
 

@@ -370,6 +370,8 @@ DEFAULT_LEAGUE = {
     "season": {"st_days": 15, "lt_phase": "lt", "st_phase": "st", "simulations": 2000,
                "roster_source": "yahoo", "opponent_model": "usage", "opponent_default_rate": 0.95,
                "opponent_ramp_days": 42},
+    "moves": {"value_tolerance": 0.10, "max_results": 20, "fa_results": 6, "fa_shortlist": 15,
+              "players": [], "compare": {}},
     "games": {"per_slot": 82, "lineup": "daily"},
     "draft": {
         "type": "snake", "rounds": 12, "my_team": "", "order": [], "keepers": {}, "keeper_rounds": [], "picks_source": "sheet",
@@ -380,7 +382,7 @@ DEFAULT_LEAGUE = {
         "draft_spreadsheet_id": "", "config_tab": "settings",
         "reco_tab": "draft_reco", "projections_spreadsheet_id": "", "projections_tab": "bdd",
         "yahoo_tab": "yahoo", "detail_tab": "bdd_detail",
-        "projections_start_col": "C", "poll_seconds": 10, "write_picks_to_sheet": True, "season_reco_tab": "season_reco",
+        "projections_start_col": "C", "poll_seconds": 10, "write_picks_to_sheet": True, "season_reco_tab": "season_reco", "moves_reco_tab": "moves_reco",
         "alias_tab": "players",
     },
     # tirage au sort de l'ordre de draft (onglet board)
