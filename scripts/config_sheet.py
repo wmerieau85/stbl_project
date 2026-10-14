@@ -70,6 +70,8 @@ PARAMS = [
     ("Sheets | Settings", "Projections ID", "league", "google_sheets.projections_spreadsheet_id", "optstr",
      "autre classeur pour l'onglet des projections (vide = ce classeur)"),
     ("Sheets | Tab", "Config", "bootstrap", "config_tab", "str", "cet onglet (indicatif : nom lu dans config/bootstrap.json)"),
+    ("Sheets | Tab", "Moves Reco", "league", "google_sheets.moves_reco_tab", "str",
+     "simulation d'échanges / joueurs libres (python -m scripts.season moves)"),
     ("Sheets | Tab", "Season Reco", "league", "google_sheets.season_reco_tab", "str",
      "projection de saison : classement, mon effectif, adversaires, effectifs des 15 équipes"),
     ("Sheets | Tab", "Players source", "league", "google_sheets.alias_tab", "str",
@@ -120,6 +122,13 @@ PARAMS = [
      "taux d'alignement de départ (avant assez de données), ex. 0,95"),
     ("Optim | Season", "Opponent ramp (days)", "league", "season.opponent_ramp_days", "int",
      "jours avant de se fier entièrement au comportement propre de chaque manager"),
+    ("Optim | Moves", "Value tolerance", "league", "moves.value_tolerance", "float",
+     "échanges : écart de valeur accepté entre joueurs cédés et reçus (0,10 ou 10 % = ±10 %)"),
+    ("Optim | Moves", "Max results", "league", "moves.max_results", "int", "échanges affichés (les meilleurs)"),
+    ("Optim | Moves", "Free agent results", "league", "moves.fa_results", "int",
+     "joueurs libres : options affichées"),
+    ("Optim | Moves", "Free agent shortlist", "league", "moves.fa_shortlist", "int",
+     "joueurs libres : meilleurs pris un par un, combinés ensuite quand plusieurs joueurs sont lâchés"),
     ("Pipeline | Import", "Maximum time per page (s)", "settings", "http.timeout", "int", ""),
     ("Pipeline | Import", "Attempts", "settings", "http.retries", "int", "nouvelles tentatives en cas d'échec"),
     ("Pipeline | Import", "Pause between pages (s)", "settings", "http.pause_seconds", "float", ""),
@@ -150,6 +159,9 @@ SCORING_SECTION = "Settings | Scoring"
 ORDER_SECTION = "Draft | Order"
 KEEPERS_SECTION = "Draft | Keepers"
 MANAGERS_SECTION = "Transco | Managers"
+MOVES_PLAYER_SECTION = "Moves | Player"      # Moves | Player 1..4 : manager | joueur
+MOVES_COMPARE_SECTION = "Moves | Compare"    # manager | nom du manager, ou free agent
+MOVES_PLAYERS = 4
 ROSTER_HELP = {"G": "postes titulaires Guard", "F": "postes titulaires Forward", "C": "postes titulaires Center",
                "UTIL": "postes titulaires Util", "BN": "banc", "IL": "blessés"}
 
@@ -227,6 +239,8 @@ def _parse(raw, kind, label):
     if kind == "int":
         return int(_number(text, label))
     if kind == "float":
+        if text.endswith("%"):
+            return _number(text[:-1], label) / 100
         value = _number(text, label)
         return int(value) if value.is_integer() and label.endswith("percent_scale") else value
     if kind.startswith("choice:"):
@@ -287,7 +301,7 @@ def build_rows(cfg=None, bootstrap=None):
              ("Settings | Phases", None), ("Settings | Draft", None), ("Sheets | Settings", None),
              ("Sheets | Tab", None), ("Sheets | Draft", None), ("Sheets | Projections", None),
              ("Sheets | Season", None), ("Optim | Draft", None), ("Optim | Season", None),
-             ("Pipeline | Import", None), ("Pipeline | Export", None), ("Draft Lottery | Managers", None),
+             ("Optim | Moves", None), ("Pipeline | Import", None), ("Pipeline | Export", None), ("Draft Lottery | Managers", None),
              ("Draft Lottery | Active", None), ("Draft Lottery | Number Balls", None),
              ("Draft Lottery | Lottery Number", None), ("Draft Lottery | Balls", None)]
     for section, special in order:
@@ -311,6 +325,16 @@ def build_rows(cfg=None, bootstrap=None):
             add(KEEPERS_SECTION, manager, player, "sans effet si les choix viennent de Yahoo (Yahoo fait foi)")
     for manager, team in ((league.get("yahoo") or {}).get("teams") or {}).items():
         add(MANAGERS_SECTION, manager, team, "")
+    moves = league.get("moves") or {}
+    listed = list(moves.get("players") or [])
+    side = listed[0]["manager"] if listed else draft.get("my_team", "")
+    for i in range(1, max(MOVES_PLAYERS, len(listed)) + 1):
+        entry = listed[i - 1] if i <= len(listed) else {"manager": side, "player": ""}
+        add(f"{MOVES_PLAYER_SECTION} {i}", entry["manager"], entry["player"],
+            "joueurs à échanger : les miens, ou ceux du manager de Moves | Compare" if i == 1 else "")
+    compare = moves.get("compare") or {}
+    add(MOVES_COMPARE_SECTION, compare.get("type", ""), compare.get("manager", ""),
+        "manager + nom du manager (échange), ou free agent (joueurs libres)")
 
     codes = [(conf.get("code"), name, conf) for name, conf in sources.items() if conf.get("code")]
     for code, _, conf in codes:
@@ -403,6 +427,7 @@ def parse_rows(rows, cfg=None, bootstrap=None):
     roster, scoring, order, keepers, teams = {}, {}, [], {}, {}
     stages, active, windows, dirs, grids, transco = {}, {}, {}, {}, {}, {}
     players_urls = {}
+    moves_players, moves_compare = {}, None
     for key, items in grouped.items():
         domain, sub = _split_section(key)
         for section, param, value in items:
@@ -434,6 +459,17 @@ def parse_rows(rows, cfg=None, bootstrap=None):
             elif key == _norm(MANAGERS_SECTION):
                 if value:
                     teams[param] = value
+            elif key.startswith(_norm(MOVES_PLAYER_SECTION)):
+                number = key[len(_norm(MOVES_PLAYER_SECTION)):].strip() or "1"
+                moves_players[int(_number(number, section))] = {"manager": param, "player": value}
+            elif key == _norm(MOVES_COMPARE_SECTION):
+                kind = _norm(param)
+                if not kind:
+                    moves_compare = {}
+                elif kind not in ("manager", "free agent"):
+                    raise ValueError(f"Onglet config, {section} : « {param} », attendu manager ou free agent.")
+                else:
+                    moves_compare = {"type": kind, "manager": value if kind == "manager" else ""}
             elif domain == "sources" and sub in ("draft", "ros"):
                 if value:
                     stages.setdefault(code_of(param, section), {})[sub] = value
@@ -483,6 +519,11 @@ def parse_rows(rows, cfg=None, bootstrap=None):
         draft["keepers"] = keepers
     if teams:
         league.setdefault("yahoo", {})["teams"] = teams
+    if moves_players or moves_compare:
+        moves = league.setdefault("moves", {})
+        moves["players"] = [moves_players[n] for n in sorted(moves_players) if moves_players[n]["player"]]
+        if moves_compare is not None:
+            moves["compare"] = moves_compare
     _check_league(league)
 
     if stages:

@@ -159,6 +159,7 @@
       "write_picks_to_sheet": true,
       "yahoo_tab": "yahoo",
       "season_reco_tab": "season_reco",
+      "moves_reco_tab": "moves_reco",
       "alias_tab": "players",
       "board_tab": "board",
       "detail_tab": "bdd_detail"
@@ -172,6 +173,14 @@
       "opponent_model": "usage",
       "opponent_default_rate": 0.95,
       "opponent_ramp_days": 42
+    },
+    "moves": {
+      "value_tolerance": 0.1,
+      "max_results": 20,
+      "fa_results": 6,
+      "fa_shortlist": 15,
+      "players": [],
+      "compare": {}
     },
     "lottery": {
       "balls_range": "board!N8:O22",
