@@ -6,6 +6,10 @@ Chaque ligne de raw_projections porte une clé normalisée (player_key). Le link
    Nikola Jokic), comme dans les onglets du classeur ;
 2. retrouve ou crée le joueur correspondant dans `players` ;
 3. renseigne raw_projections.player_id.
+Un alias ajouté après coup s'applique aussi aux lignes déjà rattachées (relink_aliases) : le joueur
+en double disparaît des projections finales au prochain calcul de la pondération.
+suspect_duplicates() signale les doublons probables (même nom de famille, même équipe NBA, sources
+différentes) pour lesquels ajouter un alias.
 
 Un nom dont un caractère a été perdu à l'encodage (« Nikola Joki? ») est rattaché au joueur
 connu qui correspond, s'il est unique. repair_players() corrige les joueurs déjà enregistrés :
@@ -62,10 +66,77 @@ def link_players(relink_all=False, season=None, stage=None):
                 (player_id, raw_key),
             )
 
+        relinked = _relink_aliases(conn, aliases, known)
+
     log.info("[Linker] %d clé(s) traitée(s), %d nouveau(x) joueur(s).", len(unlinked), created)
+    if relinked:
+        log.info("[Linker] %d ligne(s) déjà importée(s) rattachée(s) à leur nom de référence (alias).", relinked)
     repair_players()
     if season and stage:
         report_coverage(season, stage)
+        for (_, team), names in suspect_duplicates(season, stage).items():
+            log.warning("[Linker] Doublon probable (%s) : %s. Si c'est le même joueur, ajoutez un alias dans "
+                        "l'onglet players.", team, " / ".join(f"{n} ({', '.join(s)})" for n, s in names))
+
+
+def _relink_aliases(conn, aliases, known):
+    """Lignes déjà rattachées à un autre joueur que la cible de leur alias : rattachées à la cible."""
+    moved = 0
+    keys = {k for (k,) in conn.execute("SELECT DISTINCT player_key FROM raw_projections")}
+    for raw_key, canonical in aliases.items():
+        if raw_key not in keys:
+            continue
+        canonical_key = name_key(canonical)
+        target = known.get(canonical_key)
+        if target is None:
+            target = conn.execute("INSERT INTO players (canonical_name, name_key) VALUES (?, ?)",
+                                  (canonical, canonical_key)).lastrowid
+            known[canonical_key] = target
+        moved += conn.execute("UPDATE raw_projections SET player_id = ? WHERE player_key = ? AND player_id <> ?",
+                              (target, raw_key, target)).rowcount
+    return moved
+
+
+def suspect_duplicates(season, stage):
+    """{(nom de famille, équipe): [(nom, [sources])]} : joueurs différents, même nom de famille et même
+    équipe NBA, chacun absent des sources de l'autre (souvent le même joueur sous deux prénoms)."""
+    with get_connection() as conn:
+        rows = conn.execute(
+            "SELECT p.canonical_name, p.name_key, r.team, r.source FROM raw_projections r "
+            "JOIN players p ON p.player_id = r.player_id WHERE r.season = ? AND r.stage = ?",
+            (season, stage)).fetchall()
+    players = {}
+    for name, key, team, source in rows:
+        last = key.split()[-1] if key else ""
+        entry = players.setdefault((last, (team or "").upper()), {}).setdefault(name, set())
+        entry.add(source)
+    out = {}
+    for group, names in players.items():
+        if len(names) < 2 or not group[0] or not group[1]:
+            continue
+        items = sorted(names.items())
+        disjoint = all(not (a[1] & b[1]) for i, a in enumerate(items) for b in items[i + 1:])
+        if disjoint:
+            out[group] = [(n, sorted(s)) for n, s in items]
+    return out
+
+
+def canonical_names(names):
+    """{nom lu (Yahoo...): nom de référence de la base} ; nom absent de la base : nom sans accents."""
+    aliases = _alias_map()
+    with get_connection() as conn:
+        known = dict(conn.execute("SELECT name_key, canonical_name FROM players").fetchall())
+    out = {}
+    for name in names:
+        key = name_key(name)
+        if key in aliases:
+            key = name_key(aliases[key])
+        canonical = known.get(key)
+        if canonical is None and has_lost_chars(key):
+            match = match_lost_chars(key, known)
+            canonical = known.get(match) if match else None
+        out[name] = canonical
+    return out
 
 
 def repair_players():

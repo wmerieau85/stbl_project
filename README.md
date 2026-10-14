@@ -307,7 +307,10 @@ Lecture seule, via l'application déclarée sur developer.yahoo.com (redirect UR
    `python -m scripts.yahoo draft` : choix effectués (+ `exports/yahoo_draft_<saison>.csv` et bloc draft
    de l'onglet `yahoo`). `python -m scripts.yahoo rosters` : effectif actuel de chaque équipe (poste,
    statut, équipe NBA ; matchs restants par poste affichés dans la console), dans
-   `exports/yahoo_rosters_<saison>.csv` et le bloc rosters de l'onglet `yahoo`.
+   `exports/yahoo_rosters_<saison>.csv` et le bloc rosters de l'onglet `yahoo`. Dans les deux cas, la
+   colonne `player` porte le nom de référence (base + alias de l'onglet players, comme dans `bdd`) et
+   la dernière colonne, `yahoo_name`, le nom affiché par Yahoo ; un joueur inconnu de la base est
+   signalé (alias à ajouter). Blocs fixes : draft en A:K, rosters en L:U, rankings à partir de V.
 5. `python -m scripts.yahoo rankings` : pré-classement Yahoo (O-Rank, l'ordre de la salle de draft
    de ma ligue) et ADP Yahoo (`average_pick`) des `Yahoo rankings count` (300) premiers joueurs,
    enregistrés en base (table `yahoo_rankings`) et dans `exports/yahoo_rankings_<saison>.csv`.

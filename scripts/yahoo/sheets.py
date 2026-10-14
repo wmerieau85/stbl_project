@@ -10,10 +10,10 @@ TEAM_LOG_START_COL = "AO"
 
 DRAFT_HEADER = [
     "pick", "round", "pick_in_round", "team", "manager", "player", "positions", "nba_team",
-    "team_key", "player_key",
+    "team_key", "player_key", "yahoo_name",
 ]
 ROSTERS_HEADER = [
-    "team_id", "team", "manager", "player", "player_id", "nba_team", "positions", "slot", "status",
+    "team_id", "team", "manager", "player", "player_id", "nba_team", "positions", "slot", "status", "yahoo_name",
 ]
 RANKINGS_HEADER = [
     "season", "rank", "player", "player_key", "player_id", "nba_team", "positions", "adp",
@@ -40,6 +40,7 @@ def write_draft(book, tab, picks, team_to_manager=None):
             pick.get("pick", ""), pick.get("round", ""), pick.get("pick_in_round", ""),
             team, team_to_manager.get(team, ""), pick.get("player", ""), pick.get("positions", ""),
             pick.get("nba_team", ""), pick.get("team_key", ""), pick.get("player_key", pick.get("player_id", "")),
+            pick.get("yahoo_name", pick.get("player", "")),
         ])
     write_block(book, tab, rows, first_col=DRAFT_START_COL)
 
@@ -53,6 +54,7 @@ def write_rosters(book, tab, teams):
                 team.get("team_id", ""), team.get("team", ""), team.get("manager", ""),
                 player.get("player", ""), player.get("player_id", ""), player.get("nba_team", ""),
                 player.get("positions", ""), player.get("slot", ""), player.get("status", ""),
+                player.get("yahoo_name", player.get("player", "")),
             ])
     write_block(book, tab, rows, first_col=ROSTERS_START_COL)
 
