@@ -1,0 +1,73 @@
+# Lancements depuis le menu « STBL » du classeur (Apps Script -> API GitHub workflow_dispatch).
+# Les codes de commande sont définis dans scripts/run.py ; seuls ceux de la liste sont acceptés.
+name: stbl-run
+run-name: ${{ inputs.command }} ${{ inputs.key }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      command:
+        description: Commande du menu
+        required: true
+        type: choice
+        options:
+          - projections_update
+          - projections_recalc
+          - lottery_draw
+          - draft_reco
+          - draft_watch
+          - yahoo_draft
+          - yahoo_rankings
+          - yahoo_rosters
+          - yahoo_stats
+          - season_update
+          - season_moves
+          - season_all
+          - settings_check
+      key:
+        description: Clé de la ligne du journal (onglet runs)
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+# un lancement à la fois sur la base (la veille de draft tourne à part, elle ne modifie pas la base)
+concurrency:
+  group: ${{ inputs.command == 'draft_watch' && 'stbl-watch' || 'stbl-db' }}
+  cancel-in-progress: false
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: ${{ inputs.command == 'draft_watch' && 300 || 45 }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Dépendances
+        run: pip install -r requirements.txt
+
+      - name: Identifiants
+        env:
+          GOOGLE_SERVICE_ACCOUNT: ${{ secrets.GOOGLE_SERVICE_ACCOUNT }}
+          FANTASYNERDS_KEY: ${{ secrets.FANTASYNERDS_KEY }}
+        run: |
+          mkdir -p credentials
+          if [ -z "$GOOGLE_SERVICE_ACCOUNT" ]; then
+            echo "::error::Secret GOOGLE_SERVICE_ACCOUNT absent (Settings > Secrets and variables > Actions)."
+            exit 1
+          fi
+          printf '%s' "$GOOGLE_SERVICE_ACCOUNT" > credentials/service_account.json
+          if [ -n "$FANTASYNERDS_KEY" ]; then printf '%s' "$FANTASYNERDS_KEY" > credentials/fantasynerds_key.txt; fi
+
+      - name: ${{ inputs.command }}
+        env:
+          TZ: Europe/Paris
+          STBL_COMMAND: ${{ inputs.command }}
+          STBL_KEY: ${{ inputs.key }}
+        run: python -m scripts.run "$STBL_COMMAND" --key "$STBL_KEY"

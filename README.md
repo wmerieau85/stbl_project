@@ -401,6 +401,46 @@ Réglages dans l'onglet settings :
   l'autre équipe garde son taux d'alignement. « Matchs joués (reçus) » : matchs que mon lineup donnerait
   aux joueurs reçus (0 = il ne jouerait pas, faute de place sous les plafonds de matchs par poste).
 
+## Menu du classeur (lancement sans le PC)
+
+Menu **STBL** du classeur (Apps Script, `apps_script/stbl_menu.gs`) -> traitement GitHub Actions
+`.github/workflows/stbl-run.yml` -> `python -m scripts.run <code>`. Seuls les codes de `scripts/run.py`
+sont acceptés (`python -m scripts.run --list` les affiche avec leurs commandes).
+
+| Menu | Code | Commande |
+|---|---|---|
+| Projections > Mise à jour | `projections_update` | `python main.py --push-sheet` (CSV des sources copiés depuis Drive) |
+| Projections > Recalcul seul | `projections_recalc` | `python main.py --skip-import --push-sheet` |
+| Draft > Tirage lottery / Reco / Watch | `lottery_draw` / `draft_reco` / `draft_watch` | `scripts.lottery --draw` / `scripts.draft reco` / `scripts.draft watch` (5 h max, « Arrêter le watch ») |
+| Draft > Yahoo Draft / Yahoo Rankings | `yahoo_draft` / `yahoo_rankings` | `scripts.yahoo draft` / `rankings` |
+| Yahoo > MàJ rosters / Standings + Team Log | `yahoo_rosters` / `yahoo_stats` | `scripts.yahoo rosters` / `stats` |
+| Saison > Projections / Moves / Tout mettre à jour | `season_update` / `season_moves` / `season_all` | `scripts.season update` / `moves` / rosters + stats + update + moves |
+| Maintenance > Contrôle settings | `settings_check` | `scripts.config_sheet check` |
+
+Chaque lancement ajoute une ligne à l'onglet `runs` : demandé, en cours, puis OK / erreur, durée, lien
+vers le log GitHub, dernières lignes en cas d'erreur (aussi : STBL > Maintenance > Dernier lancement).
+Résultat en 1 à 3 minutes ; un lancement à la fois (la veille de draft tourne à part).
+
+La base `database.sqlite` et les CSV des sources sont dans le dossier Drive `stbl_data`
+(`Sheets | Settings | Drive folder ID`), partagé en Éditeur avec le compte de service : base
+téléchargée au début, renvoyée à la fin si elle a changé ; un sous-dossier par source CSV
+(`lineupexperts`, `draftkick`, `fanscout`), dont les `.csv` sont copiés dans `data/imports/<source>/`.
+Avec `Sheets | Settings | Drive sync = oui`, les commandes lancées sur le PC font de même (la base Drive
+fait foi) ; `python -m scripts.cloud pull | push` synchronise à la main.
+
+Mise en place (une fois) :
+1. Déposer la base du PC (`database.sqlite`) dans `stbl_data` (le compte de service ne peut que mettre
+   à jour un fichier existant), et les CSV du moment dans les sous-dossiers.
+2. GitHub, dépôt > Settings > Secrets and variables > Actions > New repository secret :
+   `GOOGLE_SERVICE_ACCOUNT` = contenu de `credentials/service_account.json`
+   (et `FANTASYNERDS_KEY` si la source est utilisée). « Google Drive API » doit être activée dans la
+   console Google Cloud du compte de service.
+3. Jeton à accès fin (github.com > Settings > Developer settings > Fine-grained tokens) : dépôt
+   `stbl_project` seul, permission « Actions : Read and write ».
+4. Classeur > Extensions > Apps Script : coller `apps_script/stbl_menu.gs`, enregistrer, recharger le
+   classeur, autoriser le script, puis STBL > Maintenance > Configurer le jeton GitHub.
+5. Tester STBL > Maintenance > Contrôle settings, puis Saison > Projections ; ensuite `Drive sync = oui`.
+
 ## Limites connues
 
 - CBS n'affiche que les 100 premiers joueurs par poste (500 au total) et un seul poste par joueur.

@@ -160,6 +160,9 @@
       "yahoo_tab": "yahoo",
       "season_reco_tab": "season_reco",
       "moves_reco_tab": "moves_reco",
+      "runs_tab": "runs",
+      "drive_folder_id": "",
+      "drive_sync": false,
       "alias_tab": "players",
       "board_tab": "board",
       "detail_tab": "bdd_detail"
