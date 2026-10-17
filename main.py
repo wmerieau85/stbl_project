@@ -163,4 +163,6 @@ if __name__ == "__main__":
         format="%(asctime)s %(levelname)-7s %(message)s",
         datefmt="%H:%M:%S",
     )
-    sys.exit(run_pipeline(cli_args))
+    from scripts.cloud import run_synced
+
+    sys.exit(run_synced(lambda: run_pipeline(cli_args), write=True))

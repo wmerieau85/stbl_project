@@ -382,7 +382,8 @@ DEFAULT_LEAGUE = {
         "draft_spreadsheet_id": "", "config_tab": "settings",
         "reco_tab": "draft_reco", "projections_spreadsheet_id": "", "projections_tab": "bdd",
         "yahoo_tab": "yahoo", "detail_tab": "bdd_detail",
-        "projections_start_col": "C", "poll_seconds": 10, "write_picks_to_sheet": True, "season_reco_tab": "season_reco", "moves_reco_tab": "moves_reco",
+        "projections_start_col": "C", "poll_seconds": 10, "write_picks_to_sheet": True, "season_reco_tab": "season_reco", "moves_reco_tab": "moves_reco", "runs_tab": "runs",
+        "drive_folder_id": "", "drive_sync": False,
         "alias_tab": "players",
     },
     # tirage au sort de l'ordre de draft (onglet board)

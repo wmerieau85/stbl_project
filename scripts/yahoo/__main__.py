@@ -285,4 +285,6 @@ def main(argv=None):
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    from scripts.cloud import run_synced
+
+    sys.exit(run_synced(main, write=True))

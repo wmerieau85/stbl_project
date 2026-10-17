@@ -204,4 +204,6 @@ if __name__ == "__main__":
 
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
     active = load_settings()
-    link_players(season=active["active_season"], stage=active["active_stage"])
+    from scripts.cloud import run_synced
+
+    run_synced(lambda: link_players(season=active["active_season"], stage=active["active_stage"]), write=True)
