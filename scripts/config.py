@@ -370,7 +370,7 @@ DEFAULT_LEAGUE = {
     "season": {"st_days": 15, "lt_phase": "lt", "st_phase": "st", "simulations": 2000,
                "roster_source": "yahoo", "opponent_model": "usage", "opponent_default_rate": 0.95,
                "opponent_ramp_days": 42},
-    "moves": {"value_tolerance": 0.10, "max_results": 20, "fa_results": 6, "fa_shortlist": 15,
+    "moves": {"value_tolerance": 0.10, "max_results": 20, "min_results": 10, "fa_results": 6, "fa_shortlist": 15,
               "players": [], "compare": {}},
     "games": {"per_slot": 82, "lineup": "daily"},
     "draft": {

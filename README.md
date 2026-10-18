@@ -385,11 +385,12 @@ Réglages dans l'onglet settings :
 | `Moves | Compare` | `manager` | nom du manager |
 | `Moves | Compare` | `free agent` | (vide) : je lâche les joueurs listés, qui doivent être les miens |
 | `Optim | Moves` | `Value tolerance` | écart de valeur accepté, 10 % par défaut |
-| `Optim | Moves` | `Max results` / `Free agent results` / `Free agent shortlist` | 20 / 6 / 15 |
+| `Optim | Moves` | `Max results` / `Min results` / `Free agent results` / `Free agent shortlist` | 20 / 10 / 6 / 15 |
 
 - Échange : autant de joueurs reçus que cédés. Toutes les combinaisons de l'autre effectif sont
-  testées ; celles dont la valeur s'écarte de plus de la tolérance sont écartées, les autres classées
-  par gain de points roto attendus pour moi, avec le gain de l'autre manager (un échange qui le fait
+  testées ; à valeur équivalente (tolérance), les 20 meilleurs gains pour moi sont gardés, complétés
+  jusqu'à 10 par les combinaisons les plus proches en valeur (« hors tolérance »). Affichage du plus
+  équitable au moins équitable, avec le gain de l'autre manager (un échange qui le fait
   perdre a peu de chances d'être accepté), le rang projeté, les chances de titre / podium et l'effet
   par catégorie.
 - Joueurs libres (joueurs des projections absents de tous les effectifs Yahoo, statut waivers non
@@ -398,8 +399,10 @@ Réglages dans l'onglet settings :
 - Valeur d'un joueur : valeur par match au-dessus du niveau de remplacement (dernier joueur d'effectif
   de la ligue, 180e pour 15 x 12 ; phase st sur l'horizon court, lt ensuite) x matchs attendus d'ici la
   fin de saison. Les stats réelles restent à l'équipe qui les a faites ; mon lineup est réoptimisé,
-  l'autre équipe garde son taux d'alignement. « Matchs joués (reçus) » : matchs que mon lineup donnerait
-  aux joueurs reçus (0 = il ne jouerait pas, faute de place sous les plafonds de matchs par poste).
+  l'autre équipe garde son taux d'alignement. « Matchs alignés (reçus) » : pour chaque joueur reçu,
+  matchs que mon lineup optimisé lui donnerait sur ses matchs attendus (« Cameron Johnson 71/71,
+  Moussa Diabate 0/73 » : le second ne ferait que compléter l'échange) ; « Effet sur mes autres
+  joueurs » : matchs alignés en plus ou en moins pour mes joueurs gardés.
 
 ## Menu du classeur (lancement sans le PC)
 

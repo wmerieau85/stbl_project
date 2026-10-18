@@ -54,6 +54,9 @@ class Move:
     cat_delta: np.ndarray
     teams: list = field(repr=False, default_factory=list)
     recv_games: float = 0.0          # matchs que je ferais jouer aux joueurs reçus (lineup optimisé)
+    recv_detail: list = field(default_factory=list)      # [(nom, matchs alignés, matchs attendus)]
+    lineup_changes: list = field(default_factory=list)   # [(nom, écart de matchs alignés)] mes autres joueurs
+    out_of_tolerance: bool = False
     p_first: float | None = None
     p_podium: float | None = None
 
@@ -168,11 +171,18 @@ class Simulator:
         total = points.sum(axis=1)
         rank = 1 + int(sum(1 for i, v in enumerate(total) if i != me and v > total[me] + 1e-9))
         partner_gain = float(total[partner] - self.base_total[partner]) if partner is not None else None
-        played = sum(x.games_used for x in teams[me].players if id(x) in {id(r) for r in recv}
-                     or x.name in {r.name for r in recv})
+        received = {r.name for r in recv}
+        given = {g.name for g in give}
+        mine = teams[me].players
+        detail = [(x.display or x.name, x.games_used, x.games_expected) for x in mine if x.name in received]
+        before = {x.name: x.games_used for x in self.teams[me].players}
+        changes = sorted(((x.display or x.name, x.games_used - before[x.name]) for x in mine
+                          if x.name in before and x.name not in received and x.name not in given
+                          and abs(x.games_used - before[x.name]) >= 1.0), key=lambda c: c[1])
         return Move(give, recv, sum(self.value(p) for p in give), sum(self.value(p) for p in recv),
                     float(total[me]), float(total[me] - self.base_total[me]), partner_gain, rank,
-                    points[me] - self.base_points[me], teams, recv_games=played)
+                    points[me] - self.base_points[me], teams, recv_games=sum(d[1] for d in detail),
+                    recv_detail=detail, lineup_changes=changes)
 
     def rank_of(self, me):
         total = self.base_total
@@ -252,24 +262,34 @@ def _trades(sim, me, p, conf):
     _check_count(len(pool_team.players), k, f"l'effectif de {pool_team.manager}")
     tolerance = float(conf.get("value_tolerance", 0.10))
     limit = int(conf.get("max_results", 20))
-    tested, kept, moves = 0, 0, []
+    minimum = min(int(conf.get("min_results", 10)), limit)
+    candidates = []
     for combo in itertools.combinations(pool_team.players, k):
-        tested += 1
         give, recv = (fixed, list(combo)) if p["mine"] else (list(combo), fixed)
         vg, vr = sum(sim.value(x) for x in give), sum(sim.value(x) for x in recv)
-        if abs(_value_diff(vg, vr)) > tolerance + 1e-9:
-            continue
-        kept += 1
+        candidates.append((abs(_value_diff(vg, vr)), give, recv))
+    candidates.sort(key=lambda c: c[0])
+
+    def evaluate(give, recv):
         gone_me, gone_partner = {id(x) for x in give}, {id(x) for x in recv}
         my_entries = [_entry(x) for x in sim.teams[me].players if id(x) not in gone_me] + [_entry(x) for x in recv]
         partner_entries = ([_entry(x) for x in sim.teams[partner].players if id(x) not in gone_partner]
                            + [_entry(x) for x in give])
         teams, points = sim.evaluate(me, my_entries, partner, partner_entries)
-        moves.append(sim.move(me, give, recv, teams, points, partner))
-    moves.sort(key=lambda m: (-m.my_gain, abs(m.value_diff)))
-    log.info("[Moves] %d combinaisons, %d dans la tolérance de ±%.0f %%.", tested, kept, 100 * tolerance)
+        return sim.move(me, give, recv, teams, points, partner)
+
+    inside = [c for c in candidates if c[0] <= tolerance + 1e-9]
+    # à valeur équivalente : les meilleurs gains pour moi ; trop peu : les plus proches en valeur, hors tolérance
+    moves = sorted((evaluate(g, r) for _, g, r in inside), key=lambda m: -m.my_gain)[:limit]
+    for _, give, recv in candidates[len(inside):len(inside) + max(0, minimum - len(moves))]:
+        move = evaluate(give, recv)
+        move.out_of_tolerance = True
+        moves.append(move)
+    moves.sort(key=lambda m: (abs(m.value_diff), -m.my_gain))   # du plus équitable au moins équitable
+    log.info("[Moves] %d combinaisons, %d dans la tolérance de ±%.0f %%, %d affichées.", len(candidates),
+             len(inside), 100 * tolerance, len(moves))
     return {"mode": "manager", "partner": partner, "partner_team": sim.teams[partner], "fixed": fixed,
-            "tested": tested, "kept": kept, "tolerance": tolerance, "moves": moves[:limit]}
+            "tested": len(candidates), "kept": len(inside), "tolerance": tolerance, "moves": moves}
 
 
 def _free_agents(sim, me, p, conf):
@@ -317,6 +337,15 @@ def _names(players):
     return ", ".join(x.display or x.name for x in players)
 
 
+def _games(detail):
+    """« Austin Reaves 72/74, Yaxel Lendeborg 0/70 » : matchs alignés / matchs attendus d'ici la fin."""
+    return ", ".join(f"{name} {used:.0f}/{expected:.0f}" for name, used, expected in detail)
+
+
+def _changes(changes):
+    return ", ".join(f"{name} {delta:+.0f}" for name, delta in changes) or "aucun"
+
+
 def _pct(value):
     return "" if value is None else round(100 * value, 1)
 
@@ -334,7 +363,8 @@ def rows(out):
         lines.append(["Mouvement", f"échange avec {partner.manager} ({partner.team_name})"])
         lines.append(["Joueurs fixés", ("Je cède : " if p["mine"] else "Je reçois : ") + _names(out["fixed"])])
         lines.append(["Tolérance de valeur", f"±{100 * out['tolerance']:.0f} %"])
-        lines.append(["Combinaisons", f"{out['tested']} testées, {out['kept']} à valeur équivalente"])
+        lines.append(["Combinaisons", f"{out['tested']} testées, {out['kept']} à valeur équivalente, "
+                                      f"{len(out['moves'])} affichées"])
     else:
         lines.append(["Mouvement", "joueurs libres (statut waivers non vérifié)"])
         lines.append(["Joueurs lâchés", _names(out["fixed"])])
@@ -345,7 +375,10 @@ def rows(out):
     lines.append(["Sans mouvement", base])
     lines.append([])
     header = ["#", "Je cède" if trade else "Je lâche", "Je reçois" if trade else "J'ajoute",
-              "Valeur cédée", "Valeur reçue", "Écart valeur (%)", "Matchs joués (reçus)", "Gain roto (moi)"]
+              "Valeur cédée", "Valeur reçue", "Écart valeur (%)"]
+    if trade:
+        header.append("Tolérance")
+    header += ["Matchs alignés (reçus)", "Effet sur mes autres joueurs", "Gain roto (moi)"]
     if trade:
         header.append(f"Gain roto ({partner.manager})")
     header += ["Points projetés", "Rang projeté", "Titre (%)", "Podium (%)"] + [f"{l} (pts)" for l in labels]
@@ -354,8 +387,10 @@ def rows(out):
         lines.append(["", "aucune combinaison à valeur équivalente : élargissez la tolérance "
                           "(Optim | Moves | Value tolerance)" if trade else "aucun joueur libre"])
     for i, m in enumerate(out["moves"], 1):
-        row = [i, _names(m.give), _names(m.recv), round(m.value_give, 1), round(m.value_recv, 1),
-               _pct(m.value_diff), round(m.recv_games, 1), round(m.my_gain, 2)]
+        row = [i, _names(m.give), _names(m.recv), round(m.value_give, 1), round(m.value_recv, 1), _pct(m.value_diff)]
+        if trade:
+            row.append("hors tolérance" if m.out_of_tolerance else "oui")
+        row += [_games(m.recv_detail), _changes(m.lineup_changes), round(m.my_gain, 2)]
         if trade:
             row.append(round(m.partner_gain, 2))
         row += [round(m.my_points, 1), m.rank, _pct(m.p_first), _pct(m.p_podium)]
@@ -364,7 +399,10 @@ def rows(out):
     lines.append([])
     lines.append(["Valeur = valeur par match au-dessus du niveau de remplacement (dernier joueur d'effectif "
                   "de la ligue, st puis lt) x matchs attendus d'ici la fin de saison, jamais négative. "
-                  "Matchs joués = matchs que mon lineup optimisé donnerait aux joueurs reçus. "
+                  "Matchs alignés (reçus) = matchs que mon lineup optimisé donnerait à chaque joueur reçu, sur ses "
+                  "matchs attendus d'ici la fin de saison (un joueur peu utile reste sur le banc) ; effet sur mes "
+                  "autres joueurs = matchs alignés en plus ou en moins. Échanges triés du plus équitable au moins "
+                  "équitable ; « hors tolérance » = ajouté pour atteindre le nombre minimum de propositions. "
                   "Gain roto = points roto attendus en fin de saison, après réoptimisation de mon lineup ; "
                   "colonnes catégories = points gagnés ou perdus par catégorie."])
     return lines
@@ -379,6 +417,8 @@ def console(out):
         text.append(f"{out['tested']} combinaisons, {out['kept']} à ±{100 * out['tolerance']:.0f} % de valeur")
     for i, m in enumerate(out["moves"][:10], 1):
         partner = f", {out['partner_team'].manager} {m.partner_gain:+.2f}" if m.partner_gain is not None else ""
+        flag = " [hors tolérance]" if m.out_of_tolerance else ""
         text.append(f"{i:>2}. {_names(m.give)} -> {_names(m.recv)} : {m.my_gain:+.2f} pts{partner} "
-                    f"(valeur {m.value_give:.1f} -> {m.value_recv:.1f}), rang {m.rank}")
+                    f"(valeur {m.value_give:.1f} -> {m.value_recv:.1f}), rang {m.rank}{flag}\n"
+                    f"    matchs alignés : {_games(m.recv_detail)} ; mes autres joueurs : {_changes(m.lineup_changes)}")
     return "\n".join(text)
