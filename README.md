@@ -400,9 +400,13 @@ Réglages dans l'onglet settings :
   de la ligue, 180e pour 15 x 12 ; phase st sur l'horizon court, lt ensuite) x matchs attendus d'ici la
   fin de saison. Les stats réelles restent à l'équipe qui les a faites ; mon lineup est réoptimisé,
   l'autre équipe garde son taux d'alignement. « Matchs alignés (reçus) » : pour chaque joueur reçu,
-  matchs que mon lineup optimisé lui donnerait sur ses matchs attendus (« Cameron Johnson 71/71,
-  Moussa Diabate 0/73 » : le second ne ferait que compléter l'échange) ; « Effet sur mes autres
-  joueurs » : matchs alignés en plus ou en moins pour mes joueurs gardés.
+  matchs que mon lineup optimisé lui donnerait sur ses matchs attendus, avec la répartition horizon
+  court / reste de saison (« Cameron Johnson 71/71 (st 0 + lt 71), Moussa Diabate 0/73 (st 0 + lt 0) » :
+  le second ne ferait que compléter l'échange ; st reste à 0 si `Optim | Season | Short-term horizon
+  (days)` vaut 0) ; « Effet sur mes autres joueurs » : matchs alignés en plus ou en moins pour mes
+  joueurs gardés. Colonnes « (pts) » : points roto gagnés ou perdus par catégorie ; colonnes
+  « (stats) » : écart de mes stats de fin de saison (FG% / FT% en points de pourcentage, les autres
+  en unités : +20,1 REB, -137 PTS).
 
 ## Menu du classeur (lancement sans le PC)
 
