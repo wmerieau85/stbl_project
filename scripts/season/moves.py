@@ -54,7 +54,8 @@ class Move:
     cat_delta: np.ndarray
     teams: list = field(repr=False, default_factory=list)
     recv_games: float = 0.0          # matchs que je ferais jouer aux joueurs reçus (lineup optimisé)
-    recv_detail: list = field(default_factory=list)      # [(nom, matchs alignés, matchs attendus)]
+    recv_detail: list = field(default_factory=list)      # [(nom, alignés, attendus, alignés st, alignés lt)]
+    stat_delta: np.ndarray = None    # écart de mes stats finales par catégorie (FG% en fraction, REB en unités...)
     lineup_changes: list = field(default_factory=list)   # [(nom, écart de matchs alignés)] mes autres joueurs
     out_of_tolerance: bool = False
     p_first: float | None = None
@@ -174,7 +175,8 @@ class Simulator:
         received = {r.name for r in recv}
         given = {g.name for g in give}
         mine = teams[me].players
-        detail = [(x.display or x.name, x.games_used, x.games_expected) for x in mine if x.name in received]
+        detail = [(x.display or x.name, x.games_used, x.games_expected, x.games_st_used, x.games_lt_used)
+                  for x in mine if x.name in received]
         before = {x.name: x.games_used for x in self.teams[me].players}
         changes = sorted(((x.display or x.name, x.games_used - before[x.name]) for x in mine
                           if x.name in before and x.name not in received and x.name not in given
@@ -182,7 +184,8 @@ class Simulator:
         return Move(give, recv, sum(self.value(p) for p in give), sum(self.value(p) for p in recv),
                     float(total[me]), float(total[me] - self.base_total[me]), partner_gain, rank,
                     points[me] - self.base_points[me], teams, recv_games=sum(d[1] for d in detail),
-                    recv_detail=detail, lineup_changes=changes)
+                    recv_detail=detail, lineup_changes=changes,
+                    stat_delta=category_values(teams[me].final, self.cats) - self.base_values[me])
 
     def rank_of(self, me):
         total = self.base_total
@@ -338,8 +341,18 @@ def _names(players):
 
 
 def _games(detail):
-    """« Austin Reaves 72/74, Yaxel Lendeborg 0/70 » : matchs alignés / matchs attendus d'ici la fin."""
-    return ", ".join(f"{name} {used:.0f}/{expected:.0f}" for name, used, expected in detail)
+    """« Austin Reaves 72/74 (st 10 + lt 62), Yaxel Lendeborg 0/70 (st 0 + lt 0) » : matchs alignés / attendus
+    d'ici la fin, dont horizon court (st) et reste de la saison (lt)."""
+    return ", ".join(f"{name} {used:.0f}/{expected:.0f} (st {st:.0f} + lt {lt:.0f})"
+                     for name, used, expected, st, lt in detail)
+
+
+PCT_CATS = {"fgp", "ftp"}
+
+
+def _stat(cat, value):
+    """Écart de stat affiché : FG% / FT% en points de pourcentage (+0,35), le reste en unités (+120,5)."""
+    return round(100 * float(value), 2) if cat in PCT_CATS else round(float(value), 1)
 
 
 def _changes(changes):
@@ -382,6 +395,7 @@ def rows(out):
     if trade:
         header.append(f"Gain roto ({partner.manager})")
     header += ["Points projetés", "Rang projeté", "Titre (%)", "Podium (%)"] + [f"{l} (pts)" for l in labels]
+    header += [f"{l} (stats)" for l in labels]
     lines.append(header)
     if not out["moves"]:
         lines.append(["", "aucune combinaison à valeur équivalente : élargissez la tolérance "
@@ -395,6 +409,7 @@ def rows(out):
             row.append(round(m.partner_gain, 2))
         row += [round(m.my_points, 1), m.rank, _pct(m.p_first), _pct(m.p_podium)]
         row += [round(float(d), 2) for d in m.cat_delta]
+        row += [_stat(c, d) for c, d in zip(cats, m.stat_delta)] if m.stat_delta is not None else []
         lines.append(row)
     lines.append([])
     lines.append(["Valeur = valeur par match au-dessus du niveau de remplacement (dernier joueur d'effectif "
@@ -404,7 +419,8 @@ def rows(out):
                   "autres joueurs = matchs alignés en plus ou en moins. Échanges triés du plus équitable au moins "
                   "équitable ; « hors tolérance » = ajouté pour atteindre le nombre minimum de propositions. "
                   "Gain roto = points roto attendus en fin de saison, après réoptimisation de mon lineup ; "
-                  "colonnes catégories = points gagnés ou perdus par catégorie."])
+                  "colonnes (pts) = points roto gagnés ou perdus par catégorie ; colonnes (stats) = écart de mes stats de fin de "
+                  "saison (FG% / FT% en points de pourcentage, ex. 0,35 = +0,35 %, les autres en unités sur la saison)."])
     return lines
 
 

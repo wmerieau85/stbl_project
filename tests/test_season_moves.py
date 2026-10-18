@@ -90,9 +90,15 @@ def test_received_players_only_get_the_games_my_lineup_gives_them():
     league = _league(["B"], {"type": "manager", "manager": "Rival"})
     out = moves.simulate(_result(league, cap=15), league)
     move = next(m for m in out["moves"] if _names(m.recv) == ["C"])
-    assert move.recv_detail == [("C", 10.0, 10.0)] and move.lineup_changes == [("A", -5.0)]
-    row = next(r for r in moves.rows(out) if r and r[0] == 1 + out["moves"].index(move))
-    assert "C 10/10" in row and "A -5" in row
+    # matchs du 1er au 10 novembre, horizon court de 15 jours : tous en st
+    assert move.recv_detail == [("C", 10.0, 10.0, 10.0, 0.0)] and move.lineup_changes == [("A", -5.0)]
+    # points : C 9 x 10 + A 5 x 5 au lieu de A 5 x 10 + B 2 x 5 -> +55
+    assert move.stat_delta.tolist() == pytest.approx([55.0])
+    rows = moves.rows(out)
+    header = next(r for r in rows if r and r[0] == "#")
+    row = next(r for r in rows if r and r[0] == 1 + out["moves"].index(move))
+    assert "C 10/10 (st 10 + lt 0)" in row and "A -5" in row
+    assert row[header.index("PTS (stats)")] == 55.0
 
 
 def test_free_agents_best_replacement_first():
