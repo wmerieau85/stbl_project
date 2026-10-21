@@ -161,6 +161,7 @@
       "season_reco_tab": "season_reco",
       "moves_reco_tab": "moves_reco",
       "runs_tab": "runs",
+      "accuracy_tab": "sources_accuracy",
       "drive_folder_id": "",
       "drive_sync": false,
       "alias_tab": "players",
@@ -190,7 +191,8 @@
       "projections_days": 7,
       "stats_days": 1,
       "retention_seasons": 3,
-      "shrink": 0.5
+      "shrink": 0.5,
+      "players": 200
     },
     "lottery": {
       "balls_range": "board!N8:O22",

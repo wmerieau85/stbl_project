@@ -428,6 +428,7 @@ sont acceptés (`python -m scripts.run --list` les affiche avec leurs commandes)
 | Saison > Projections / Moves / Tout mettre à jour | `season_update` / `season_moves` / `season_all` | `scripts.season update` / `moves` / rosters + stats + update + moves |
 | Maintenance > Contrôle settings | `settings_check` | `scripts.config_sheet check` |
 | Maintenance > Photo des sources (et chaque matin) | `history_snapshot` | `scripts.history daily` |
+| Maintenance > Pertinence des sources | `sources_accuracy` | `scripts.accuracy` |
 
 Chaque lancement ajoute une ligne à l'onglet `runs` : demandé, en cours, puis OK / erreur, durée, lien
 vers le log GitHub, dernières lignes en cas d'erreur (aussi : STBL > Maintenance > Dernier lancement).
@@ -469,6 +470,28 @@ projections ros, fenêtres l30 / l15 / l07 et projections finales lt / st 7 jour
 chaque changement. Sa date est celle de l'import ou du calcul des données. Les stats sea d'une autre
 saison (plus de matchs joués que de jours écoulés depuis le 1er octobre) sont ignorées.
 `Retention (seasons)` : saisons gardées (3). `python -m scripts.history status` : photos disponibles.
+
+## Pertinence des sources (onglet sources_accuracy)
+
+`python -m scripts.accuracy` (ou STBL > Maintenance > Pertinence des sources ; `--no-sheet` : console +
+CSV) compare chaque code des grilles draft, lt et st aux stats réelles photographiées, sur les trois
+niveaux de la pondération, et propose des poids. Rien n'est réécrit dans les grilles.
+
+- Référence : stats réelles de la saison à date (sea) de la source la plus photographiée.
+- Périodes : draft = projections de pré-saison contre la saison jouée ; lt = chaque photo ros (une par
+  semaine) contre la suite de la saison ; st = chaque photo des fenêtres l30 / l15 / l07 / sea contre les
+  N jours suivants (horizon court terme, 15 jours si le réglage vaut 0). Provisoire tant que la saison
+  n'est pas finie ; poids proposés indicatifs sous 25 % des matchs de la période joués.
+- Mesures (comme le moteur) : GP = part des matchs de l'équipe jouée, écart en matchs ; MIN = minutes
+  par match (3 matchs au moins) ; STATS = production par minute (60 minutes au moins) et FG% / FT%
+  pondérés par les tentatives, chaque écart divisé par l'écart-type réel de la catégorie, moyenne des
+  catégories (même poids pour toutes, détail par catégorie affiché).
+- Mêmes joueurs pour tous : les `Players evaluated` (200) premiers en minutes projetées ou réelles,
+  couverts par tous les codes qui en couvrent au moins 80 % ; un code moins couvert est mesuré seul
+  (« couverture partielle ») et garde son poids.
+- Poids optimal : combinaison de codes (positifs, total 100 %) à la plus petite erreur quadratique ;
+  poids proposé = `Shrink to current weights` (50 %) x actuel + le reste x optimal. Lignes « Mélange
+  actuel », « Mélange proposé » et « Projection finale (photo) » : erreur de chaque mélange.
 
 ## Limites connues
 

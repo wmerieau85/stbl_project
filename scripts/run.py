@@ -56,6 +56,7 @@ COMMANDS = {
                                                           _m("scripts.season", "moves"))),
     "history_snapshot": Command("Maintenance > Photo des sources", (_m("scripts.history", "daily"),),
                                 imports=True, history=True),
+    "sources_accuracy": Command("Maintenance > Pertinence des sources", (_m("scripts.accuracy"),), history=True),
     "settings_check": Command("Maintenance > Contrôle settings", (_m("scripts.config_sheet", "check"),), db=False),
 }
 
