@@ -375,7 +375,7 @@ DEFAULT_LEAGUE = {
                "opponent_ramp_days": 42},
     "moves": {"value_tolerance": 0.10, "max_results": 20, "min_results": 10, "fa_results": 6, "fa_shortlist": 15,
               "players": [], "compare": {}},
-    "history": {"projections_days": 7, "stats_days": 1, "retention_seasons": 3, "shrink": 0.5},
+    "history": {"projections_days": 7, "stats_days": 1, "retention_seasons": 3, "shrink": 0.5, "players": 200},
     "games": {"per_slot": 82, "lineup": "daily"},
     "draft": {
         "type": "snake", "rounds": 12, "my_team": "", "order": [], "keepers": {}, "keeper_rounds": [], "picks_source": "sheet",
@@ -387,6 +387,7 @@ DEFAULT_LEAGUE = {
         "reco_tab": "draft_reco", "projections_spreadsheet_id": "", "projections_tab": "bdd",
         "yahoo_tab": "yahoo", "detail_tab": "bdd_detail",
         "projections_start_col": "C", "poll_seconds": 10, "write_picks_to_sheet": True, "season_reco_tab": "season_reco", "moves_reco_tab": "moves_reco", "runs_tab": "runs",
+        "accuracy_tab": "sources_accuracy",
         "drive_folder_id": "", "drive_sync": False,
         "alias_tab": "players",
     },

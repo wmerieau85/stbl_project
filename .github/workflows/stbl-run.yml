@@ -27,6 +27,7 @@ on:
           - season_moves
           - season_all
           - history_snapshot
+          - sources_accuracy
           - settings_check
       key:
         description: Clé de la ligne du journal (onglet runs)
