@@ -7,7 +7,10 @@ import os
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CONFIG_DIR = os.path.join(BASE_DIR, "config")
-DB_PATH = os.path.join(BASE_DIR, "database.sqlite")
+# STBL_DB_PATH : base de travail temporaire (photos des sources en ligne sans toucher à la base principale)
+DB_PATH = os.environ.get("STBL_DB_PATH") or os.path.join(BASE_DIR, "database.sqlite")
+# photos datées des projections et des stats réelles (suivi de pertinence des sources)
+HISTORY_PATH = os.environ.get("STBL_HISTORY_PATH") or os.path.join(BASE_DIR, "history.sqlite")
 # Configuration : l'onglet « config » du classeur fait foi. config/config.json en est la copie locale
 # (écrite par config_sheet.pull, ignorée par git) ; config/defaults.json sert tant qu'elle n'existe pas.
 # config/bootstrap.json : ce qu'il faut connaître avant de lire le classeur (ID, onglet, identifiants).
@@ -372,6 +375,7 @@ DEFAULT_LEAGUE = {
                "opponent_ramp_days": 42},
     "moves": {"value_tolerance": 0.10, "max_results": 20, "min_results": 10, "fa_results": 6, "fa_shortlist": 15,
               "players": [], "compare": {}},
+    "history": {"projections_days": 7, "stats_days": 1, "retention_seasons": 3, "shrink": 0.5},
     "games": {"per_slot": 82, "lineup": "daily"},
     "draft": {
         "type": "snake", "rounds": 12, "my_team": "", "order": [], "keepers": {}, "keeper_rounds": [], "picks_source": "sheet",

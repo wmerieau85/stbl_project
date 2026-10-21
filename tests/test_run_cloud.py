@@ -190,3 +190,14 @@ def test_journal_row_is_updated_by_key():
     journal.update("OK", run.now(), run.now())
     assert book.sheet.cells[2][3] == "OK" and book.sheet.cells[2][0] == "20261017-k"
     assert json.dumps(book.sheet.cells[2])
+
+
+def test_history_snapshot_syncs_history_file(monkeypatch):
+    calls = []
+    _patch_cloud(monkeypatch, calls)
+    monkeypatch.setattr(cloud, "pull_history", lambda d: calls.append("pull_history") or "h0")
+    monkeypatch.setattr(cloud, "push_history", lambda d, before: calls.append(("push_history", before)) or True)
+    ok = lambda a, e: (calls.append(a), (0, []))[1]
+    assert run.execute("history_snapshot", "k", None, LEAGUE, step_runner=ok, drive_factory=FakeDrive) == 0
+    assert calls == ["pull_db", "pull_imports", "pull_history", ("-m", "scripts.history", "daily"),
+                     ("push_history", "h0")]

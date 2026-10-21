@@ -1,9 +1,12 @@
 # Lancements depuis le menu « STBL » du classeur (Apps Script -> API GitHub workflow_dispatch).
 # Les codes de commande sont définis dans scripts/run.py ; seuls ceux de la liste sont acceptés.
+# Chaque matin (8 h UTC, 9 h ou 10 h à Paris) : photo des sources (history_snapshot).
 name: stbl-run
-run-name: ${{ inputs.command }} ${{ inputs.key }}
+run-name: ${{ inputs.command || 'history_snapshot' }} ${{ inputs.key }}
 
 on:
+  schedule:
+    - cron: "0 8 * * *"
   workflow_dispatch:
     inputs:
       command:
@@ -23,6 +26,7 @@ on:
           - season_update
           - season_moves
           - season_all
+          - history_snapshot
           - settings_check
       key:
         description: Clé de la ligne du journal (onglet runs)
@@ -65,9 +69,9 @@ jobs:
           printf '%s' "$GOOGLE_SERVICE_ACCOUNT" > credentials/service_account.json
           if [ -n "$FANTASYNERDS_KEY" ]; then printf '%s' "$FANTASYNERDS_KEY" > credentials/fantasynerds_key.txt; fi
 
-      - name: ${{ inputs.command }}
+      - name: ${{ inputs.command || 'history_snapshot' }}
         env:
           TZ: Europe/Paris
-          STBL_COMMAND: ${{ inputs.command }}
+          STBL_COMMAND: ${{ inputs.command || 'history_snapshot' }}
           STBL_KEY: ${{ inputs.key }}
         run: python -m scripts.run "$STBL_COMMAND" --key "$STBL_KEY"

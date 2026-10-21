@@ -138,6 +138,14 @@ PARAMS = [
      "joueurs libres : options affichées"),
     ("Optim | Moves", "Free agent shortlist", "league", "moves.fa_shortlist", "int",
      "joueurs libres : meilleurs pris un par un, combinés ensuite quand plusieurs joueurs sont lâchés"),
+    ("Optim | History", "Projections interval (days)", "league", "history.projections_days", "int",
+     "photos des projections ros, des fenêtres l30 / l15 / l07 et des projections finales lt / st : une tous les N jours au plus"),
+    ("Optim | History", "Stats interval (days)", "league", "history.stats_days", "int",
+     "photos des stats réelles de la saison à date (sea, résultat de référence) : une tous les N jours au plus"),
+    ("Optim | History", "Retention (seasons)", "league", "history.retention_seasons", "int",
+     "saisons gardées dans history.sqlite (les plus anciennes sont effacées)"),
+    ("Optim | History", "Shrink to current weights", "league", "history.shrink", "float",
+     "pondérations proposées : part de rapprochement vers les poids actuels (50 % = à mi-chemin)"),
     ("Pipeline | Import", "Maximum time per page (s)", "settings", "http.timeout", "int", ""),
     ("Pipeline | Import", "Attempts", "settings", "http.retries", "int", "nouvelles tentatives en cas d'échec"),
     ("Pipeline | Import", "Pause between pages (s)", "settings", "http.pause_seconds", "float", ""),
@@ -310,7 +318,7 @@ def build_rows(cfg=None, bootstrap=None):
              ("Settings | Phases", None), ("Settings | Draft", None), ("Sheets | Settings", None),
              ("Sheets | Tab", None), ("Sheets | Draft", None), ("Sheets | Projections", None),
              ("Sheets | Season", None), ("Optim | Draft", None), ("Optim | Season", None),
-             ("Optim | Moves", None), ("Pipeline | Import", None), ("Pipeline | Export", None), ("Draft Lottery | Managers", None),
+             ("Optim | Moves", None), ("Optim | History", None), ("Pipeline | Import", None), ("Pipeline | Export", None), ("Draft Lottery | Managers", None),
              ("Draft Lottery | Active", None), ("Draft Lottery | Number Balls", None),
              ("Draft Lottery | Lottery Number", None), ("Draft Lottery | Balls", None)]
     for section, special in order:

@@ -423,6 +423,7 @@ sont acceptés (`python -m scripts.run --list` les affiche avec leurs commandes)
 | Yahoo > MàJ rosters / Standings + Team Log | `yahoo_rosters` / `yahoo_stats` | `scripts.yahoo rosters` / `stats` |
 | Saison > Projections / Moves / Tout mettre à jour | `season_update` / `season_moves` / `season_all` | `scripts.season update` / `moves` / rosters + stats + update + moves |
 | Maintenance > Contrôle settings | `settings_check` | `scripts.config_sheet check` |
+| Maintenance > Photo des sources (et chaque matin) | `history_snapshot` | `scripts.history daily` |
 
 Chaque lancement ajoute une ligne à l'onglet `runs` : demandé, en cours, puis OK / erreur, durée, lien
 vers le log GitHub, dernières lignes en cas d'erreur (aussi : STBL > Maintenance > Dernier lancement).
@@ -447,6 +448,23 @@ Mise en place (une fois) :
 4. Classeur > Extensions > Apps Script : coller `apps_script/stbl_menu.gs`, enregistrer, recharger le
    classeur, autoriser le script, puis STBL > Maintenance > Configurer le jeton GitHub.
 5. Tester STBL > Maintenance > Contrôle settings, puis Saison > Projections ; ensuite `Drive sync = oui`.
+
+## Photos des sources (history.sqlite)
+
+Pour mesurer en fin de saison (ou à date) la pertinence des sources sur GP, MIN et stats, les projections
+et les stats réelles sont photographiées dans `history.sqlite` (dossier Drive `stbl_data`, à côté de la
+base). `python -m scripts.history daily`, lancé chaque matin par GitHub (8 h UTC) ou par STBL >
+Maintenance > Photo des sources :
+1. importe les sources en ligne (étape ros et stats par période, CSV de Drive compris) dans une copie
+   temporaire de la base : la base principale, bdd et season_reco ne changent pas ;
+2. photographie cette copie, puis la base principale (imports et projections finales draft / lt / st).
+
+Une photo n'est gardée que si son contenu a changé, et au plus une tous les N jours
+(`Optim | History`) : stats réelles de la saison à date (sea, résultat de référence) 1 jour ;
+projections ros, fenêtres l30 / l15 / l07 et projections finales lt / st 7 jours ; projections draft à
+chaque changement. Sa date est celle de l'import ou du calcul des données. Les stats sea d'une autre
+saison (plus de matchs joués que de jours écoulés depuis le 1er octobre) sont ignorées.
+`Retention (seasons)` : saisons gardées (3). `python -m scripts.history status` : photos disponibles.
 
 ## Limites connues
 

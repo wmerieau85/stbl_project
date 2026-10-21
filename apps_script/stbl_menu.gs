@@ -29,6 +29,7 @@ var LABELS = {
   season_update: 'Saison > Projections',
   season_moves: 'Saison > Moves',
   season_all: 'Saison > Tout mettre à jour',
+  history_snapshot: 'Maintenance > Photo des sources',
   settings_check: 'Maintenance > Contrôle settings'
 };
 
@@ -55,6 +56,7 @@ function onOpen() {
       .addItem('Tout mettre à jour', 'run_season_all'))
     .addSubMenu(ui.createMenu('Maintenance')
       .addItem('Contrôle settings', 'run_settings_check')
+      .addItem('Photo des sources', 'run_history_snapshot')
       .addItem('Dernier lancement', 'lastRun')
       .addSeparator()
       .addItem('Configurer le jeton GitHub', 'configureToken'))
@@ -79,6 +81,7 @@ function run_yahoo_stats() { launch_('yahoo_stats'); }
 function run_season_update() { launch_('season_update'); }
 function run_season_moves() { launch_('season_moves'); }
 function run_season_all() { launch_('season_all'); }
+function run_history_snapshot() { launch_('history_snapshot'); }
 function run_settings_check() { launch_('settings_check'); }
 
 function token_() {
