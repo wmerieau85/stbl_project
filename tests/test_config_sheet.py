@@ -62,16 +62,16 @@ def test_old_sheet_gets_new_draft_sources_and_weights(cfg):
             (row[0] in ("Sources | Types", "Sources | Draft", "Sources | Active")
              and (row[1] in ("es", "rb") or row[2] in ("es", "rb")))
             or (row[0].startswith("Transco |") and row[1] in ("es", "rb"))
-            or (row[0].startswith("Grid Draft |") and row[1] in ("es26", "rb26"))
+            or (row[0].startswith("Grid Draft |") and row[1] in ("es", "rb"))
         )
     ]
     for row in old_rows:
         if row[0] == "Grid Draft | GP":
-            row[2] = {"fs26": "22,50%", "fp26": "22,50%", "cbs26": "10,00%",
-                      "le26": "22,50%", "dk26": "22,50%"}.get(row[1], row[2])
+            row[2] = {"fs": "22,50%", "fp": "22,50%", "cbs": "10,00%",
+                      "le": "22,50%", "dk": "22,50%"}.get(row[1], row[2])
         elif row[0] in ("Grid Draft | MIN", "Grid Draft | STATS"):
-            row[2] = {"fs26": "20,00%", "fp26": "20,00%", "cbs26": "20,00%",
-                      "le26": "20,00%", "dk26": "20,00%"}.get(row[1], row[2])
+            row[2] = {"fs": "20,00%", "fp": "20,00%", "cbs": "20,00%",
+                      "le": "20,00%", "dk": "20,00%"}.get(row[1], row[2])
 
     updated, _ = C.parse_rows(old_rows, config, boot)
     settings = updated["settings"]["sources"]
@@ -85,12 +85,12 @@ def test_old_sheet_gets_new_draft_sources_and_weights(cfg):
     rows_by_level = {row[0]: dict(zip(codes, row[1:])) for row in draft[2:]}
     from scripts.weighting.weights import parse_weight
 
-    assert parse_weight(rows_by_level["GP"]["es26"]) == pytest.approx(0.1667, abs=0.0001)
-    assert parse_weight(rows_by_level["GP"]["rb26"]) == 0
-    assert parse_weight(rows_by_level["GP"]["fs26"]) == pytest.approx(0.1875)
-    assert parse_weight(rows_by_level["STATS"]["fs26"]) == pytest.approx(0.16)
-    assert parse_weight(rows_by_level["STATS"]["es26"]) == pytest.approx(0.1)
-    assert parse_weight(rows_by_level["STATS"]["rb26"]) == pytest.approx(0.1)
+    assert parse_weight(rows_by_level["GP"]["es"]) == pytest.approx(0.1667, abs=0.0001)
+    assert parse_weight(rows_by_level["GP"]["rb"]) == 0
+    assert parse_weight(rows_by_level["GP"]["fs"]) == pytest.approx(0.1875)
+    assert parse_weight(rows_by_level["STATS"]["fs"]) == pytest.approx(0.16)
+    assert parse_weight(rows_by_level["STATS"]["es"]) == pytest.approx(0.1)
+    assert parse_weight(rows_by_level["STATS"]["rb"]) == pytest.approx(0.1)
 
 
 def test_wrong_manager_count_rejected(cfg):

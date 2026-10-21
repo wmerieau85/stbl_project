@@ -166,10 +166,10 @@ def test_ninecat_totals_and_rotoballer_per_game_stats_combine_correctly():
 def test_draft_grid_assigns_requested_new_source_weights():
     slots = {slot["code"]: slot for slot in load_grid("draft", "2026-27")["slots"]}
 
-    assert slots["rb26"]["weights"]["gp"] == 0
-    assert slots["rb26"]["weights"]["stats"]["pts"] == 0.1
-    assert slots["es26"]["weights"]["gp"] == pytest.approx(0.1667, abs=0.0001)
-    assert slots["es26"]["weights"]["stats"]["pts"] == 0.1
+    assert slots["rb"]["weights"]["gp"] == 0
+    assert slots["rb"]["weights"]["stats"]["pts"] == 0.1
+    assert slots["es"]["weights"]["gp"] == pytest.approx(0.1667, abs=0.0001)
+    assert slots["es"]["weights"]["stats"]["pts"] == 0.1
 
 
 def test_detail_per_game_source_without_games_uses_weighted_games():
@@ -181,3 +181,13 @@ def test_detail_per_game_source_without_games_uses_weighted_games():
     assert row["gp"] == 74.0 and round(row["pts"], 1) == 1953.6 and row["fgp"] == 0.57
     assert detail_tab._per_game(row, "pts") == 26.4
     assert "RotoBaller" in detail_tab._per_game_labels()
+
+
+def test_bare_codes_target_active_season_and_year_codes_warn(caplog):
+    from scripts.weighting.weights import parse_code
+
+    bare, dated = parse_code("fp", "draft", "2027-28"), parse_code("fp26", "draft", "2027-28")
+    assert (bare["season"], bare["stage"]) == ("2027-28", "draft")
+    assert (dated["season"], dated["stage"]) == ("2026-27", "draft")
+    assert "pas la saison active 2027-28" in caplog.text
+    assert parse_code("fp", "lt", "2027-28")["stage"] == "ros"
