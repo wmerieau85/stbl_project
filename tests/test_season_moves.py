@@ -153,7 +153,7 @@ AUTO_STATS = {"P1": (20, 2, 6), "P2": (18, 2, 5.5), "R1": (4, 6, 5), "R2": (4, 1
               "P3": (12, 2, 5), "M1": (12, 7, 6), "M2": (11, 7, 5.5), "M3": (12, 6, 5), "Z": (1, 1, 1)}
 
 
-def _auto_result(league):
+def _auto_result(league, cap=30):
     players = []
     for i, (name, (pts, reb, value)) in enumerate(AUTO_STATS.items()):
         per_game = np.zeros(len(STATS))
@@ -164,7 +164,7 @@ def _auto_result(league):
     teams = []
     for manager, names in AUTO_ROSTERS.items():
         roster = {"players": [{"player": n, "nba_team": "DEN", "positions": "C", "slot": "C"} for n in names],
-                  "games": {"C": {"remaining": 30}}}
+                  "games": {"C": {"remaining": cap}}}
         teams.append(project_team(manager, manager, roster, None, pool, None, GAMES, TODAY, 15, league))
     cats, weights = ["pts", "reb"], [1.0, 1.0]
     return {"teams": teams, "categories": cats, "weights": weights,
@@ -185,7 +185,8 @@ def test_auto_finds_win_win_trades_without_players():
     out = moves.simulate(_auto_result(league), league)
     assert out["mode"] == "auto" and out["partners"] == ["Rival", "Autre"] and out["moves"]
     assert all(m.my_gain > 0 and m.partner_gain >= 0 for m in out["moves"])
-    assert [m.my_gain for m in out["moves"]] == sorted((m.my_gain for m in out["moves"]), reverse=True)
+    # du plus équitable au moins équitable
+    assert [abs(m.value_diff) for m in out["moves"]] == sorted(abs(m.value_diff) for m in out["moves"])
     best = out["moves"][0]
     # j'ai trop de points et pas de rebonds : je cède un marqueur contre un rebondeur
     assert best.partner_name == "Rival" and _names(best.give)[0].startswith("P") and "R2" in _names(best.recv)
@@ -224,3 +225,49 @@ def test_auto_setting_is_parsed():
                                             ["Optim | Moves", "Auto max players", "3"]])
     m = cfg["league"]["moves"]
     assert m["compare"] == {"type": "auto", "manager": ""} and m["auto_max_players"] == 3
+
+
+def test_auto_screen_respects_full_lineups():
+    # plafond de 20 matchs pour 3 joueurs : R1 est remplaçant chez moi, P3 chez Rival
+    league = _auto_league("Rival")
+    sim = moves.Simulator(_auto_result(league, cap=20), league)
+    me, partner = sim.index("Moi"), sim.index("Rival")
+    found = {(give[0].name, recv[0].name): gain for gain, _, give, recv in moves._screen(sim, me, partner, 1, 1.0)[0]}
+    # céder un remplaçant contre un joueur qui ne serait pas titulaire ne rapporte rien (avant : tous ses matchs
+    # attendus étaient ajoutés)
+    assert found[("R1", "P3")] == pytest.approx(0.0, abs=0.05)
+    assert found[("P2", "P3")] == pytest.approx(0.0, abs=0.05)
+    # céder un titulaire contre un meilleur joueur : même gain que la simulation exacte
+    give = next(x for x in sim.teams[me].players if x.name == "P2")
+    recv = next(x for x in sim.teams[partner].players if x.name == "R2")
+    mine = [moves._entry(x) for x in sim.teams[me].players if x is not give] + [moves._entry(recv)]
+    theirs = [moves._entry(x) for x in sim.teams[partner].players if x is not recv] + [moves._entry(give)]
+    _, points = sim.evaluate(me, mine, partner, theirs)
+    assert found[("P2", "R2")] == pytest.approx(points[me].sum() - sim.base_total[me], abs=0.05)
+
+
+def test_auto_completes_with_trades_where_partner_loses():
+    league = _auto_league()
+    league["moves"]["min_results"] = 10
+    out = moves.simulate(_auto_result(league, cap=20), league)
+    assert out["win_win"] == 0 and out["moves"]
+    assert all(m.partner_loses and m.my_gain > 0 and m.partner_gain < 0 for m in out["moves"])
+    rows = moves.rows(out)
+    header = next(r for r in rows if r and r[0] == "#")
+    first = next(r for r in rows if r and r[0] == 1)
+    assert first[header.index("Accord")] == "il perd des points"
+    assert "[il perd des points]" in moves.console(out)
+
+
+def test_auto_shows_one_trade_per_effect_on_my_team():
+    league = _auto_league()
+    league["moves"]["min_results"] = 10
+    sim_out = moves.simulate(_auto_result(league, cap=20), league)
+    sim = moves.Simulator(_auto_result(league, cap=20), league)
+    me = sim.index("Moi")
+    cores = [moves._core(sim, me, m) for m in sim_out["moves"]]
+    assert len(cores) == len(set(cores))
+
+
+def test_auto_interleaves_trade_sizes():
+    assert moves._interleave([[1, 2, 3], ["a"], ["x", "y"]]) == [1, "a", "x", 2, "y", 3]
