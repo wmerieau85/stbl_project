@@ -3,8 +3,17 @@
 Réglages de l'onglet settings :
 - Moves | Player 1..4 : manager | joueur. Le manager est soit le mien (je cède ces joueurs), soit celui
   de Moves | Compare (je reçois ces joueurs). Ligne sans joueur : ignorée.
-- Moves | Compare : « manager » + nom du manager (échange), ou « free agent » (je lâche mes joueurs).
+- Moves | Compare : « manager » + nom du manager (échange), « free agent » (je lâche mes joueurs), ou
+  « auto » (+ nom du manager facultatif) : recherche d'échanges sans joueur saisi (Moves | Player ignorés).
 - Optim | Moves : tolérance de valeur, nombre de résultats...
+
+Recherche auto : tous les échanges 1 contre 1 à N contre N (Auto max players) avec chaque manager (ou celui
+indiqué) sont filtrés sur la tolérance de valeur, puis passés à un crible rapide (stats de fin de saison
+modifiées sans réoptimiser les lineups, points roto de moi et du partenaire). Les meilleurs pour moi, parmi
+ceux que le partenaire a intérêt à accepter, sont ensuite simulés exactement (Auto shortlist, au plus
+2 x Auto per manager par manager) ; on garde ceux qui me font gagner et où son gain dépasse Auto min partner
+gain (au plus Auto per manager affichés par manager) : un échange « gagnant-gagnant » par les
+besoins, à valeur brute équivalente.
 
 Échange : autant de joueurs reçus que cédés ; toutes les combinaisons de l'effectif d'en face (ou du
 mien) sont testées, celles dont la valeur s'écarte de plus de la tolérance sont écartées, les autres
@@ -26,7 +35,7 @@ from math import comb
 
 import numpy as np
 
-from scripts.draft.engine import category_values, roto_points
+from scripts.draft.engine import LOWER_IS_BETTER, UNCERTAINTY, S, category_values, roto_points
 from scripts.names import name_key
 from scripts.season.engine import apply_lineup_rate, optimize_team, project_team, standings_projection
 
@@ -60,6 +69,8 @@ class Move:
     out_of_tolerance: bool = False
     p_first: float | None = None
     p_podium: float | None = None
+    partner_name: str = ""
+    screen_gain: float | None = None     # recherche auto : gain estimé par le crible rapide
 
     @property
     def value_diff(self):
@@ -231,13 +242,26 @@ def plan(league):
             "other": other}
 
 
+def _auto_plan(league):
+    compare = (league.get("moves") or {}).get("compare") or {}
+    if str(compare.get("type") or "").strip().lower() != "auto":
+        return None
+    me = league.get("draft", {}).get("my_team")
+    other = str(compare.get("manager") or "").strip()
+    if other and other.casefold() == str(me or "").casefold():
+        raise MovesError("Moves | Compare : le manager comparé ne peut pas être le mien.")
+    return {"me": me, "side": me, "mine": True, "players": [], "kind": "auto", "other": other}
+
+
 def simulate(result, league):
     """Mouvements classés : {mode, plan, moves, tested, kept, base...}."""
-    p = plan(league)
+    p = _auto_plan(league) or plan(league)
     sim = Simulator(result, league)
     conf = league.get("moves") or {}
     me = sim.index(p["me"])
-    if p["kind"] == "manager":
+    if p["kind"] == "auto":
+        out = _auto(sim, me, p, conf)
+    elif p["kind"] == "manager":
         out = _trades(sim, me, p, conf)
     else:
         out = _free_agents(sim, me, p, conf)
@@ -334,6 +358,142 @@ def _free_agents(sim, me, p, conf):
             "kept": len(moves), "tolerance": None, "moves": moves[:limit], "free_count": len(free)}
 
 
+# --- Recherche auto ---------------------------------------------------------------------------
+
+def _erf_fast(x):
+    """erf vectorisé (Abramowitz-Stegun 7.1.26, erreur < 1,5e-7) : suffisant pour le crible."""
+    sign = np.sign(x)
+    x = np.abs(x)
+    t = 1.0 / (1.0 + 0.3275911 * x)
+    y = 1.0 - (((((1.061405429 * t - 1.453152072) * t) + 1.421413741) * t - 0.284496735) * t
+               + 0.254829592) * t * np.exp(-x * x)
+    return sign * y
+
+
+def _rows_points(values, rows, cats, weights):
+    """values : (N, équipes, catégories) -> points roto espérés des équipes `rows` (N, len(rows))."""
+    values = values.astype(float).copy()
+    for j, cat in enumerate(cats):
+        if cat in LOWER_IS_BETTER:
+            values[:, :, j] = -values[:, :, j]
+    sigma = UNCERTAINTY * values.std(axis=1)                         # (N, catégories)
+    sigma = np.where(sigma <= 1e-12, 1e-12, sigma)
+    out = []
+    for r in rows:
+        diff = values[:, r:r + 1, :] - values                         # (N, équipes, catégories)
+        beat = 0.5 * (1.0 + _erf_fast(diff / (sigma[:, None, :] * np.sqrt(2.0))))
+        beat[:, r, :] = 0.0
+        out.append(((1.0 + beat.sum(axis=1)) * np.asarray(weights)).sum(axis=1))
+    return np.stack(out, axis=1)
+
+
+def _values_batch(totals, cats):
+    """category_values sur une matrice (N, stats) -> (N, catégories)."""
+    cols = []
+    for cat in cats:
+        if cat in ("fgp", "ftp"):
+            made, att = totals[:, S[cat[:2] + "m"]], totals[:, S[cat[:2] + "a"]]
+            cols.append(np.divide(made, att, out=np.zeros_like(made), where=att != 0))
+        else:
+            cols.append(totals[:, S[cat]])
+    return np.stack(cols, axis=1)
+
+
+def _expected_totals(p):
+    """Stats d'un joueur s'il est aligné sur tous ses matchs attendus (avant plafonds)."""
+    return p.per_game_st * p.games_st_expected + p.per_game_lt * p.games_lt_expected
+
+
+def _combos(players, k):
+    return list(itertools.combinations(players, k))
+
+
+def _screen(sim, me, partner, max_players, tolerance, batch=4000):
+    """Crible rapide des échanges k contre k avec `partner` : [(gain moi, gain partenaire, cédés, reçus)]."""
+    mine, theirs = sim.teams[me], sim.teams[partner]
+    rate = theirs.lineup_rate or 1.0
+    my_players = [x for x in mine.players if x.found]
+    their_players = [x for x in theirs.players if x.found]
+    base_totals = np.array([t.final for t in sim.teams])
+    base_values = sim.base_values.astype(float)
+    base_rows = sim.base_total[[me, partner]]
+    out, tested = [], 0
+    for k in range(1, max_players + 1):
+        gives, recvs = _combos(my_players, k), _combos(their_players, k)
+        if not gives or not recvs:
+            continue
+        vg = np.array([sum(sim.value(x) for x in c) for c in gives])
+        vr = np.array([sum(sim.value(x) for x in c) for c in recvs])
+        scale = np.maximum(np.abs(vg)[:, None], np.abs(vr)[None, :])
+        diff = np.where(scale < 1e-9, 1.0, np.abs(vr[None, :] - vg[:, None]) / np.where(scale < 1e-9, 1, scale))
+        gi, ri = np.nonzero(diff <= tolerance + 1e-9)
+        tested += len(gives) * len(recvs)
+        if not len(gi):
+            continue
+        # stats : ce que je perds (aligné chez moi) / ce que je reçois (attendu, mon lineup sera réoptimisé)
+        g_used = np.array([sum(x.totals for x in c) for c in gives])
+        g_exp = np.array([sum(_expected_totals(x) for x in c) for c in gives])
+        r_used = np.array([sum(x.totals for x in c) for c in recvs])
+        r_exp = np.array([sum(_expected_totals(x) for x in c) for c in recvs])
+        for start in range(0, len(gi), batch):
+            g, r = gi[start:start + batch], ri[start:start + batch]
+            values = np.repeat(base_values[None], len(g), axis=0)
+            values[:, me] = _values_batch(base_totals[me] + r_exp[r] - g_used[g], sim.cats)
+            values[:, partner] = _values_batch(base_totals[partner] + g_exp[g] * rate - r_used[r], sim.cats)
+            gains = _rows_points(values, [me, partner], sim.cats, sim.weights) - base_rows
+            for (a, b), gg, rr in zip(gains, g, r):
+                out.append((float(a), float(b), list(gives[gg]), list(recvs[rr])))
+    return out, tested
+
+
+def _auto(sim, me, p, conf):
+    partners = [sim.index(p["other"])] if p["other"] else [i for i in range(len(sim.teams)) if i != me]
+    max_players = max(1, min(int(conf.get("auto_max_players", 2)), MAX_PLAYERS))
+    tolerance = float(conf.get("value_tolerance", 0.10))
+    shortlist = int(conf.get("auto_shortlist", 40))
+    min_partner = float(conf.get("auto_min_partner_gain", 0.0))
+    limit = int(conf.get("max_results", 20))
+    screened, tested = [], 0
+    for partner in partners:
+        found, n = _screen(sim, me, partner, max_players, tolerance)
+        tested += n
+        screened += [(partner,) + c for c in found]
+    # le crible est approché : marge d'un demi-point sur le gain du partenaire avant la simulation exacte
+    pool = [c for c in screened if c[1] > 0 and c[2] >= min_partner - 0.5]
+    pool.sort(key=lambda c: -(c[1] + 0.25 * min(c[2], 0.0)))
+    # variété : au plus 2 x Auto per manager échanges simulés par manager, Auto per manager affichés
+    per_manager = max(1, int(conf.get("auto_per_manager", 5)))
+    count, chosen = {}, []
+    for c in pool:
+        if count.get(c[0], 0) < 2 * per_manager:
+            count[c[0]] = count.get(c[0], 0) + 1
+            chosen.append(c)
+        if len(chosen) >= shortlist:
+            break
+    moves = []
+    for partner, gain, _, give, recv in chosen:
+        gone_me, gone_partner = {id(x) for x in give}, {id(x) for x in recv}
+        my_entries = [_entry(x) for x in sim.teams[me].players if id(x) not in gone_me] + [_entry(x) for x in recv]
+        partner_entries = ([_entry(x) for x in sim.teams[partner].players if id(x) not in gone_partner]
+                           + [_entry(x) for x in give])
+        teams, points = sim.evaluate(me, my_entries, partner, partner_entries)
+        move = sim.move(me, give, recv, teams, points, partner)
+        move.partner_name, move.screen_gain = sim.teams[partner].manager, gain
+        if move.my_gain > 1e-6 and move.partner_gain >= min_partner - 1e-9:
+            moves.append(move)
+    moves.sort(key=lambda m: -m.my_gain)
+    shown = {}
+    moves = [m for m in moves if shown.setdefault(m.partner_name, []).append(m) or
+             len(shown[m.partner_name]) <= per_manager][:limit]
+    log.info("[Moves auto] %d échanges possibles, %d à ±%.0f %% de valeur, %d intéressants au crible, "
+             "%d simulés, %d retenus.", tested, len(screened), 100 * tolerance, len(pool),
+             len(chosen), len(moves))
+    return {"mode": "auto", "partner": None, "partner_team": None, "fixed": [], "tested": tested,
+            "kept": len(screened), "screened": len(pool), "simulated": len(chosen),
+            "tolerance": tolerance, "min_partner_gain": min_partner, "max_players": max_players,
+            "partners": [sim.teams[i].manager for i in partners], "moves": moves}
+
+
 # --- Restitution -----------------------------------------------------------------------------
 
 def _names(players):
@@ -369,10 +529,19 @@ def rows(out):
 
     p, cats = out["plan"], out["categories"]
     labels = [CATEGORY_LABELS.get(c, c) for c in cats]
-    trade = out["mode"] == "manager"
+    auto = out["mode"] == "auto"
+    trade = out["mode"] in ("manager", "auto")
     partner = out["partner_team"]
     lines = [[f"Mouvements - simulation au {out['today'].isoformat()}"]]
-    if trade:
+    if auto:
+        lines.append(["Mouvement", "recherche auto d'échanges avec " + ", ".join(out["partners"])])
+        lines.append(["Taille", f"1 contre 1 à {out['max_players']} contre {out['max_players']}"])
+        lines.append(["Tolérance de valeur", f"±{100 * out['tolerance']:.0f} %"])
+        lines.append(["Gain minimum du partenaire", f"{out['min_partner_gain']:+.2f} pts roto"])
+        lines.append(["Combinaisons", f"{out['tested']} testées, {out['kept']} à valeur équivalente, "
+                                      f"{out['screened']} intéressantes au crible, {out['simulated']} simulées, "
+                                      f"{len(out['moves'])} retenues"])
+    elif trade:
         lines.append(["Mouvement", f"échange avec {partner.manager} ({partner.team_name})"])
         lines.append(["Joueurs fixés", ("Je cède : " if p["mine"] else "Je reçois : ") + _names(out["fixed"])])
         lines.append(["Tolérance de valeur", f"±{100 * out['tolerance']:.0f} %"])
@@ -387,22 +556,28 @@ def rows(out):
         base += f", titre {100 * out['base_first']:.1f} %, podium {100 * out['base_podium']:.1f} %"
     lines.append(["Sans mouvement", base])
     lines.append([])
-    header = ["#", "Je cède" if trade else "Je lâche", "Je reçois" if trade else "J'ajoute",
+    header = ["#"] + (["Manager"] if auto else []) + ["Je cède" if trade else "Je lâche", "Je reçois" if trade else "J'ajoute",
               "Valeur cédée", "Valeur reçue", "Écart valeur (%)"]
-    if trade:
+    if trade and not auto:
         header.append("Tolérance")
     header += ["Matchs alignés (reçus)", "Effet sur mes autres joueurs", "Gain roto (moi)"]
-    if trade:
+    if auto:
+        header.append("Gain roto (partenaire)")
+    elif trade:
         header.append(f"Gain roto ({partner.manager})")
     header += ["Points projetés", "Rang projeté", "Titre (%)", "Podium (%)"] + [f"{l} (pts)" for l in labels]
     header += [f"{l} (stats)" for l in labels]
     lines.append(header)
-    if not out["moves"]:
+    if not out["moves"] and auto:
+        lines.append(["", "aucun échange gagnant-gagnant : élargissez la tolérance (Optim | Moves | Value "
+                          "tolerance), Auto max players ou Auto shortlist, ou baissez Auto min partner gain"])
+    elif not out["moves"]:
         lines.append(["", "aucune combinaison à valeur équivalente : élargissez la tolérance "
                           "(Optim | Moves | Value tolerance)" if trade else "aucun joueur libre"])
     for i, m in enumerate(out["moves"], 1):
-        row = [i, _names(m.give), _names(m.recv), round(m.value_give, 1), round(m.value_recv, 1), _pct(m.value_diff)]
-        if trade:
+        row = [i] + ([m.partner_name] if auto else []) + [_names(m.give), _names(m.recv), round(m.value_give, 1),
+                                                          round(m.value_recv, 1), _pct(m.value_diff)]
+        if trade and not auto:
             row.append("hors tolérance" if m.out_of_tolerance else "oui")
         row += [_games(m.recv_detail), _changes(m.lineup_changes), round(m.my_gain, 2)]
         if trade:
@@ -426,6 +601,17 @@ def rows(out):
 
 def console(out):
     p = out["plan"]
+    if out["mode"] == "auto":
+        text = [f"Recherche auto d'échanges ({out['tested']} combinaisons, {out['kept']} à "
+                f"±{100 * out['tolerance']:.0f} % de valeur, {out['simulated']} simulées)",
+                f"Sans mouvement : {out['base_points']:.1f} pts, rang {out['base_rank']}"]
+        for i, m in enumerate(out["moves"][:10], 1):
+            text.append(f"{i:>2}. avec {m.partner_name} : {_names(m.give)} -> {_names(m.recv)} : {m.my_gain:+.2f} pts, "
+                        f"{m.partner_name} {m.partner_gain:+.2f} (valeur {m.value_give:.1f} -> {m.value_recv:.1f}), "
+                        f"rang {m.rank}")
+        if not out["moves"]:
+            text.append("Aucun échange gagnant-gagnant trouvé.")
+        return "\n".join(text)
     head = (f"Échange avec {out['partner_team'].manager}" if out["mode"] == "manager" else "Joueurs libres")
     text = [f"{head} - {'je cède' if p['mine'] else 'je reçois'} : {_names(out['fixed'])}",
             f"Sans mouvement : {out['base_points']:.1f} pts, rang {out['base_rank']}"]

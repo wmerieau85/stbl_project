@@ -184,6 +184,10 @@
       "min_results": 10,
       "fa_results": 6,
       "fa_shortlist": 15,
+      "auto_max_players": 2,
+      "auto_shortlist": 40,
+      "auto_per_manager": 5,
+      "auto_min_partner_gain": 0.0,
       "players": [],
       "compare": {}
     },

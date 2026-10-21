@@ -143,3 +143,84 @@ def test_settings_rows_are_parsed():
     assert m["compare"] == {"type": "manager", "manager": "Cliffy"} and m["value_tolerance"] == pytest.approx(0.15)
     cfg, _ = C.parse_rows(C.build_rows() + [["Moves | Compare", "Free Agent", ""]])
     assert cfg["league"]["moves"]["compare"] == {"type": "free agent", "manager": ""}
+
+
+# --- Recherche auto -----------------------------------------------------------------------------
+
+AUTO_ROSTERS = {"Moi": ["P1", "P2", "R1"], "Rival": ["R2", "R3", "P3"], "Autre": ["M1", "M2", "M3"]}
+# P = points, R = rebonds, M = mixte ; (pts, reb, valeur) ; Z joueur libre : remplacement = 9e = 5
+AUTO_STATS = {"P1": (20, 2, 6), "P2": (18, 2, 5.5), "R1": (4, 6, 5), "R2": (4, 12, 6), "R3": (4, 11, 5.5),
+              "P3": (12, 2, 5), "M1": (12, 7, 6), "M2": (11, 7, 5.5), "M3": (12, 6, 5), "Z": (1, 1, 1)}
+
+
+def _auto_result(league):
+    players = []
+    for i, (name, (pts, reb, value)) in enumerate(AUTO_STATS.items()):
+        per_game = np.zeros(len(STATS))
+        per_game[STATS.index("pts")], per_game[STATS.index("reb")] = pts, reb
+        players.append(Player(idx=i, player_id=i, name=name, team="DEN", positions="C", gp=10, per_game=per_game,
+                              value_avg=float(value), value_tot=float(value), rank_tot=i, adp=None, market=i))
+    pool = Pool(players)
+    teams = []
+    for manager, names in AUTO_ROSTERS.items():
+        roster = {"players": [{"player": n, "nba_team": "DEN", "positions": "C", "slot": "C"} for n in names],
+                  "games": {"C": {"remaining": 30}}}
+        teams.append(project_team(manager, manager, roster, None, pool, None, GAMES, TODAY, 15, league))
+    cats, weights = ["pts", "reb"], [1.0, 1.0]
+    return {"teams": teams, "categories": cats, "weights": weights,
+            "projection": standings_projection(teams, cats, weights, sims=50),
+            "context": {"lt_pool": pool, "st_pool": None, "games": GAMES, "today": TODAY, "horizon": 15,
+                        "league": league}}
+
+
+def _auto_league(manager=""):
+    league = _league([], {"type": "auto", "manager": manager}, tolerance=0.10)
+    league["roster"] = {"C": 3}
+    league["moves"].update(auto_max_players=2, auto_shortlist=40, auto_min_partner_gain=0.0)
+    return league
+
+
+def test_auto_finds_win_win_trades_without_players():
+    league = _auto_league()
+    out = moves.simulate(_auto_result(league), league)
+    assert out["mode"] == "auto" and out["partners"] == ["Rival", "Autre"] and out["moves"]
+    assert all(m.my_gain > 0 and m.partner_gain >= 0 for m in out["moves"])
+    assert [m.my_gain for m in out["moves"]] == sorted((m.my_gain for m in out["moves"]), reverse=True)
+    best = out["moves"][0]
+    # j'ai trop de points et pas de rebonds : je cède un marqueur contre un rebondeur
+    assert best.partner_name == "Rival" and _names(best.give)[0].startswith("P") and "R2" in _names(best.recv)
+    rows = moves.rows(out)
+    header = next(r for r in rows if r and r[0] == "#")
+    assert header[1] == "Manager" and "Gain roto (partenaire)" in header
+    assert next(r for r in rows if r and r[0] == 1)[1] == "Rival"
+    assert "Rival" in moves.console(out)
+
+
+def test_auto_can_target_one_manager_and_respects_partner_gain():
+    league = _auto_league("Autre")
+    out = moves.simulate(_auto_result(league), league)
+    assert out["partners"] == ["Autre"] and all(m.partner_name == "Autre" for m in out["moves"])
+    league = _auto_league()
+    league["moves"]["auto_min_partner_gain"] = 100.0
+    out = moves.simulate(_auto_result(league), league)
+    assert out["moves"] == [] and "aucun échange gagnant-gagnant" in str(moves.rows(out))
+
+
+def test_auto_screen_is_close_to_the_exact_simulation():
+    league = _auto_league("Rival")
+    sim = moves.Simulator(_auto_result(league), league)
+    me, partner = sim.index("Moi"), sim.index("Rival")
+    found, tested = moves._screen(sim, me, partner, 1, 1.0)
+    assert tested == 9 and len(found) == 9
+    for gain, partner_gain, give, recv in found:
+        mine = [moves._entry(x) for x in sim.teams[me].players if x is not give[0]] + [moves._entry(recv[0])]
+        theirs = [moves._entry(x) for x in sim.teams[partner].players if x is not recv[0]] + [moves._entry(give[0])]
+        _, points = sim.evaluate(me, mine, partner, theirs)
+        assert gain == pytest.approx(points[me].sum() - sim.base_total[me], abs=0.05)
+
+
+def test_auto_setting_is_parsed():
+    cfg, _ = C.parse_rows(C.build_rows() + [["Moves | Compare", "Auto", ""],
+                                            ["Optim | Moves", "Auto max players", "3"]])
+    m = cfg["league"]["moves"]
+    assert m["compare"] == {"type": "auto", "manager": ""} and m["auto_max_players"] == 3

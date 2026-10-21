@@ -4,7 +4,8 @@
     python -m scripts.season update --no-sheet  # console + CSV seulement
     python -m scripts.season update --rosters sheet   # effectifs de l'onglet bdd (Team Season, sinon Team Draft)
     python -m scripts.season moves              # échanges / joueurs libres (lignes Moves | ... de settings) :
-                                                # onglet moves_reco (+ CSV)
+                                                # onglet moves_reco (+ CSV) ; Moves | Compare = auto :
+                                                # recherche d'échanges gagnant-gagnant sans joueur saisi
 
 Données : pages publiques de la ligue Yahoo (effectifs, compteur de matchs par poste, classement),
 calendrier NBA, projections lt (reste de la saison) et st (forme récente, 15 prochains jours).

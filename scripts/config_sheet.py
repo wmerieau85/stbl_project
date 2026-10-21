@@ -136,6 +136,14 @@ PARAMS = [
      "échanges affichés au maximum (à valeur équivalente : les meilleurs gains)"),
     ("Optim | Moves", "Min results", "league", "moves.min_results", "int",
      "échanges affichés au minimum : complétés par les plus proches en valeur, hors tolérance"),
+    ("Optim | Moves", "Auto max players", "league", "moves.auto_max_players", "int",
+     "recherche auto : échanges de 1 contre 1 jusqu'à N contre N (2 conseillé, 3 plus lent)"),
+    ("Optim | Moves", "Auto shortlist", "league", "moves.auto_shortlist", "int",
+     "recherche auto : meilleurs échanges du crible rapide simulés exactement"),
+    ("Optim | Moves", "Auto per manager", "league", "moves.auto_per_manager", "int",
+     "recherche auto : échanges affichés au plus par manager (variété des propositions)"),
+    ("Optim | Moves", "Auto min partner gain", "league", "moves.auto_min_partner_gain", "float",
+     "recherche auto : gain roto minimum de l'autre manager (0 = il ne perd rien, il a intérêt à accepter)"),
     ("Optim | Moves", "Free agent results", "league", "moves.fa_results", "int",
      "joueurs libres : options affichées"),
     ("Optim | Moves", "Free agent shortlist", "league", "moves.fa_shortlist", "int",
@@ -355,7 +363,8 @@ def build_rows(cfg=None, bootstrap=None):
             "joueurs à échanger : les miens, ou ceux du manager de Moves | Compare" if i == 1 else "")
     compare = moves.get("compare") or {}
     add(MOVES_COMPARE_SECTION, compare.get("type", ""), compare.get("manager", ""),
-        "manager + nom du manager (échange), ou free agent (joueurs libres)")
+        "manager + nom du manager (échange), free agent (joueurs libres), ou auto + manager facultatif "
+        "(recherche d'échanges sans joueur saisi)")
 
     codes = [(conf.get("code"), name, conf) for name, conf in sources.items() if conf.get("code")]
     for code, _, conf in codes:
@@ -487,10 +496,10 @@ def parse_rows(rows, cfg=None, bootstrap=None):
                 kind = _norm(param)
                 if not kind:
                     moves_compare = {}
-                elif kind not in ("manager", "free agent"):
-                    raise ValueError(f"Onglet config, {section} : « {param} », attendu manager ou free agent.")
+                elif kind not in ("manager", "free agent", "auto"):
+                    raise ValueError(f"Onglet config, {section} : « {param} », attendu manager, free agent ou auto.")
                 else:
-                    moves_compare = {"type": kind, "manager": value if kind == "manager" else ""}
+                    moves_compare = {"type": kind, "manager": value if kind in ("manager", "auto") else ""}
             elif domain == "sources" and sub in ("draft", "ros"):
                 if value:
                     stages.setdefault(code_of(param, section), {})[sub] = value
