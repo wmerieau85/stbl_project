@@ -3,7 +3,7 @@
 Format : la grille telle qu'elle est dans Google Sheets (copier/coller ou export CSV).
 
     ;lt01;lt02;lt03;lt04;lt05
-    site;fs26;fp26;cbs26;le26;dk26
+    site;fs;fp;cbs;le;dk
     GP;22,50%;22,50%;10,00%;22,50%;22,50%
     MIN;20,00%;20,00%;20,00%;20,00%;20,00%
     STATS;20,00%;20,00%;20,00%;20,00%;20,00%
@@ -25,6 +25,7 @@ import re
 from scripts.config import load_grid_rows, load_sources_config
 
 log = logging.getLogger(__name__)
+_WARNED = set()   # avertissement « autre saison » une seule fois par code
 
 LEVELS = ("gp", "min", "stats")
 
@@ -75,7 +76,8 @@ def source_codes():
 def parse_code(code, phase, active_season):
     """Traduit un code de la ligne « site » en (source, saison, étape).
 
-    - fs26      -> FanScout, saison 2026-27, étape draft (projections de pré-saison)
+    - fs        -> FanScout, saison active, étape draft dans la grille draft (ros dans les grilles lt / st)
+    - fs26      -> FanScout, saison 2026-27, étape draft (à réserver au mélange avec une autre saison)
     - fp.ros    -> FantasyPros, saison active, étape ros
     - fp26.ros  -> FantasyPros, saison 2026-27, étape ros
     - fp.l30    -> FantasyPros, saison active, fenêtre l30 (quand la source existera)
@@ -90,12 +92,16 @@ def parse_code(code, phase, active_season):
         return {"code": code, "source": code, "season": active_season, "stage": code, "final": True}
     match = CODE_RE.match(code)
     if not match:
-        raise WeightsError(f"Code source illisible : '{code}' (ex. fs26, fp.ros, fp.l30, draft)")
+        raise WeightsError(f"Code source illisible : '{code}' (ex. fs, fp.ros, fp.l30, fs26, draft)")
     site, yy, window = match.groups()
     codes = source_codes()
     if site not in codes:
         raise WeightsError(f"Code site inconnu : '{site}' (codes connus : {', '.join(sorted(codes))})")
     season = season_from_year(yy) if yy else active_season
+    if yy and season != active_season and (phase, code, active_season) not in _WARNED:
+        _WARNED.add((phase, code, active_season))
+        log.warning("[Weights] Grille %s : '%s' vise la saison %s, pas la saison active %s (code sans année = "
+                    "saison active).", phase, code, season, active_season)
     stage = window or ("draft" if yy else ("draft" if phase == "draft" else "ros"))
     source_label = codes[site]
     from scripts.sources import SOURCES

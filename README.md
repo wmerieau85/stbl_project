@@ -97,9 +97,13 @@ python -m scripts.config_sheet push      # remise à plat des onglets depuis la 
 python -m scripts.config_sheet migrate   # ancien format (blocs) -> nouveau, copie dans config_old
 ```
 
-Codes de la ligne « site » des grilles : `fs26` (FanScout 2026-27, pré-saison), `fp.ros`
-(FantasyPros, saison active, rest of season), `fp26.ros`, `fp.sea` / `fp.l30` / `fp.l15` /
-`fp.l07` (stats réelles), `draft` / `lt` (projections finales d'une phase calculée avant).
+Codes de la ligne « site » des grilles, sans année = saison active (`Settings | League | Actual Season`) :
+`fs` (FanScout, pré-saison dans la grille draft, rest of season dans les grilles lt / st), `fp.ros`
+(FantasyPros, rest of season), `fp.sea` / `fp.l30` / `fp.l15` / `fp.l07` (stats réelles), `draft` / `lt`
+(projections finales d'une phase calculée avant). Avec une année (`fs26`, `fp26.ros`), le code vise une
+saison précise : à réserver au mélange avec une autre saison (avertissement si elle diffère de la saison
+active). Changer de saison = changer `Actual Season` : la base garde chaque saison à part (colonne
+season) et tous les onglets n'affichent que la saison active.
 
 ## Sources
 
