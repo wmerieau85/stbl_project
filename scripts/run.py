@@ -31,6 +31,7 @@ class Command:
     db: bool = True       # base nécessaire
     write: bool = False   # base modifiée : renvoyée sur Drive
     imports: bool = False  # CSV des sources à copier depuis Drive
+    history: bool = False  # history.sqlite téléchargé, puis renvoyé s'il a changé
 
 
 def _m(*args):
@@ -53,6 +54,8 @@ COMMANDS = {
     "season_all": Command("Saison > Tout mettre à jour", (_m("scripts.yahoo", "rosters"), _m("scripts.yahoo", "stats"),
                                                           _m("scripts.season", "update"),
                                                           _m("scripts.season", "moves"))),
+    "history_snapshot": Command("Maintenance > Photo des sources", (_m("scripts.history", "daily"),),
+                                imports=True, history=True),
     "settings_check": Command("Maintenance > Contrôle settings", (_m("scripts.config_sheet", "check"),), db=False),
 }
 
@@ -156,7 +159,7 @@ def execute(code, key=None, book=None, league=None, step_runner=run_step, drive_
     start = now()
     journal.update("en cours", start)
     env = dict(os.environ, **{cloud.RUNNER_ENV: "1", "PYTHONUNBUFFERED": "1", "PYTHONIOENCODING": "utf-8"})
-    detail, rc, drive, before = [], 0, None, None
+    detail, rc, drive, before, before_history = [], 0, None, None, None
     t0 = time.monotonic()
     try:
         if command.db:
@@ -164,6 +167,8 @@ def execute(code, key=None, book=None, league=None, step_runner=run_step, drive_
             before = cloud.pull_db(drive)
             if command.imports:
                 cloud.pull_imports(drive)
+            if command.history:
+                before_history = cloud.pull_history(drive)
         for args in command.steps:
             log.info("=== %s", " ".join(args))
             rc, tail = step_runner(args, env)
@@ -172,6 +177,8 @@ def execute(code, key=None, book=None, league=None, step_runner=run_step, drive_
                 break
         if rc == 0 and command.write and drive is not None:
             cloud.push_db(drive, before)
+        if rc == 0 and command.history and drive is not None:
+            cloud.push_history(drive, before_history)
     except Exception as exc:   # Drive, classeur... : message lisible dans le journal
         log.error("%s", exc)
         rc, detail = rc or 1, detail + [str(exc)]

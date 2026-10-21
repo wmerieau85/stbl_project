@@ -186,6 +186,12 @@
       "players": [],
       "compare": {}
     },
+    "history": {
+      "projections_days": 7,
+      "stats_days": 1,
+      "retention_seasons": 3,
+      "shrink": 0.5
+    },
     "lottery": {
       "balls_range": "board!N8:O22",
       "managers_range": "board!B8:B22",

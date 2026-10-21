@@ -27,6 +27,7 @@ API = "https://www.googleapis.com/drive/v3/files"
 UPLOAD = "https://www.googleapis.com/upload/drive/v3/files"
 FOLDER = "application/vnd.google-apps.folder"
 DB_NAME = "database.sqlite"
+HISTORY_NAME = "history.sqlite"
 RUNNER_ENV = "STBL_CLOUD_RUNNER"      # positionné par scripts.run : les commandes ne resynchronisent pas
 
 
@@ -145,34 +146,55 @@ def _db_path():
     return db.DB_PATH
 
 
-def pull_db(drive, path=None):
-    """Télécharge la base Drive si elle diffère de la base locale. Renvoie son empreinte md5."""
-    path = path or _db_path()
-    remote = drive.find(DB_NAME)
+def pull_file(drive, name, path):
+    """Télécharge le fichier Drive `name` s'il diffère du fichier local. Renvoie son empreinte md5."""
+    remote = drive.find(name)
     if remote is None:
-        raise CloudError(f"{DB_NAME} absent du dossier Drive : déposez-y une première fois la base de votre PC "
+        raise CloudError(f"{name} absent du dossier Drive : déposez-y une première fois le fichier de votre PC "
                          f"({os.path.relpath(path, BASE_DIR)}).")
     if remote.get("md5Checksum") and remote["md5Checksum"] == _md5(path):
-        log.info("[Drive] Base locale déjà à jour.")
+        log.info("[Drive] %s : version locale déjà à jour.", name)
     else:
         drive.download(remote, path)
-        log.info("[Drive] Base téléchargée (%s, %.1f Mo).", remote.get("modifiedTime", ""), os.path.getsize(path) / 1e6)
+        log.info("[Drive] %s téléchargé (%s, %.1f Mo).", name, remote.get("modifiedTime", ""),
+                 os.path.getsize(path) / 1e6)
     return _md5(path)
+
+
+def push_file(drive, name, path, before=None):
+    """Renvoie le fichier sur Drive s'il a changé depuis pull_file. Renvoie True si envoyé."""
+    current = _md5(path)
+    if current is None or current == before:
+        log.info("[Drive] %s inchangé : rien à renvoyer.", name)
+        return False
+    remote = drive.find(name)
+    if remote is None:
+        raise CloudError(f"{name} absent du dossier Drive.")
+    drive.upload(remote, path)
+    log.info("[Drive] %s renvoyé (%.1f Mo).", name, os.path.getsize(path) / 1e6)
+    return True
+
+
+def pull_db(drive, path=None):
+    """Télécharge la base Drive si elle diffère de la base locale. Renvoie son empreinte md5."""
+    return pull_file(drive, DB_NAME, path or _db_path())
 
 
 def push_db(drive, before=None, path=None):
     """Renvoie la base sur Drive si elle a changé depuis pull_db. Renvoie True si envoyée."""
-    path = path or _db_path()
-    current = _md5(path)
-    if current is None or current == before:
-        log.info("[Drive] Base inchangée : rien à renvoyer.")
-        return False
-    remote = drive.find(DB_NAME)
-    if remote is None:
-        raise CloudError(f"{DB_NAME} absent du dossier Drive.")
-    drive.upload(remote, path)
-    log.info("[Drive] Base renvoyée (%.1f Mo).", os.path.getsize(path) / 1e6)
-    return True
+    return push_file(drive, DB_NAME, path or _db_path(), before)
+
+
+def pull_history(drive, path=None):
+    from scripts.config import HISTORY_PATH
+
+    return pull_file(drive, HISTORY_NAME, path or HISTORY_PATH)
+
+
+def push_history(drive, before=None, path=None):
+    from scripts.config import HISTORY_PATH
+
+    return push_file(drive, HISTORY_NAME, path or HISTORY_PATH, before)
 
 
 def import_dirs(settings=None):
