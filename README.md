@@ -117,7 +117,14 @@ season) et tous les onglets n'affichent que la saison active.
 | LineupExperts | export navigateur | protégé par Cloudflare : favori `tools/lineupexperts_export.js` (voir `tools/README.md`) qui télécharge `lineupexperts_<étape>_AAAA-MM-JJ.csv`, à déposer dans `data/imports/lineupexperts/` |
 | DraftKick | fichier CSV | export manuel, déposé dans `data/imports/draftkick/` sous le nom `draftkick_<étape>_AAAA-MM-JJ.csv` |
 | 9cat (9 Fantasy, code `nc`) | API JSON | automatique : projections « Expected » de [9cat.co.il](https://9cat.co.il/en/basketball/players/nba-103) (API publique 365scores, moyennes par match + matchs projetés, FGM/FGA et FTM/FTA fournis) ; `nc.sea` = stats réelles de la saison, une fois celle-ci commencée |
+| RotoWire (code `rw`) | API publique Sleeper | automatique, étape RoS : projections RotoWire publiées par [Sleeper](https://api.sleeper.app/projections/nba/2026?season_type=regular) (moyennes par match mises à jour chaque jour, FGM/FGA et FTM/FTA fournis, rookies compris) ; ni matchs ni minutes : stats seulement |
+| DARKO (code `dr`) | JSON public | automatique, étape RoS : modèle statistique de [darko.app](https://www.darko.app/projections), mis à jour chaque jour (JSON de la page, format SvelteKit). Stats pour 100 possessions converties par match avec les minutes et le rythme projetés ; tentatives et % fournis ; pas de matchs : minutes et stats |
+| Net Prophet (code `np`) | web | automatique, étape RoS : [classement](https://netprophet.pro/rankings) (moyennes par match, 300 joueurs) et [matchs projetés](https://netprophet.pro/games-played) (`Sources \| Players`). Les matchs projetés portent sur la saison complète : ils sont ramenés aux matchs restants avec le calendrier NBA (part des matchs de l'équipe encore à jouer). Joueurs sans match la saison précédente (rookies, absents toute l'année) : valeur par défaut de Net Prophet, matchs non repris. Pas de minutes ni de tentatives (estimées) |
 | Fantasy Nerds (code `fn`) | API payante | clé personnelle dans `credentials/fantasynerds_key.txt` (une ligne, ignoré par git) ou variable `FANTASYNERDS_API_KEY` ; projections de draft en totaux, FG% / FT% sans tentatives (estimées). Désactivée par défaut (`Sources | Active`) |
+
+RotoWire, DARKO et Net Prophet sont activés pour le RoS (pas pour la draft, faute d'historique). Ils
+entrent dans les photos quotidiennes de `history.sqlite` : l'onglet `sources_accuracy` mesure ensuite leur
+précision et propose leurs poids dans la grille lt (`rw.ros`, `dr.ros`, `np.ros`).
 
 ESPN et RotoBaller sont activés pour la draft, pas pour le RoS. RotoBaller publie des moyennes
 par match sans nombre de matchs projeté : elles sont donc converties en totaux avec les GP

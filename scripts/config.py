@@ -32,6 +32,8 @@ DEFAULT_SETTINGS = {
     "sources": dict({name: {"draft": True, "ros": True}
                      for name in ("cbs", "fantasypros", "fanscout", "draftkick", "lineupexperts", "ninecat")},
                     espn={"draft": True, "ros": False}, rotoballer={"draft": True, "ros": False},
+                    rotowire={"draft": False, "ros": True}, darko={"draft": False, "ros": True},
+                    netprophet={"draft": False, "ros": True},
                     fantasynerds={"draft": False, "ros": False}),   # API payante : clé nécessaire
     "google": {"service_account_file": "credentials/service_account.json"},
     "yahoo": {"app_file": "credentials/yahoo_app.json", "token_file": "credentials/yahoo_token.json",

@@ -6,14 +6,17 @@ ajouter sa configuration (config/defaults.json > sources, puis onglet settings) 
 """
 
 from scripts.sources.cbs import CbsSource
+from scripts.sources.darko import DarkoSource
 from scripts.sources.draftkick import DraftKickSource
 from scripts.sources.espn import ESPNSource
 from scripts.sources.fanscout import FanScoutSource
 from scripts.sources.fantasynerds import FantasyNerdsSource
 from scripts.sources.fantasypros import FantasyProsSource
 from scripts.sources.lineupexperts import LineupExpertsSource
+from scripts.sources.netprophet import NetProphetSource
 from scripts.sources.ninecat import NineCatSource
 from scripts.sources.rotoballer import RotoBallerSource
+from scripts.sources.rotowire import RotoWireSource
 
 SOURCES = {
     CbsSource.name: CbsSource,
@@ -25,4 +28,7 @@ SOURCES = {
     NineCatSource.name: NineCatSource,
     FantasyNerdsSource.name: FantasyNerdsSource,
     RotoBallerSource.name: RotoBallerSource,
+    RotoWireSource.name: RotoWireSource,
+    DarkoSource.name: DarkoSource,
+    NetProphetSource.name: NetProphetSource,
 }

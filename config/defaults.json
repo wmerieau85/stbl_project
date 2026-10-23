@@ -245,6 +245,18 @@
       "rotoballer": {
         "draft": true,
         "ros": false
+      },
+      "rotowire": {
+        "draft": false,
+        "ros": true
+      },
+      "darko": {
+        "draft": false,
+        "ros": true
+      },
+      "netprophet": {
+        "draft": false,
+        "ros": true
       }
     },
     "phases": {
@@ -528,6 +540,72 @@
         "fg_pct": "fgp",
         "ft_pct": "ftp",
         "to": "tov"
+      }
+    },
+    "rotowire": {
+      "code": "rw",
+      "urls": {
+        "draft": "https://api.sleeper.app/projections/nba/{year}?season_type=regular",
+        "ros": "https://api.sleeper.app/projections/nba/{year}?season_type=regular"
+      },
+      "percent_scale": 1,
+      "columns": {
+        "pts": "pts",
+        "reb": "reb",
+        "ast": "ast",
+        "stl": "stl",
+        "blk": "blk",
+        "to": "tov",
+        "tpm": "fg3m",
+        "tpa": "fg3a",
+        "fgm": "fgm",
+        "fga": "fga",
+        "ftm": "ftm",
+        "fta": "fta"
+      }
+    },
+    "darko": {
+      "code": "dr",
+      "urls": {
+        "draft": "https://www.darko.app/projections/__data.json",
+        "ros": "https://www.darko.app/projections/__data.json"
+      },
+      "percent_scale": 1,
+      "columns": {
+        "mpg": "mpg",
+        "pts": "pts",
+        "reb": "reb",
+        "ast": "ast",
+        "stl": "stl",
+        "blk": "blk",
+        "tov": "tov",
+        "fga": "fga",
+        "fg3a": "fg3a",
+        "fta": "fta",
+        "fgp": "fgp",
+        "fg3p": "fg3p",
+        "ftp": "ftp"
+      }
+    },
+    "netprophet": {
+      "code": "np",
+      "urls": {
+        "draft": "https://netprophet.pro/rankings",
+        "ros": "https://netprophet.pro/rankings"
+      },
+      "players_url": "https://netprophet.pro/games-played",
+      "percent_scale": 100,
+      "columns": {
+        "gp": "gp",
+        "pts": "pts",
+        "reb": "reb",
+        "ast": "ast",
+        "stl": "stl",
+        "blk": "blk",
+        "3pm": "fg3m",
+        "to": "tov",
+        "fg%": "fgp",
+        "ft%": "ftp"
       }
     }
   },
