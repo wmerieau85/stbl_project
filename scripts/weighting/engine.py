@@ -10,7 +10,8 @@ Modèle à 3 niveaux, chacun pondéré par sa ligne de la grille :
 - STATS : moyenne pondérée de la production par minute de chaque source.
   Une source sans minutes (ex. DraftKick) est ramenée à la minute avec le MPG final :
   sa moyenne par match compte alors telle quelle.
-- FG% / FT% : moyenne pondérée des pourcentages (toutes les sources qui les donnent) ;
+- FG% / FT% : moyenne des pourcentages pondérée par le poids de la grille x les tentatives par match
+  de chaque source (une source à 0/0, ou sans match, est ignorée) ;
   les tentatives (FGA, FTA) viennent des sources qui les fournissent ;
   FGM = FG% x FGA et FTM = FT% x FTA, donc cohérents avec les pourcentages.
   Sans aucune source de tentatives : FGA estimé par
@@ -121,6 +122,30 @@ def _mean(values):
     return sum(values) / len(values) if values else None
 
 
+def _weighted_pct(entries, pct, att, final_att_pg):
+    """FG% / FT% : moyenne des % de chaque source, pondérée par (poids de la grille x tentatives par match).
+
+    - une source sans match (gp = 0) ou à 0 réussite sans tentatives connues (0/0, affiché « .000 » par
+      les pages de stats réelles) ne donne pas de % : elle est ignorée au lieu de compter pour 0 % ;
+    - le poids suit le volume : un 1/1 aux lancers sur 7 jours pèse bien moins qu'une projection à
+      4 tentatives par match ; une source sans tentatives prend les tentatives finales du joueur.
+    """
+    rows = []
+    for s, r in entries:
+        value, games, attempts = r[pct], r["gp"], r[att]
+        if value is None or games == 0 or s["weights"]["stats"][pct] <= 0:
+            continue
+        if not attempts and not value:
+            continue
+        per_game = attempts / games if attempts and games else None
+        rows.append((s["weights"]["stats"][pct], value, per_game))
+    known = [a for _, _, a in rows if a]
+    if not known:
+        return _weighted([(w, v) for w, v, _ in rows])[0]
+    fill = final_att_pg or sum(known) / len(known)
+    return _weighted([(w * (a or fill), v) for w, v, a in rows])[0]
+
+
 def compute_player(entries):
     """entries = [(slot, row)] pour un joueur. Retourne le dict de projection finale."""
     gp, gp_cov = _weighted([(s["weights"]["gp"], r["gp"]) for s, r in entries])
@@ -152,8 +177,8 @@ def compute_player(entries):
         if cat == "pts":
             out["stats_coverage"] = cov
 
-    for pct in ("fgp", "ftp"):
-        out[pct], _ = _weighted([(s["weights"]["stats"][pct], r[pct]) for s, r in entries])
+    for pct, att in (("fgp", "fga"), ("ftp", "fta")):
+        out[pct] = _weighted_pct(entries, pct, att, per_game.get(att))
 
     games = gp or 0
     for cat in COUNTING:

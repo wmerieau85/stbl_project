@@ -202,6 +202,10 @@ puis sa configuration dans `config/defaults.json` > `sources` (code, `urls` ou `
   `rank_avg` / `rank_tot`. Exportées (triées par `rank_avg` en H2H, `rank_tot` en Roto) dans `exports/final_<phase>_<saison>.csv` (`;` et virgule
   décimale par défaut, réglable dans l'onglet settings, `Pipeline | Export`).
 
+- FG% / FT% finaux : moyenne des pourcentages des sources, pondérée par le poids de la grille × les
+  tentatives par match de chaque source ; une source sans match ou à 0 réussite sans tentatives connues
+  (« .000 » des pages de stats réelles FantasyPros, souvent 0/0) est ignorée. FGM = FG% × FGA, FTM = FT% × FTA.
+
 ## Z-scores
 
 - Groupe de référence = `teams` × taille du roster (15 × 14 = 210 joueurs) : moyenne et
