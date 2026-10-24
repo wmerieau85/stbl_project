@@ -58,6 +58,8 @@ COMMANDS = {
                                 imports=True, history=True),
     "sources_accuracy": Command("Maintenance > Pertinence des sources", (_m("scripts.accuracy"),), history=True),
     "settings_check": Command("Maintenance > Contrôle settings", (_m("scripts.config_sheet", "check"),), db=False),
+    "settings_complete": Command("Maintenance > Compléter settings", (_m("scripts.config_sheet", "complete"),),
+                                 db=False),
 }
 
 RUNS_HEADER = ["Clé", "Demandé le", "Menu", "Statut", "Début", "Fin", "Durée (s)", "Log", "Détail"]

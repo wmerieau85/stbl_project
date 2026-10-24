@@ -29,6 +29,7 @@ on:
           - history_snapshot
           - sources_accuracy
           - settings_check
+          - settings_complete
       key:
         description: Clé de la ligne du journal (onglet runs)
         required: false
