@@ -27,6 +27,11 @@ ignorée par git) n'est qu'une copie, réécrite à chaque relecture de l'onglet
     python -m scripts.config_sheet pull      # onglets settings + players -> config/config.json
     python -m scripts.config_sheet push      # config/config.json -> onglets (remise à plat)
     python -m scripts.config_sheet migrate   # ancien format de l'onglet -> nouveau (une fois)
+    python -m scripts.config_sheet check     # onglet lisible ? + liste des paramètres absents
+    python -m scripts.config_sheet complete  # ajoute les paramètres absents (valeur en vigueur + aide)
+
+Un paramètre ajouté au code après la création de l'onglet n'y apparaît pas tout seul (il garde sa valeur
+par défaut) : « complete » l'insère à la fin de sa section, sans modifier ni déplacer les lignes existantes.
 """
 
 import argparse
@@ -856,9 +861,56 @@ def migrate(spreadsheet, tab=None):
     return tab
 
 
+# --------------------------------------------------------------------------- paramètres absents
+
+def missing_rows(rows, cfg=None, bootstrap=None):
+    """Lignes [section, paramètre, valeur en vigueur, aide] des paramètres simples absents de l'onglet."""
+    present = {(_norm(sec), _norm(par)) for sec, par, _, _ in _clean_rows(rows)}
+    for alias, official in PARAM_ALIASES.items():
+        if alias in present:
+            present.add((_norm(official[0]), _norm(official[1])))
+    known = {(_norm(sec), _norm(par)) for sec, par, *_ in PARAMS}
+    out = []
+    for row in build_rows(cfg, bootstrap)[1:]:
+        key = (_norm(row[0]), _norm(row[1]))
+        if key in known and key not in present:
+            out.append(row)
+    return out
+
+
+def complete(spreadsheet, tab=None):
+    """Insère les paramètres absents à la fin de leur section (ou en fin d'onglet). Renvoie les lignes ajoutées."""
+    from scripts.sheets import _cell
+
+    boot = load_bootstrap()
+    tab = tab or boot.get("config_tab") or "settings"
+    ws = spreadsheet.worksheet(tab)
+    rows = ws.get("A1:D3000")
+    add = missing_rows(rows)
+    if not add:
+        log.info("[Config] Onglet '%s' complet : aucun paramètre absent.", tab)
+        return []
+    last = {}                                    # section -> n° de sa dernière ligne (1 = en-tête)
+    for i, r in enumerate(rows, 1):
+        if r and str(r[0]).strip():
+            last[_norm(r[0])] = i
+    groups, tail = {}, []
+    for row in add:
+        at = last.get(_norm(row[0]))
+        (groups.setdefault(at, []) if at else tail).append([_cell(v) for v in row])
+    for at in sorted(groups, reverse=True):     # du bas vers le haut : les numéros restent valables
+        ws.insert_rows(groups[at], row=at + 1, value_input_option="RAW")
+    if tail:
+        ws.append_rows(tail, value_input_option="RAW", table_range="A1")
+    for row in add:
+        log.info("[Config] Ajouté : %s | %s = %s", row[0], row[1], row[2])
+    log.info("[Config] Onglet '%s' : %d paramètre(s) ajouté(s) avec leur valeur en vigueur.", tab, len(add))
+    return add
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description="Onglet config du classeur <-> configuration locale")
-    parser.add_argument("command", choices=["pull", "push", "migrate", "check"])
+    parser.add_argument("command", choices=["pull", "push", "migrate", "check", "complete"])
     parser.add_argument("-v", "--verbose", action="store_true")
     args = parser.parse_args(argv)
     logging.basicConfig(level=logging.DEBUG if args.verbose else logging.INFO,
@@ -875,8 +927,18 @@ def main(argv=None):
         if args.command == "pull":
             pull(book)
         elif args.command == "check":
-            parse_rows(_read_tab(book, boot.get("config_tab") or "settings"))
+            rows = _read_tab(book, boot.get("config_tab") or "settings")
+            parse_rows(rows)
             print("Onglet config lisible, aucune erreur.")
+            absent = missing_rows(rows)
+            if absent:
+                print(f"{len(absent)} paramètre(s) absent(s) de l'onglet (valeur par défaut utilisée) ; "
+                      "Maintenance > Compléter settings pour les ajouter :")
+                for sec, par, val, _ in absent:
+                    print(f"  {sec} | {par} = {val}")
+        elif args.command == "complete":
+            added = complete(book)
+            print(f"{len(added)} paramètre(s) ajouté(s) à l'onglet." if added else "Aucun paramètre absent.")
         elif args.command == "push":
             rows = push(book)
             print(f"Onglet '{boot.get('config_tab')}' réécrit ({len(rows) - 1} lignes).")

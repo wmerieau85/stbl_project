@@ -453,7 +453,8 @@ sont acceptés (`python -m scripts.run --list` les affiche avec leurs commandes)
 | Draft > Yahoo Draft / Yahoo Rankings | `yahoo_draft` / `yahoo_rankings` | `scripts.yahoo draft` / `rankings` |
 | Yahoo > MàJ rosters / Standings + Team Log | `yahoo_rosters` / `yahoo_stats` | `scripts.yahoo rosters` / `stats` |
 | Saison > Projections / Moves / Tout mettre à jour | `season_update` / `season_moves` / `season_all` | `scripts.season update` / `moves` / rosters + stats + update + moves |
-| Maintenance > Contrôle settings | `settings_check` | `scripts.config_sheet check` |
+| Maintenance > Contrôle settings | `settings_check` | `scripts.config_sheet check` (liste aussi les paramètres absents) |
+| Maintenance > Compléter settings | `settings_complete` | `scripts.config_sheet complete` : ajoute les paramètres absents de l'onglet (valeur en vigueur + aide) à la fin de leur section |
 | Maintenance > Photo des sources (et chaque matin) | `history_snapshot` | `scripts.history daily` |
 | Maintenance > Pertinence des sources | `sources_accuracy` | `scripts.accuracy` |
 

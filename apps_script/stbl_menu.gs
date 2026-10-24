@@ -31,7 +31,8 @@ var LABELS = {
   season_all: 'Saison > Tout mettre à jour',
   history_snapshot: 'Maintenance > Photo des sources',
   sources_accuracy: 'Maintenance > Pertinence des sources',
-  settings_check: 'Maintenance > Contrôle settings'
+  settings_check: 'Maintenance > Contrôle settings',
+  settings_complete: 'Maintenance > Compléter settings'
 };
 
 function onOpen() {
@@ -57,6 +58,7 @@ function onOpen() {
       .addItem('Tout mettre à jour', 'run_season_all'))
     .addSubMenu(ui.createMenu('Maintenance')
       .addItem('Contrôle settings', 'run_settings_check')
+      .addItem('Compléter settings', 'run_settings_complete')
       .addItem('Photo des sources', 'run_history_snapshot')
       .addItem('Pertinence des sources', 'run_sources_accuracy')
       .addItem('Dernier lancement', 'lastRun')
@@ -86,6 +88,7 @@ function run_season_all() { launch_('season_all'); }
 function run_history_snapshot() { launch_('history_snapshot'); }
 function run_sources_accuracy() { launch_('sources_accuracy'); }
 function run_settings_check() { launch_('settings_check'); }
+function run_settings_complete() { launch_('settings_complete'); }
 
 function token_() {
   var token = PropertiesService.getScriptProperties().getProperty(TOKEN_PROPERTY);
