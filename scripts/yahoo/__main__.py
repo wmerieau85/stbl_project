@@ -33,7 +33,7 @@ def _sync_config(settings, league):
         return league
     try:
         from scripts import config_sheet
-        from scripts.sheets import SheetsError, open_spreadsheet
+        from scripts.sheets import open_spreadsheet
 
         config_sheet.pull(open_spreadsheet(gs["draft_spreadsheet_id"], settings), gs["config_tab"])
         return load_league()

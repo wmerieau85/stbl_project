@@ -16,12 +16,13 @@ import csv
 import logging
 import os
 import sys
-from datetime import date, datetime
+from datetime import date
 
 from scripts.config import EXPORTS_DIR, load_league, load_settings, season_reco_tab
 from scripts.draft.pool import load_pool
 from scripts.season import opponents, report
-from scripts.season.engine import CATEGORY_ORDER, optimize_team, project_team, standings_projection, gp_inconsistencies
+from scripts.draft.engine import CATEGORY_ORDER
+from scripts.season.engine import optimize_team, project_team, standings_projection, gp_inconsistencies
 from scripts.season.schedule import load_games
 from scripts.yahoo import public
 

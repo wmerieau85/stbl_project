@@ -18,24 +18,9 @@ n'y écrit jamais ; il recopie seulement la formule de la 1re ligne sur les lign
 import logging
 
 from scripts.names import name_key
+from scripts.sheets import column_index as _col_index, column_letter as _col_letter
 
 log = logging.getLogger(__name__)
-
-
-def _col_index(letter):
-    n = 0
-    for ch in letter.strip().upper():
-        n = n * 26 + ord(ch) - 64
-    return n - 1
-
-
-def _col_letter(index):
-    index += 1
-    out = ""
-    while index:
-        index, rem = divmod(index - 1, 26)
-        out = chr(65 + rem) + out
-    return out
 
 
 def layout(gs):
