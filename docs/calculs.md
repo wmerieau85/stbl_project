@@ -32,6 +32,10 @@ Détail du fonctionnement. Commandes : voir le [README](../README.md).
 - Groupe de référence = `teams` × taille du roster (15 × 14 = 210 joueurs) : moyenne et
   écart-type sont calculés sur les joueurs réellement draftés, en 3 passes (tous les
   joueurs, puis les 210 meilleurs, etc.).
+- `Optim | Draft | Minimum number of games` : matchs minimum pour entrer dans le groupe de référence,
+  exprimé pour une saison complète (82 matchs) et ramené aux matchs de chaque phase (seuil × matchs
+  maximum de la phase / 82). Exemple avec 20 : 20 en draft, 1 en début de saison pour la phase
+  season (3 matchs joués), 2 en fin de saison pour lt (8 matchs restants).
 - AVG = moyennes par match (utile en H2H), TOT = totaux sur la saison (Roto, intègre les matchs joués).
 - FG% / FT% : z-score de l'impact `(pourcentage - pourcentage du groupe) × tentatives`.
 - TO : signe inversé. Somme = Σ poids × z ; rang 1 = meilleure somme.

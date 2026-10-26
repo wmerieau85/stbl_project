@@ -104,7 +104,8 @@ PARAMS = [
     ("Sheets | Season", "Rosters Source", "league", "season.roster_source", "choice:yahoo,sheet",
      "yahoo (effectifs réels) ou sheet (colonne Team Season de l'onglet Projections, sinon Team Draft)"),
     ("Optim | Draft", "Minimum number of games", "league", "zscore.min_gp", "int",
-     "z-scores : matchs projetés pour entrer dans le groupe de référence"),
+     "z-scores : matchs pour entrer dans le groupe de référence, sur une saison complète (ramené aux matchs "
+     "de la phase : season, fin de saison)"),
     ("Optim | Draft", "Iterations", "league", "zscore.iterations", "int", "z-scores : recalculs du groupe de référence"),
     ("Optim | Draft", "Standby interval (seconds)", "league", "google_sheets.poll_seconds", "int",
      "watch : lecture des choix toutes les N secondes"),

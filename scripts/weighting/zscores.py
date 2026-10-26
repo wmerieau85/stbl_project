@@ -3,7 +3,10 @@
 Paramètres dans l'onglet settings :
 - teams x somme du roster = taille du groupe de joueurs draftés (15 x 14 = 210) ;
 - categories : poids de chaque catégorie dans la somme (0 = catégorie ignorée / punt) ;
-- zscore.min_gp : matchs projetés minimum pour entrer dans le groupe de référence ;
+- zscore.min_gp : matchs minimum pour entrer dans le groupe de référence, pour une saison complète
+  (games.per_slot, 82) ; ramené à l'échelle de la phase : seuil x (matchs maximum de la phase / 82).
+  Ainsi la phase season (stats réelles, 3 matchs joués en début de saison) ou lt / st en fin de
+  saison gardent un groupe de référence, au lieu de z-scores vides ;
 - zscore.iterations : nombre de passes (groupe recalculé sur les N meilleurs à chaque passe).
 
 Méthode, pour chaque mode (AVG puis TOT) :
@@ -76,10 +79,18 @@ def reference_params(players, league):
     return {mode: _compute_mode(work, league, mode) for mode in MODES}
 
 
+def _phase_min_gp(players, league):
+    """Seuil de matchs du groupe de référence, à l'échelle des matchs de la phase (voir en-tête)."""
+    min_gp = float(league.get("zscore", {}).get("min_gp", 0) or 0)
+    full = float(league.get("games", {}).get("per_slot", 82) or 82)
+    max_gp = max(((p.get("gp") or 0) for p in players), default=0)
+    return min_gp * min(1.0, max_gp / full)
+
+
 def _compute_mode(players, league, mode):
     weights = {cat: float(league["categories"].get(cat, 0)) for cat in CATEGORIES}
     size = pool_size(league)
-    min_gp = float(league.get("zscore", {}).get("min_gp", 0) or 0)
+    min_gp = _phase_min_gp(players, league)
     iterations = max(1, int(league.get("zscore", {}).get("iterations", 3)))
     eligible = [p for p in players if (p.get("gp") or 0) > 0 and (p.get("gp") or 0) >= min_gp]
     pool = eligible
