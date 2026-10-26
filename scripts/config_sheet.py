@@ -26,7 +26,6 @@ ignorée par git) n'est qu'une copie, réécrite à chaque relecture de l'onglet
 
     python -m scripts.config_sheet pull      # onglets settings + players -> config/config.json
     python -m scripts.config_sheet push      # config/config.json -> onglets (remise à plat)
-    python -m scripts.config_sheet migrate   # ancien format de l'onglet -> nouveau (une fois)
     python -m scripts.config_sheet check     # onglet lisible ? + liste des paramètres absents
     python -m scripts.config_sheet complete  # ajoute les paramètres absents (valeur en vigueur + aide)
 
@@ -42,6 +41,7 @@ import sys
 
 from scripts.config import (CATEGORY_LABELS_SHEET, load_bootstrap, load_config, load_default_config, save_bootstrap,
                             save_config, validate_runtime_config)
+from scripts.sheets import cell_number
 
 log = logging.getLogger(__name__)
 
@@ -253,7 +253,7 @@ def _parse_bool(text, label):
 
 def _number(text, label):
     try:
-        return float(str(text).strip().replace("\u00a0", "").replace(" ", "").replace(",", "."))
+        return cell_number(text)
     except ValueError:
         raise ValueError(f"Onglet config : « {label} » = '{text}', nombre attendu.") from None
 
@@ -649,7 +649,7 @@ def _apply_transco(conf, entries):
 
 def _maybe_number(text):
     try:
-        value = float(str(text).strip().replace(",", "."))
+        value = cell_number(text)
         return int(value) if value.is_integer() else value
     except ValueError:
         return str(text).strip()
@@ -833,34 +833,6 @@ def push(spreadsheet, tab=None, league=None):
     return rows
 
 
-def migrate(spreadsheet, tab=None):
-    """Ancien format (blocs) -> configuration locale, copie de sauvegarde, puis onglet au nouveau format."""
-    from scripts import config_legacy
-    from scripts.sheets import write_tab
-
-    boot = load_bootstrap()
-    tab = tab or boot.get("config_tab") or "settings"
-    rows = spreadsheet.worksheet(tab).get("A1:Z600")
-    cfg = load_config()
-    league, settings, sources, grids = config_legacy.parse_rows(rows, cfg["league"], cfg["settings"], cfg["sources"])
-    cfg.update(league=league, settings=settings, sources=sources)
-    import csv
-    import io
-
-    for phase, text in grids.items():
-        cfg["grids"][phase] = [r for r in csv.reader(io.StringIO(text), delimiter=";") if any(c.strip() for c in r)]
-    gs = cfg["league"].get("google_sheets", {})
-    gs.pop("draft_spreadsheet_id", None)
-    gs.pop("config_tab", None)
-    aliases = _read_aliases(spreadsheet, gs.get("alias_tab") or "players")
-    if aliases:
-        cfg["aliases"] = dict(sorted(aliases.items()))
-    save_config(cfg)
-    write_tab(spreadsheet, f"{tab}_old", rows)
-    push(spreadsheet, tab)
-    return tab
-
-
 # --------------------------------------------------------------------------- paramètres absents
 
 def missing_rows(rows, cfg=None, bootstrap=None):
@@ -910,7 +882,7 @@ def complete(spreadsheet, tab=None):
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description="Onglet config du classeur <-> configuration locale")
-    parser.add_argument("command", choices=["pull", "push", "migrate", "check", "complete"])
+    parser.add_argument("command", choices=["pull", "push", "check", "complete"])
     parser.add_argument("-v", "--verbose", action="store_true")
     args = parser.parse_args(argv)
     logging.basicConfig(level=logging.DEBUG if args.verbose else logging.INFO,
@@ -939,12 +911,9 @@ def main(argv=None):
         elif args.command == "complete":
             added = complete(book)
             print(f"{len(added)} paramètre(s) ajouté(s) à l'onglet." if added else "Aucun paramètre absent.")
-        elif args.command == "push":
+        else:
             rows = push(book)
             print(f"Onglet '{boot.get('config_tab')}' réécrit ({len(rows) - 1} lignes).")
-        else:
-            tab = migrate(book)
-            print(f"Onglet '{tab}' converti au nouveau format (ancien contenu copié dans '{tab}_old').")
     except ValueError as exc:
         log.error("%s", exc)
         return 1
