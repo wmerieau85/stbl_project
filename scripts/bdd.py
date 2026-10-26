@@ -45,6 +45,17 @@ def read_rows(book, gs):
         return []
 
 
+def phases_in(rows, gs):
+    """Phases présentes dans l'onglet bdd (colonne Phase), dans l'ordre d'apparition."""
+    col = layout(gs)["phase"]
+    out = []
+    for r in rows[1:]:
+        phase = _cell(r, col).lower()
+        if phase and phase not in out:
+            out.append(phase)
+    return out
+
+
 def formula_columns(book, gs):
     """{"team_draft": bool, "team_season": bool} : colonne remplie par des formules (non écrite)."""
     cols = layout(gs)
