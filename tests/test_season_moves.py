@@ -304,6 +304,15 @@ def test_auto_free_agents_never_drop_an_injured_reserve_player():
     assert any("aucun joueur libre ne me fait gagner" in str(c) for r in moves.rows(out) for c in r)
 
 
-def test_auto_free_agent_setting_is_read():
-    cfg, _ = C.parse_rows(C.build_rows() + [["Moves | Compare", "Auto Free Agent", ""]])
+@pytest.mark.parametrize("param,value", [("Auto Free Agent", ""), ("auto", "auto free agent"), ("auto", "Free Agent"),
+                                         ("free agent", "auto"), ("", "auto free agent"),
+                                         ("manager", "auto free agent")])
+def test_auto_free_agent_setting_is_read(param, value):
+    """Le choix peut être saisi dans la colonne Paramètre ou (en tout ou partie) dans la colonne Valeur."""
+    cfg, _ = C.parse_rows(C.build_rows() + [["Moves | Compare", param, value]])
     assert cfg["league"]["moves"]["compare"] == {"type": "auto free agent", "manager": ""}
+
+
+def test_auto_with_a_manager_is_still_a_trade_search():
+    cfg, _ = C.parse_rows(C.build_rows() + [["Moves | Compare", "auto", "Cliffy"]])
+    assert cfg["league"]["moves"]["compare"] == {"type": "auto", "manager": "Cliffy"}

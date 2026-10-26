@@ -371,7 +371,8 @@ def build_rows(cfg=None, bootstrap=None):
     compare = moves.get("compare") or {}
     add(MOVES_COMPARE_SECTION, compare.get("type", ""), compare.get("manager", ""),
         "manager + nom du manager (échange), free agent (joueurs libres), auto + manager facultatif "
-        "(recherche d'échanges sans joueur saisi) ou auto free agent (recherche de joueurs libres sans joueur saisi)")
+        "(recherche d'échanges sans joueur saisi) ou auto free agent (recherche de joueurs libres sans joueur saisi ; "
+        "auto + free agent en Valeur accepté aussi)")
 
     codes = [(conf.get("code"), name, conf) for name, conf in sources.items() if conf.get("code")]
     for code, _, conf in codes:
@@ -500,7 +501,11 @@ def parse_rows(rows, cfg=None, bootstrap=None):
                 number = key[len(_norm(MOVES_PLAYER_SECTION)):].strip() or "1"
                 moves_players[int(_number(number, section))] = {"manager": param, "player": value}
             elif key == _norm(MOVES_COMPARE_SECTION):
-                kind = _norm(param)
+                kind, target = _norm(param), _norm(value)
+                # recherche auto de joueurs libres saisie (en tout ou partie) dans la colonne Valeur :
+                # « auto | free agent », « free agent | auto », « auto | auto free agent »... même sens
+                if target == "auto free agent" or {kind, target} == {"auto", "free agent"}:
+                    kind, value = "auto free agent", ""
                 if not kind:
                     moves_compare = {}
                 elif kind not in ("manager", "free agent", "auto", "auto free agent"):

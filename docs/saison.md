@@ -46,7 +46,7 @@ Réglages dans l'onglet settings :
 | `Moves | Compare` | `manager` | nom du manager |
 | `Moves | Compare` | `free agent` | (vide) : je lâche les joueurs listés, qui doivent être les miens |
 | `Moves | Compare` | `auto` | (vide = tous les managers, ou un nom de manager) : recherche d'échanges sans joueur saisi, lignes `Moves | Player` ignorées |
-| `Moves | Compare` | `auto free agent` | (vide) : recherche de joueurs libres sans joueur saisi (qui lâcher, qui prendre), lignes `Moves | Player` ignorées |
+| `Moves | Compare` | `auto free agent` | (vide) : recherche de joueurs libres sans joueur saisi (qui lâcher, qui prendre), lignes `Moves | Player` ignorées ; `auto` + `free agent` (colonne Valeur) accepté aussi |
 | `Optim | Moves` | `Value tolerance` | écart de valeur accepté, 10 % par défaut |
 | `Optim | Moves` | `Max results` / `Min results` / `Free agent results` / `Free agent shortlist` | 20 / 10 / 6 / 15 |
 | `Optim | Moves` | `Auto max players` / `Auto shortlist` / `Auto per manager` / `Auto min partner gain` | 2 / 40 / 5 / 0 |
