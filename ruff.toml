@@ -1,0 +1,6 @@
+# Contrôle du code : python -m ruff check .
+# E9 = erreurs de syntaxe, F = pyflakes (imports inutilisés, noms inconnus, variables jamais lues...).
+target-version = "py312"
+
+[lint]
+select = ["E9", "F"]

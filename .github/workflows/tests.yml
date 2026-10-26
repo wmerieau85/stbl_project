@@ -1,0 +1,31 @@
+# Tests et contrôle du code à chaque envoi sur GitHub et à chaque pull request.
+name: tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Dépendances
+        run: pip install -r requirements-dev.txt
+
+      - name: Contrôle du code (ruff)
+        run: ruff check .
+
+      - name: Tests
+        run: python -m pytest -q
