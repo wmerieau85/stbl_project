@@ -2,7 +2,7 @@ import pytest
 
 from scripts.config import load_source_config
 from scripts.sources.base import complete_stats, standardize_stats
-from scripts.sources.espn import TEAM_CODES, parse_espn
+from scripts.sources.espn import parse_espn
 from scripts.sources.rotoballer import parse_rotoballer
 from scripts.weighting.engine import compute_player
 from scripts.weighting.weights import load_grid

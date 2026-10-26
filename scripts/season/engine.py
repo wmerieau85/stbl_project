@@ -23,11 +23,11 @@ import logging
 import math
 from collections import deque
 from dataclasses import dataclass, field
-from datetime import date, timedelta
+from datetime import timedelta
 
 import numpy as np
 
-from scripts.draft.engine import CATEGORY_ORDER, LOWER_IS_BETTER, UNCERTAINTY, S, category_values, roto_points
+from scripts.draft.engine import LOWER_IS_BETTER, UNCERTAINTY, S, category_values, roto_points
 from scripts.draft.pool import STATS
 from scripts.names import strip_accents
 from scripts.season.schedule import games_by_team, team_code

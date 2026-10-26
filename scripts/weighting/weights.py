@@ -23,6 +23,7 @@ import os
 import re
 
 from scripts.config import load_grid_rows, load_sources_config
+from scripts.sheets import cell_number
 
 log = logging.getLogger(__name__)
 _WARNED = set()   # avertissement « autre saison » une seule fois par code
@@ -118,7 +119,7 @@ def parse_weight(text):
     if not text:
         return 0.0
     percent = text.endswith("%")
-    value = float(text.rstrip("%").replace(",", "."))
+    value = cell_number(text.rstrip("%"))
     if percent or value > 1:
         value /= 100.0
     if value < 0:

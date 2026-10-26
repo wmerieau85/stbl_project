@@ -162,7 +162,11 @@ def pull_file(drive, name, path):
 
 
 def push_file(drive, name, path, before=None):
-    """Renvoie le fichier sur Drive s'il a changé depuis pull_file. Renvoie True si envoyé."""
+    """Renvoie le fichier sur Drive s'il a changé depuis pull_file. Renvoie True si envoyé.
+
+    Refuse l'envoi si le fichier Drive a été modifié depuis pull_file (autre lancement, PC ou GitHub,
+    pendant celui-ci) : le dernier arrivé écraserait sinon le travail de l'autre sans le dire.
+    """
     current = _md5(path)
     if current is None or current == before:
         log.info("[Drive] %s inchangé : rien à renvoyer.", name)
@@ -170,6 +174,10 @@ def push_file(drive, name, path, before=None):
     remote = drive.find(name)
     if remote is None:
         raise CloudError(f"{name} absent du dossier Drive.")
+    if before is not None and remote.get("md5Checksum") and remote["md5Checksum"] != before:
+        raise CloudError(f"{name} modifié sur Drive pendant ce lancement ({remote.get('modifiedTime', '')}, "
+                         "par un autre lancement, PC ou GitHub) : version locale non renvoyée pour ne pas "
+                         "l'écraser. Relancez la commande une fois l'autre lancement terminé.")
     drive.upload(remote, path)
     log.info("[Drive] %s renvoyé (%.1f Mo).", name, os.path.getsize(path) / 1e6)
     return True
@@ -247,6 +255,9 @@ def run_synced(main, argv=None, write=True):
     if write:
         try:
             push_db(drive, before)
+        except CloudError as exc:
+            log.error("[Drive] %s", exc)
+            return rc or 1
         except Exception as exc:
             log.error("[Drive] Base non renvoyée (%s) : relancez la commande ou déposez-la à la main.", exc)
             return rc or 1

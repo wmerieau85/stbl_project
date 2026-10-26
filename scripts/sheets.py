@@ -18,6 +18,32 @@ class SheetsError(RuntimeError):
     pass
 
 
+def column_index(letter):
+    """Lettre(s) de colonne -> index (A = 0). ValueError si ce ne sont pas des lettres A-Z."""
+    letters = str(letter).strip().upper()
+    if not letters or not all("A" <= ch <= "Z" for ch in letters):
+        raise ValueError(f"Colonne Google Sheets invalide : {letter!r}.")
+    n = 0
+    for ch in letters:
+        n = n * 26 + ord(ch) - 64
+    return n - 1
+
+
+def column_letter(index):
+    """Index (A = 0) -> lettre(s) de colonne."""
+    index += 1
+    out = ""
+    while index:
+        index, rem = divmod(index - 1, 26)
+        out = chr(65 + rem) + out
+    return out
+
+
+def cell_number(text):
+    """Nombre saisi dans le classeur (« 1 234,5 », « 0.25 ») -> float ; ValueError si illisible."""
+    return float(str(text).strip().replace("\u00a0", "").replace(" ", "").replace(",", "."))
+
+
 def _service_account_path(settings=None):
     settings = settings or load_settings()
     path = settings.get("google", {}).get("service_account_file") or ""

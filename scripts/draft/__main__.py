@@ -3,10 +3,7 @@
 Commandes :
     python -m scripts.draft reco                  # une recommandation (choix lus dans Google Sheets)
     python -m scripts.draft watch                 # veille : recalcule à chaque nouveau choix saisi
-    python -m scripts.draft push-projections      # projections finales, toutes phases -> onglet bdd (C = phase)
-    python -m scripts.draft push-detail           # projections de chaque source -> onglet bdd_detail (aussi fait par push-projections)
-    python -m scripts.draft config-push           # configuration locale -> onglets "settings" et "players" (remise à plat)
-    python -m scripts.draft config-pull           # onglets "settings" et "players" -> config/config.json
+    python -m scripts.draft push-projections      # projections finales, toutes phases -> onglets bdd (C = phase) et bdd_detail
     python -m scripts.draft check                 # vérifie l'accès au classeur (compte de service)
 
 Hors ligne (tests, mock draft) :
@@ -45,8 +42,7 @@ log = logging.getLogger("stbl.draft")
 
 def parse_args(argv=None):
     parser = argparse.ArgumentParser(description="Assistant de draft STBL (roto)")
-    parser.add_argument("command", choices=["reco", "watch", "push-projections", "push-detail", "config-push", "config-pull",
-                                            "check"])
+    parser.add_argument("command", choices=["reco", "watch", "push-projections", "check"])
     parser.add_argument("--season")
     parser.add_argument("--phase", help="push-projections : n'écrire que cette phase (défaut : toutes)")
     parser.add_argument("--xlsx", help="lire les choix dans un export Excel (colonne Team Draft de l'onglet bdd, sinon onglet draft_res)")
@@ -384,18 +380,6 @@ def main(argv=None):
             print(f"Classeur ouvert : {book.title} (onglets : {', '.join(ws.title for ws in book.worksheets())})")
         elif args.command == "push-projections":
             push_projections(session)
-        elif args.command == "push-detail":
-            gs = session.gs
-            book = session.book() if not gs.get("projections_spreadsheet_id") else \
-                open_spreadsheet(gs["projections_spreadsheet_id"], session.settings)
-            push_detail(book, gs.get("detail_tab") or "bdd_detail",
-                        session.args.season or session.settings["active_season"])
-        elif args.command == "config-push":
-            config_sheet.push(session.book(), session.gs.get("config_tab") or "settings", session.league)
-            print(f"Onglet '{session.gs.get('config_tab') or 'config'}' réécrit à partir de la configuration locale.")
-        elif args.command == "config-pull":
-            config_sheet.pull(session.book(), session.gs.get("config_tab") or "settings")
-            print("config/config.json mis à jour.")
         elif args.command == "watch":
             watch(session)
         else:

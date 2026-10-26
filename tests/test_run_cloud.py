@@ -90,6 +90,16 @@ def test_push_db_only_when_changed(drive):
     assert cloud.push_db(d, before) is True and http.files["db"]["content"] == b"nouvelle base"
 
 
+def test_push_db_refuses_to_overwrite_a_concurrent_change(drive):
+    d, http, tmp = drive
+    before = cloud.pull_db(d)
+    http.files["db"]["content"] = b"base d'un autre lancement"
+    (tmp / "database.sqlite").write_bytes(b"nouvelle base")
+    with pytest.raises(cloud.CloudError, match="modifié sur Drive"):
+        cloud.push_db(d, before)
+    assert http.uploads == [] and http.files["db"]["content"] == b"base d'un autre lancement"
+
+
 def test_missing_db_explains_initial_upload(drive):
     d, http, _ = drive
     del http.files["db"]

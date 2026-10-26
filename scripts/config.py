@@ -190,20 +190,6 @@ def validate_sources_config(sources):
     return sources_cfg
 
 
-def _column_number(value):
-    if not isinstance(value, str):
-        raise ValueError("Colonne Google Sheets invalide : une chaîne de lettres attendue.")
-    letters = value.strip().upper()
-    if not letters or not letters.isalpha():
-        raise ValueError(f"Colonne Google Sheets invalide : {value!r}.")
-    index = 0
-    for char in letters:
-        if not ("A" <= char <= "Z"):
-            raise ValueError(f"Colonne Google Sheets invalide : {value!r}.")
-        index = index * 26 + (ord(char) - ord("A") + 1)
-    return index
-
-
 def validate_league(league):
     """Vérifie la configuration de la ligue."""
     league_map = _validate_mapping(league, "league")
@@ -231,7 +217,9 @@ def validate_league(league):
         if not isinstance(start_col, str) or not start_col.strip():
             raise ValueError("league.google_sheets.projections_start_col doit être une chaîne non vide.")
         start_col = start_col.strip()
-        if _column_number(start_col) < 3:
+        from scripts.sheets import column_index   # import local : sheets importe config
+
+        if column_index(start_col) < 2:
             raise ValueError(
                 "league.google_sheets.projections_start_col doit être une colonne à partir de C; "
                 "A et B sont réservés aux formules de l'onglet bdd."

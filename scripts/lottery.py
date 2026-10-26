@@ -22,15 +22,17 @@ import logging
 import random
 import sys
 
+from scripts.sheets import cell_number
+
 log = logging.getLogger(__name__)
 
 
 def _number(value):
-    text = str(value if value is not None else "").strip().replace("\u00a0", "").replace(" ", "").replace(",", ".")
+    text = str(value if value is not None else "").strip()
     if not text:
         return 0.0
     try:
-        return float(text.rstrip("%"))
+        return cell_number(text.rstrip("%"))
     except ValueError:
         return None
 

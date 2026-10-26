@@ -1,6 +1,6 @@
 """Mise en forme du module saison : onglet season_reco, détail des effectifs (aussi en CSV), résumé console."""
 
-from scripts.draft.engine import S, category_values
+from scripts.draft.engine import S
 from scripts.draft.pool import CATEGORY_LABELS
 from scripts.season.engine import BUCKETS, category_gaps
 

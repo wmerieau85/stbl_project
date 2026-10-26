@@ -1,8 +1,17 @@
 # STBL – Projections fantasy NBA
 
-Pipeline qui importe des projections de joueurs NBA depuis plusieurs sources,
-les harmonise dans une base SQLite et relie les joueurs entre sources.
-Objectif final : alimenter un Google Sheets d'optimisation de ligue fantasy.
+Outil d'aide à la décision pour une ligue fantasy NBA Yahoo (Rotisserie) :
+
+1. importe les projections de joueurs de plusieurs sites (web, API, fichiers CSV) dans une base SQLite ;
+2. relie les joueurs d'un site à l'autre ;
+3. combine les projections avec des poids réglables par site et classe les joueurs (z-scores) ;
+4. recommande les choix pendant la draft, puis simule le classement, les échanges et les joueurs libres
+   en saison ;
+5. se pilote depuis Google Sheets : l'onglet `settings` porte tous les réglages et le menu **STBL** du
+   classeur lance les calculs sur GitHub Actions.
+
+Le détail des calculs est dans [`docs/`](docs/) : [données et calculs](docs/calculs.md),
+[draft et Yahoo](docs/draft.md), [module saison](docs/saison.md).
 
 ## Installation
 
@@ -12,25 +21,7 @@ python -m venv .venv
 pip install -r requirements.txt
 ```
 
-## Utilisation
-
-Toujours lancer depuis la racine du projet.
-
-```bash
-python main.py                          # réglages de l'onglet settings
-python main.py --stage ros              # projections "rest of season"
-python main.py --sources fantasypros    # une seule source
-python main.py --skip-link -v           # sans rapprochement, logs détaillés
-python main.py --skip-import            # recalcule seulement les projections finales
-python -m scripts.weighting --phase draft   # pondération d'une phase
-python -m scripts.exports               # réexporte seulement les projections brutes
-
-python main.py --file fanscout=C:\chemin\table.csv   # fichier CSV précis
-python -m scripts.sources.cbs           # une source seule
-python -m scripts.player_linker         # relancer le rapprochement
-```
-
-## Récapitulatif des commandes
+## Commandes
 
 Toutes se lancent depuis la racine du projet, venv activé. L'onglet `settings` est relu à chaque
 lancement (saison, étape `Actual Phase`, sources, grilles).
@@ -57,12 +48,25 @@ lancement (saison, étape `Actual Phase`, sources, grilles).
 | En saison | `python -m scripts.season moves` | échanges ou joueurs libres simulés (lignes `Moves | ...`), onglet `moves_reco` |
 | Maintenance | `python -m scripts.player_linker` | relance le rapprochement des joueurs |
 | Maintenance | `python -m scripts.config_sheet push` | réécrit les onglets settings / players depuis la configuration locale (remise à plat) |
-| Maintenance | `python -m pytest -q` | tests |
+| Maintenance | `python -m pytest -q` | tests (voir [Tests](#tests-et-contrôle-du-code)) |
 
 Étape active (`Actual Phase`) : `draft` n'importe que les sources actives en draft et ne recalcule
 que la phase draft ; `ros` importe les projections ros et les stats par période, et ne recalcule
 que lt / st. Les autres phases restent telles quelles en base et sont réécrites à l'identique dans
 `bdd`. Une phase sans aucune donnée garde son calcul précédent.
+
+Autres options utiles :
+
+```bash
+python main.py --stage ros              # force l'étape (sinon Actual Phase)
+python main.py --sources fantasypros    # une seule source
+python main.py --file fanscout=C:\chemin\table.csv   # fichier CSV précis
+python main.py --skip-link -v           # sans rapprochement, logs détaillés
+python main.py --skip-yahoo             # sans le pré-classement / ADP Yahoo
+python -m scripts.weighting --phase draft   # pondération d'une phase seule
+python -m scripts.exports               # réexporte seulement les projections brutes
+python -m scripts.sources.cbs           # une source seule
+```
 
 ## Configuration
 
@@ -76,7 +80,7 @@ Une ligne par information, quatre colonnes `Section | Paramètre | Valeur | Aide
 | `Optim \| Draft / Season` | z-scores, veille, candidats, simulations, horizon court terme |
 | `Pipeline \| Import / Export` | réglages HTTP, séparateur et décimale des CSV |
 | `Draft \| Order`, `Draft \| Keepers`, `Transco \| Managers` | ordre du 1er tour, keepers (mode `sheet` seulement : sinon Yahoo fait foi), équipes Yahoo |
-| `Sources \| Types / Draft / RoS / Active / Import Files / Sea / L30 / L15 / L07` | par code de site (`cbs`, `fp`, `fs`, `dk`, `le`, `nc`, `fn`, `es`, `rb`) : URL ou fichier par étape, sources actives par étape, dossiers d'import, fenêtres de stats réelles |
+| `Sources \| Types / Draft / RoS / Active / Import Files / Sea / L30 / L15 / L07` | par code de site (`cbs`, `fp`, `fs`, `dk`, `le`, `nc`, `fn`, `es`, `rb`, `rw`, `dr`, `np`) : URL ou fichier par étape, sources actives par étape, dossiers d'import, fenêtres de stats réelles |
 | `Grid <phase> \| GP / MIN / STATS / <catégorie>` | grilles de pondération : code de la ligne « site » -> poids (chaque niveau = 100 %) |
 | `Transco \| <colonne> / percent_scale / Player / Team / Positions...` | lecture des sites : colonne du site pour chaque colonne standard, options de lecture |
 
@@ -94,7 +98,7 @@ l'éviter) : une erreur de saisie arrête le calcul avec un message, une ligne i
 python -m scripts.config_sheet pull      # onglets settings + players -> config/config.json
 python -m scripts.config_sheet check     # contrôle l'onglet sans rien écrire
 python -m scripts.config_sheet push      # remise à plat des onglets depuis la configuration locale
-python -m scripts.config_sheet migrate   # ancien format (blocs) -> nouveau, copie dans config_old
+python -m scripts.config_sheet complete  # ajoute à l'onglet les paramètres absents (valeur en vigueur + aide)
 ```
 
 Codes de la ligne « site » des grilles, sans année = saison active (`Settings | League | Actual Season`) :
@@ -136,312 +140,11 @@ Pour les sources CSV, l'import prend le fichier le plus récent de l'étape acti
 (ou celui passé avec `--file`). Totaux ou moyennes par match : détection
 automatique. Les CSV déposés ne sont pas versionnés.
 
-Lorsqu'un onglet `settings` existant ne connaît pas encore les codes `es` et `rb`, sa lecture
-(`python -m scripts.config_sheet pull`, ou la synchronisation habituelle du pipeline) ajoute automatiquement
-les deux sources et les poids livrés à la copie locale, en conservant les poids relatifs des sources
-déjà configurées. Cela ne modifie pas le classeur Google Sheets. Pour y faire apparaître les nouveaux
-réglages, utilisez `python -m scripts.config_sheet push` après avoir vérifié la copie locale : cette
-commande réécrit tout l'onglet `settings` et `players`.
-
-## Structure
-
-```
-main.py                      orchestration du pipeline
-scripts/config.py            chemins et chargement de la configuration
-scripts/db.py                schéma SQLite, migration, écriture des projections
-scripts/names.py             nettoyage des noms et clé de rapprochement
-scripts/http_client.py       requêtes (timeout, nouvelles tentatives, pause)
-scripts/sources/base.py      logique commune à toutes les sources
-scripts/sources/csv_source.py  base des sources alimentées par un fichier CSV
-scripts/sources/cbs.py       CBS Sports (une page par poste)
-scripts/sources/fantasypros.py
-scripts/sources/fanscout.py  FanScout (CSV)
-scripts/sources/draftkick.py DraftKick (CSV)
-scripts/sources/lineupexperts.py LineupExperts (CSV exporté depuis le navigateur)
-scripts/sources/ninecat.py     9cat.co.il (API 365scores)
-scripts/sources/fantasynerds.py Fantasy Nerds (API, clé personnelle)
-tools/                       outils navigateur (export LineupExperts)
-data/imports/<source>/       dépôt des exports CSV
-scripts/player_linker.py     table players et rapprochement entre sources
-scripts/exports.py           exports CSV (projections brutes, format commun)
-scripts/weighting/weights.py lecture et validation des grilles de pondération
-scripts/weighting/engine.py  calcul des projections finales et export CSV
-scripts/weighting/zscores.py z-scores des 9 catégories (AVG et TOT), sommes et rangs
-```
-
-Ajouter une source :
-- **web** : une classe héritant de `ProjectionSource` (méthodes `page_requests` et `parse_page`) ;
-- **CSV** : une classe de deux lignes héritant de `CsvProjectionSource` (voir `fanscout.py`) ;
-  tout le reste se règle dans l'onglet settings (sections Sources et Transco) :
-  - `import_dir`, `files` (motif du fichier par étape) ;
-  - `player_column`, `team_column`, `positions_column` (un en-tête en double devient `Nom_2`) ;
-  - `stat_mode` (`auto`, `totals`, `per_game`), `percent_scale` (1 ou 100) ;
-  - `empty_as_zero` (case vide = 0), `missing_values` (ex. ADP 999 = vide), `skip_players` ;
-  - `columns` (en-tête du CSV -> colonne standard) ;
-
-puis sa configuration dans `config/defaults.json` > `sources` (code, `urls` ou `files`) et une ligne dans `scripts/sources/__init__.py`.
-
-## Données
-
-- `raw_projections` : une ligne par joueur, source, saison et étape (contrainte d'unicité).
-  Colonnes : `player`, `player_key`, `team` (codes NBA officiels), `positions`
-  (ex. `PG,SG`), puis les stats standard `gp gs min mpg pts reb ast stl blk tov
-  fgm fga fgp ftm fta ftp fg3m fg3a fg3p fpts`, et pour le draft `adp`, `auction_cost`
-  (coût moyen Yahoo, FanScout) et `auction_value` (valeur estimée, DraftKick).
-- Stats dérivées automatiquement quand une source ne les donne pas :
-  `mpg = min / gp`, `fgm = fgp × fga`, `ftm = ftp × fta`, et l'inverse.
-- Toutes les stats sont des **totaux sur la saison** ; les pourcentages sont en **décimal (0.485)**.
-- `players` : référentiel, un joueur par `name_key`.
-- Vue `v_projections` : projections + nom canonique, prête pour l'export.
-  Exportée à chaque lancement dans `exports/raw_<étape>_<saison>.csv` (toutes les sources,
-  une ligne par joueur et par source, triée par joueur puis source).
-- `final_projections` : projections finales pondérées, une ligne par phase, saison et joueur,
-  avec `n_sources`, `sources`, `gp_coverage`, `min_coverage`, `stats_coverage` et
-  `fga_estimated`, et les z-scores : `z_<cat>_avg` / `z_<cat>_tot` pour FG%, 3PM, FT%, REB,
-  AST, STL, BLK, TO, PTS, leur somme pondérée `z_sum_avg` / `z_sum_tot` et le rang
-  `rank_avg` / `rank_tot`. Exportées (triées par `rank_avg` en H2H, `rank_tot` en Roto) dans `exports/final_<phase>_<saison>.csv` (`;` et virgule
-  décimale par défaut, réglable dans l'onglet settings, `Pipeline | Export`).
-
-- FG% / FT% finaux : moyenne des pourcentages des sources, pondérée par le poids de la grille × les
-  tentatives par match de chaque source ; une source sans match ou à 0 réussite sans tentatives connues
-  (« .000 » des pages de stats réelles FantasyPros, souvent 0/0) est ignorée. FGM = FG% × FGA, FTM = FT% × FTA.
-
-## Z-scores
-
-- Groupe de référence = `teams` × taille du roster (15 × 14 = 210 joueurs) : moyenne et
-  écart-type sont calculés sur les joueurs réellement draftés, en 3 passes (tous les
-  joueurs, puis les 210 meilleurs, etc.).
-- AVG = moyennes par match (utile en H2H), TOT = totaux sur la saison (Roto, intègre les matchs joués).
-- FG% / FT% : z-score de l'impact `(pourcentage - pourcentage du groupe) × tentatives`.
-- TO : signe inversé. Somme = Σ poids × z ; rang 1 = meilleure somme.
-- Pas encore de rareté par poste (la répartition G/F/C sert seulement à la taille du groupe).
-
-## Assistant de draft (Rotisserie)
-
-Le classeur Google Sheets reste l'interface : on saisit le manager de chaque joueur drafté dans la
-colonne `Team Draft` (A) de l'onglet `bdd`, sur sa ligne de phase `draft` ; le script en déduit
-l'état de la draft (ordre snake, keepers dans leurs tours) et écrit ses recommandations dans
-`draft_reco`, que l'onglet `board` (draft board) reprend par formules.
-
-```bash
-python main.py --push-sheet                # pipeline complet puis projections (toutes phases) -> bdd
-python -m scripts.draft push-projections   # seulement l'envoi des projections vers bdd
-python -m scripts.draft config-push        # configuration locale -> onglets "settings" et "players"
-python -m scripts.draft config-pull        # onglets -> config/config.json
-python -m scripts.draft watch              # veille pendant la draft : recalcul à chaque choix saisi
-python -m scripts.draft reco               # un seul calcul
-python -m scripts.draft reco --xlsx draft2627.xlsx --until 40 --no-sheet   # test hors ligne / mock draft
-```
-
-Mise en place (une fois) :
-1. Copier le JSON du compte de service dans `credentials/service_account.json` (ignoré par git),
-   ou modifier `google.service_account_file` dans `config/bootstrap.json`.
-2. Partager le classeur de draft avec l'adresse `client_email` du compte de service, en Éditeur.
-3. `spreadsheet_id` dans `config/bootstrap.json` : l'identifiant dans l'URL
-   `docs.google.com/spreadsheets/d/<ID>/edit`.
-4. `python -m scripts.config_sheet push` crée les onglets `settings` et `players` (voir
-   Configuration) ; ensuite on ne modifie plus que les onglets.
-
-Projections : `push-projections` écrit toutes les phases de la saison (draft, lt, st, season)
-dans l'onglet `bdd`, colonnes C à BK : C = phase, puis la disposition de l'ancien onglet `export`
-(joueur en D). Les colonnes A `Team Draft` et B `Team Season` sont des propriétés du joueur :
-elles sont conservées et reportées sur toutes ses lignes, même si l'ordre change. Les colonnes à
-droite (formules) ne sont pas touchées. Pour une seule phase : `--phase lt`. Onglet et colonne de
-départ réglables dans l'onglet settings (section Projections).
-
-Détail par source : `push-projections` (et `python main.py --push-sheet`) écrit aussi l'onglet
-`bdd_detail` (réglable : `Sheets | Tab | Detail`, vide = pas d'onglet ; seul :
-`python -m scripts.draft push-detail`). Une ligne par joueur et par source (colonne Stage :
-draft, ros, sea, l30...) et une ligne `Pondéré` par phase, triées par rang final : stats par match,
-ADP, EFF et RANG AVG / TOT calculés avec le groupe de référence de la phase pondérée (une source
-optimiste sur un joueur lui donne un meilleur rang). Sans tirs tentés, les tentatives par match de
-la projection pondérée sont reprises avec le % de la source (colonne `Tirs estimés`).
-
-Phase `season` (étape ros) : stats réelles de la saison en cours (`Grid season`, par défaut
-`fp.sea` à 100 %), avec z-scores et rangs comme les autres phases.
-
-Tirage au sort de l'ordre de draft (bloc lottery de l'onglet `board`) :
-
-```bash
-python -m scripts.lottery              # boules des managers encore dans le tirage -> onglet lottery
-python -m scripts.lottery --draw       # ... puis tire une boule au hasard
-python -m scripts.lottery --dry-run    # affiche sans écrire
-```
-
-Plages dans l'onglet settings (`Draft Lottery | Managers / Active / Number Balls / Lottery
-Number`) : managers dont `Active` = 0, nombre de boules de la colonne du tirage en cours (1 ou 2).
-Boules numérotées de 1 à N, mélangées, écrites en `Ball | Manager` (`Draft Lottery | Balls`,
-par défaut `lottery!A1`).
-
-Keepers : `Settings | Draft | Keeper rounds` = tours occupés par les keepers (`1, 2` : le 1er keeper
-prend le choix du manager au tour 1, le 2e au tour 2) ; vide si les keepers s'ajoutent aux
-tours. Un keeper inscrit dans `Team Draft` pour son propre manager n'est jamais compté deux fois.
-
-Calcul :
-- tour et manager déduits de l'ordre snake de `draft.order` (tour impair : ordre normal,
-  tour pair : ordre inversé) ;
-- effectif de chaque équipe = keepers + choix saisis ; les totaux saison respectent le plafond
-  `games.per_slot` × postes titulaires (82 × 8 = 656) : les meilleurs joueurs par match
-  (z AVG) jouent en priorité ;
-- tirages de la suite de la draft, tous partagés par les candidats (même ordre des autres
-  managers pour tous, comparaison à hasard égal) : `Simulations min` (10) tirages pour tous, puis
-  tous les 10 tirages on écarte ceux dont l'écart au meilleur dépasse `Prune z` (2) écarts-types,
-  sans descendre sous `Finalists` (5) ; les finalistes vont jusqu'à `Simulations` (200) tirages
-  ou `Time budget` (8 s). La disponibilité est mesurée sur tous les tirages, pour tous les
-  candidats. Colonnes `± pts (95 %)` et `Tirages` dans draft_reco. Dans la suite simulée, les autres
-  managers suivent l'ADP (bruit `draft.adp_noise`, joueurs sans ADP placés d'après leur rang
-  TOT), nos choix suivants prennent le meilleur z TOT compatible avec les postes G / F / C ;
-- mode `need` (`Optim | Draft | Opponent model`, par défaut) : chaque manager départage les
-  `Need candidates` (4) prochains joueurs de son ADP selon les besoins de son équipe (pente de
-  ses points roto par catégorie, équipes comparées en moyenne par joueur et en %). Le poids des
-  besoins vaut 0 au 1er tour et monte jusqu'à `Need weight` (2) au dernier : l'ADP reste la base.
-  `adp` = ancien comportement ; `--model adp|need` pour comparer sans toucher l'onglet settings ;
-- chaque tirage donne un classement roto projeté (points espérés par catégorie, FG% et FT%
-  recalculés sur les tirs de l'équipe) ; la recommandation classe les candidats selon les
-  points roto espérés de notre équipe, avec la probabilité qu'ils soient encore disponibles
-  à notre choix et au choix suivant (pour savoir si l'on peut attendre).
-
-L'onglet `reco` contient : l'état de la draft, les 20 meilleurs candidats (points espérés, écart
-avec le n°1, disponibilité, points par catégorie), le classement roto projeté, le classement
-des effectifs actuels avec leurs totaux, et mon équipe. Même contenu dans `exports/reco_<saison>.csv`.
-Les noms saisis sont reconnus sans tenir compte des accents, de la casse ni des suffixes ; sinon
-ajouter un alias dans l'onglet `players`.
-
-## Yahoo Fantasy (API)
-
-Lecture seule, via l'application déclarée sur developer.yahoo.com (redirect URI `https://localhost:8080`).
-
-1. Créer `credentials/yahoo_app.json` (dossier ignoré par git) :
-   `{"client_id": "<Client ID>", "client_secret": "<Client Secret>"}`
-2. `python -m scripts.yahoo auth` : ouvre la page Yahoo ; après « Autoriser », le navigateur
-   arrive sur `https://localhost:8080/?code=...` (page qui ne s'affiche pas, c'est normal) :
-   coller l'adresse complète dans le terminal. Le jeton est enregistré dans
-   `credentials/yahoo_token.json` et renouvelé automatiquement.
-3. `python -m scripts.yahoo leagues` : liste mes ligues NBA avec leur ID, à reporter dans
-   l'onglet settings (« ID de la ligue Yahoo »).
-4. `python -m scripts.yahoo check` : réglages, équipes et managers, nombre de choix de draft.
-   `python -m scripts.yahoo draft` : choix effectués (+ `exports/yahoo_draft_<saison>.csv` et bloc draft
-   de l'onglet `yahoo`). `python -m scripts.yahoo rosters` : effectif actuel de chaque équipe (poste,
-   statut, équipe NBA ; matchs restants par poste affichés dans la console), dans
-   `exports/yahoo_rosters_<saison>.csv` et le bloc rosters de l'onglet `yahoo`. Dans les deux cas, la
-   colonne `player` porte le nom de référence (base + alias de l'onglet players, comme dans `bdd`) et
-   la dernière colonne, `yahoo_name`, le nom affiché par Yahoo ; un joueur inconnu de la base est
-   signalé (alias à ajouter). Blocs fixes : draft en A:K, rosters en L:U, rankings à partir de V.
-5. `python -m scripts.yahoo rankings` : pré-classement Yahoo (O-Rank, l'ordre de la salle de draft
-   de ma ligue) et ADP Yahoo (`average_pick`) des `Yahoo rankings count` (300) premiers joueurs,
-   enregistrés en base (table `yahoo_rankings`) et dans `exports/yahoo_rankings_<saison>.csv`.
-   Fait aussi par `python main.py` à l'étape draft (`--skip-yahoo` pour s'en passer ; sans jeton
-   ou sans accès, simple avertissement). Colonnes `Yahoo` (rang) et `ADP Yahoo` de `bdd` (BK, BL) ;
-   sans classement récupéré, `Yahoo` reprend l'ordre ADP des sources. Joueurs absents des
-   projections : listés dans le log (alias à ajouter dans l'onglet players si le nom diffère).
-6. `python -m scripts.yahoo stats` : standings Yahoo (statistiques et points roto par catégorie)
-   et Team Log (cumuls de saison de chaque joueur ayant rapporté des points à chaque équipe,
-   y compris les joueurs qui ne sont plus dans son roster) dans l'onglet `yahoo`. Le Team Log
-   n'est disponible qu'après la fin de la première semaine de matchs : d'ici là, les standings sont
-   écrits quand même et le bloc Team Log reste vide (simple avertissement). Les deux blocs sont écrits
-   à droite des résultats de draft, rosters et rankings déjà présents.
-
-Tant que Yahoo n'a pas validé l'accès à l'API (erreur 403), la ligue étant publique, les choix
-sont lus sur la page `basketball.fantasysports.yahoo.com/nba/<ID>/draftresults` (assistant de draft,
-`watch` et `python -m scripts.yahoo draft`) : aucun réglage à faire, le programme bascule tout seul.
-`rosters`, `rankings` et `stats` passent toujours par les pages publiques. La colonne « Équipe Yahoo » de l'onglet settings relie
-chaque équipe Yahoo à un manager ; l'ordre réel de Yahoo (choix par choix) remplace alors l'ordre
-snake de la config, avec une alerte en cas d'écart et si un choix des tours keepers ne correspond
-pas aux keepers déclarés.
-
-Pendant la draft (`Source des choix` = `yahoo` dans l'onglet settings), `watch` lit les choix
-directement dans Yahoo, les recopie dans la colonne `Team Draft` de `bdd` (réglable) et signale tout
-écart entre l'ordre Yahoo et l'ordre de la config. Si Yahoo ne répond pas, lecture de
-`Team Draft` à la place : la saisie manuelle reste possible.
-
-## Module saison
-
-```
-python main.py --stage ros                 # projections ROS (lt) + stats par période (st)
-python -m scripts.season update            # onglet season_reco (+ exports/season_reco_<saison>.csv et season_reco_rosters_<saison>.csv)
-python -m scripts.season update --no-sheet # console + exports/season_<saison>.csv
-python -m scripts.season update --rosters sheet  # effectifs de bdd : Team Season (sinon Team Draft)
-```
-
-Projection de fin de saison de chaque équipe = stats réelles (classement Yahoo) + 15 prochains
-jours en phase st + reste de la saison en phase lt, avec le calendrier NBA (NBA.com, sinon
-fixturedownload.com) et les plafonds de matchs restants par poste (G, F, C, Util) lus sur la page
-de chaque équipe. Onglet season : classement projeté (points espérés, chances de titre et de
-podium), mes catégories (ce qu'il faut pour gagner un point, marge avant d'en perdre un), mes
-matchs par poste, stats projetées de toutes les équipes et matchs ST/LT attendus et affectés par
-joueur dans chacun des 15 rosters. Les 14 autres équipes servent de référence : lineup standard (valeur par match
-d'abord, sous les plafonds), chaque match attendu n'étant aligné qu'avec le taux d'alignement du
-manager (`scripts/season/opponents.py` : GP réels / GP possibles à date, mélangé au taux médian de la
-ligue tant que la saison est jeune ; réglages `Optim | Season | Opponent model / Opponent default
-rate / Opponent ramp (days)`). Seule l'affectation ST/LT de mon équipe maximise ensuite le gain
-marginal de points roto attendu face à elles, sous les plafonds G / F / C / Util. L'onglet
-s'appelle désormais `season_reco` (`Sheets | Tab | Season Reco` ; l'ancien libellé `Season` et
-l'ancien onglet `season` sont repris et renommés) ; il contient aussi le bloc Adversaires et les
-effectifs des 15 équipes. Les matchs écartés
-par cette optimisation sont distingués des matchs perdus faute de plafond. Le détail des 15 rosters
-est aussi dans l'export `exports/season_reco_rosters_<saison>.csv`.
-Sans projections lt, la phase draft est utilisée. Effectifs : Yahoo par défaut, ou le classeur
-(`Sheets | Season | Rosters Source` =
-`sheet` : colonne `Team Season` de `bdd`, sinon `Team Draft`) ; les plafonds de
-matchs sont alors ceux de la saison complète (82 x postes).
-
-Limites : les tentatives de tirs réelles (FGA, FTA) ne sont pas publiées par Yahoo et sont
-estimées ; l'alignement jour par jour (plus de joueurs que de postes certains soirs) sera traité
-par le module rotation.
-
-### Simulation de mouvements (moves_reco)
-
-`python -m scripts.season moves` (option `--no-sheet` : console + `exports/moves_reco_<saison>.csv`).
-Réglages dans l'onglet settings :
-
-| Ligne | Colonne 2 | Colonne 3 |
-|---|---|---|
-| `Moves | Player 1` à `4` | manager : le mien (je cède ces joueurs) ou celui de `Moves | Compare` (je les reçois) | joueur (vide = ignoré) |
-| `Moves | Compare` | `manager` | nom du manager |
-| `Moves | Compare` | `free agent` | (vide) : je lâche les joueurs listés, qui doivent être les miens |
-| `Moves | Compare` | `auto` | (vide = tous les managers, ou un nom de manager) : recherche d'échanges sans joueur saisi, lignes `Moves | Player` ignorées |
-| `Optim | Moves` | `Value tolerance` | écart de valeur accepté, 10 % par défaut |
-| `Optim | Moves` | `Max results` / `Min results` / `Free agent results` / `Free agent shortlist` | 20 / 10 / 6 / 15 |
-| `Optim | Moves` | `Auto max players` / `Auto shortlist` / `Auto per manager` / `Auto min partner gain` | 2 / 40 / 5 / 0 |
-
-- Échange : autant de joueurs reçus que cédés. Toutes les combinaisons de l'autre effectif sont
-  testées ; à valeur équivalente (tolérance), les 20 meilleurs gains pour moi sont gardés, complétés
-  jusqu'à 10 par les combinaisons les plus proches en valeur (« hors tolérance »). Affichage du plus
-  équitable au moins équitable, avec le gain de l'autre manager (un échange qui le fait
-  perdre a peu de chances d'être accepté), le rang projeté, les chances de titre / podium et l'effet
-  par catégorie.
-- Recherche auto (`Moves | Compare` = `auto`) : tous les échanges de 1 contre 1 à N contre N
-  (`Auto max players`) avec chaque manager sont testés. Filtre de valeur (tolérance), puis crible rapide :
-  stats de fin de saison des deux équipes modifiées sans réoptimiser les lineups, en respectant les plafonds
-  de matchs par poste : un arrivant ne joue que les matchs libérés par les partants, la place libre, ou
-  ceux d'un titulaire moins bon que lui par match (dont les stats sont retirées) ; un remplaçant cédé ne
-  libère rien. Points roto recalculés pour moi et pour l'autre manager. Les plus prometteurs, parmi ceux
-  qu'il a intérêt à accepter, sont simulés exactement comme un échange classique, par lots de
-  `Auto shortlist` répartis entre les tailles d'échange (1 contre 1, 2 contre 2...) et au plus
-  2 x `Auto per manager` par manager ; jusqu'à 4 lots tant que `Min results` échanges gagnant-gagnant
-  ne sont pas trouvés. Restent ceux qui me font gagner et où son gain est au moins `Auto min partner gain`
-  (0 = il ne perd rien) ; un même effet sur mon équipe (mêmes partants qui jouaient, mêmes arrivants
-  alignés) n'est montré qu'une fois, dans sa version la plus équitable (le joueur en plus sert alors à
-  équilibrer la valeur). Affichage du plus équitable au moins équitable (écart de valeur), au plus
-  `Auto per manager` par manager ; complété jusqu'à `Min results` par des échanges où je gagne mais où
-  l'autre manager perd des points (colonne Accord : « gagnant-gagnant » / « il perd des points »).
-  Principe : à valeur brute équivalente, on échange un surplus dans une catégorie où je suis loin de mes
-  voisins de classement contre une catégorie où chaque unité me rapporte des points, l'autre manager ayant
-  les besoins inverses. Environ 1 seconde pour 15 équipes en 2 contre 2 ; 3 contre 3 est plus long.
-- Joueurs libres (joueurs des projections absents de tous les effectifs Yahoo, statut waivers non
-  vérifié) : chacun est testé à la place des joueurs lâchés ; si plusieurs sont lâchés, les 15
-  meilleurs sont combinés. Les 6 meilleures options sont affichées, même si elles font perdre des points.
-- Valeur d'un joueur : valeur par match au-dessus du niveau de remplacement (dernier joueur d'effectif
-  de la ligue, 180e pour 15 x 12 ; phase st sur l'horizon court, lt ensuite) x matchs attendus d'ici la
-  fin de saison. Les stats réelles restent à l'équipe qui les a faites ; mon lineup est réoptimisé,
-  l'autre équipe garde son taux d'alignement. « Matchs alignés (reçus) » : pour chaque joueur reçu,
-  matchs que mon lineup optimisé lui donnerait sur ses matchs attendus, avec la répartition horizon
-  court / reste de saison (« Cameron Johnson 71/71 (st 0 + lt 71), Moussa Diabate 0/73 (st 0 + lt 0) » :
-  le second ne ferait que compléter l'échange ; st reste à 0 si `Optim | Season | Short-term horizon
-  (days)` vaut 0) ; « Effet sur mes autres joueurs » : matchs alignés en plus ou en moins pour mes
-  joueurs gardés. Colonnes « (pts) » : points roto gagnés ou perdus par catégorie ; colonnes
-  « (stats) » : écart de mes stats de fin de saison (FG% / FT% en points de pourcentage, les autres
-  en unités : +20,1 REB, -137 PTS).
+Une source ajoutée au code après la création de l'onglet `settings` (absente de l'onglet) reçoit à la
+lecture de l'onglet ses réglages et ses poids livrés (`config/defaults.json`) dans la copie locale ; les
+poids des sources déjà configurées sont réduits en gardant leurs proportions. Le classeur n'est pas
+modifié : `python -m scripts.config_sheet push` y écrit ces réglages, après vérification de la copie
+locale (cette commande réécrit tout l'onglet `settings` et `players`).
 
 ## Menu du classeur (lancement sans le PC)
 
@@ -471,7 +174,10 @@ La base `database.sqlite` et les CSV des sources sont dans le dossier Drive `stb
 téléchargée au début, renvoyée à la fin si elle a changé ; un sous-dossier par source CSV
 (`lineupexperts`, `draftkick`, `fanscout`), dont les `.csv` sont copiés dans `data/imports/<source>/`.
 Avec `Sheets | Settings | Drive sync = oui`, les commandes lancées sur le PC font de même (la base Drive
-fait foi) ; `python -m scripts.cloud pull | push` synchronise à la main.
+fait foi) ; `python -m scripts.cloud pull | push` synchronise à la main. Si la base Drive a changé
+pendant un lancement (un lancement sur le PC et un autre sur GitHub en même temps), la base n'est pas
+renvoyée, pour ne pas écraser le travail de l'autre lancement : relancer la commande une fois l'autre
+terminé.
 
 Mise en place (une fois) :
 1. Déposer la base du PC (`database.sqlite`) dans `stbl_data` (le compte de service ne peut que mettre
@@ -486,44 +192,55 @@ Mise en place (une fois) :
    classeur, autoriser le script, puis STBL > Maintenance > Configurer le jeton GitHub.
 5. Tester STBL > Maintenance > Contrôle settings, puis Saison > Projections ; ensuite `Drive sync = oui`.
 
-## Photos des sources (history.sqlite)
+## Structure
 
-Pour mesurer en fin de saison (ou à date) la pertinence des sources sur GP, MIN et stats, les projections
-et les stats réelles sont photographiées dans `history.sqlite` (dossier Drive `stbl_data`, à côté de la
-base). `python -m scripts.history daily`, lancé chaque matin par GitHub (8 h UTC) ou par STBL >
-Maintenance > Photo des sources :
-1. importe les sources en ligne (étape ros et stats par période, CSV de Drive compris) dans une copie
-   temporaire de la base : la base principale, bdd et season_reco ne changent pas ;
-2. photographie cette copie, puis la base principale (imports et projections finales draft / lt / st).
+```
+main.py                        pipeline : import, rapprochement, pondération, envoi vers le classeur
+config/                        bootstrap.json (accès au classeur), defaults.json (configuration livrée)
+apps_script/stbl_menu.gs       menu STBL du classeur (lance le workflow GitHub)
+.github/workflows/             stbl-run.yml (commandes du menu, photo quotidienne), tests.yml (tests)
+tools/                         outils navigateur (export LineupExperts)
+data/imports/<source>/         dépôt des exports CSV
+docs/                          détail des calculs
 
-Une photo n'est gardée que si son contenu a changé, et au plus une tous les N jours
-(`Optim | History`) : stats réelles de la saison à date (sea, résultat de référence) 1 jour ;
-projections ros, fenêtres l30 / l15 / l07 et projections finales lt / st 7 jours ; projections draft à
-chaque changement. Sa date est celle de l'import ou du calcul des données. Les stats sea d'une autre
-saison (plus de matchs joués que de jours écoulés depuis le 1er octobre) sont ignorées.
-`Retention (seasons)` : saisons gardées (3). `python -m scripts.history status` : photos disponibles.
+scripts/
+  config.py                    chemins, chargement et validation de la configuration
+  config_sheet.py              onglet settings <-> configuration locale (pull, push, check, complete)
+  sheets.py                    lecture / écriture Google Sheets (compte de service)
+  cloud.py                     base et CSV partagés sur Google Drive
+  run.py                       lanceur des commandes du menu (journal dans l'onglet runs)
+  db.py                        schéma SQLite et migrations
+  bdd.py                       onglet bdd (colonnes Team Draft / Team Season)
+  names.py                     nettoyage des noms et clé de rapprochement
+  player_linker.py             table players et rapprochement entre sources
+  http_client.py               requêtes (timeout, nouvelles tentatives, pause)
+  exports.py                   exports CSV des projections brutes
+  history.py                   photos des sources (history.sqlite)
+  accuracy.py                  pertinence des sources (onglet sources_accuracy)
+  lottery.py                   tirage au sort de l'ordre de draft
+  sources/                     une classe par site ; base.py (logique commune), csv_source.py (sources CSV)
+  weighting/                   grilles de pondération (weights.py), projections finales (engine.py),
+                               z-scores (zscores.py)
+  draft/                       assistant de draft : état (state.py), simulations (engine.py),
+                               joueurs (pool.py), onglets bdd / bdd_detail / draft_reco
+  season/                      module saison : projection des équipes (engine.py), adversaires
+                               (opponents.py), calendrier (schedule.py), échanges (moves.py)
+  yahoo/                       API Yahoo (client.py, league.py), pages publiques (public.py),
+                               pré-classement (rankings.py), onglet yahoo (sheets.py)
+```
 
-## Pertinence des sources (onglet sources_accuracy)
+## Ajouter une source
 
-`python -m scripts.accuracy` (ou STBL > Maintenance > Pertinence des sources ; `--no-sheet` : console +
-CSV) compare chaque code des grilles draft, lt et st aux stats réelles photographiées, sur les trois
-niveaux de la pondération, et propose des poids. Rien n'est réécrit dans les grilles.
+- **web** : une classe héritant de `ProjectionSource` (méthodes `page_requests` et `parse_page`) ;
+- **CSV** : une classe de deux lignes héritant de `CsvProjectionSource` (voir `fanscout.py`) ;
+  tout le reste se règle dans l'onglet settings (sections Sources et Transco) :
+  - `import_dir`, `files` (motif du fichier par étape) ;
+  - `player_column`, `team_column`, `positions_column` (un en-tête en double devient `Nom_2`) ;
+  - `stat_mode` (`auto`, `totals`, `per_game`), `percent_scale` (1 ou 100) ;
+  - `empty_as_zero` (case vide = 0), `missing_values` (ex. ADP 999 = vide), `skip_players` ;
+  - `columns` (en-tête du CSV -> colonne standard) ;
 
-- Référence : stats réelles de la saison à date (sea) de la source la plus photographiée.
-- Périodes : draft = projections de pré-saison contre la saison jouée ; lt = chaque photo ros (une par
-  semaine) contre la suite de la saison ; st = chaque photo des fenêtres l30 / l15 / l07 / sea contre les
-  N jours suivants (horizon court terme, 15 jours si le réglage vaut 0). Provisoire tant que la saison
-  n'est pas finie ; poids proposés indicatifs sous 25 % des matchs de la période joués.
-- Mesures (comme le moteur) : GP = part des matchs de l'équipe jouée, écart en matchs ; MIN = minutes
-  par match (3 matchs au moins) ; STATS = production par minute (60 minutes au moins) et FG% / FT%
-  pondérés par les tentatives, chaque écart divisé par l'écart-type réel de la catégorie, moyenne des
-  catégories (même poids pour toutes, détail par catégorie affiché).
-- Mêmes joueurs pour tous : les `Players evaluated` (200) premiers en minutes projetées ou réelles,
-  couverts par tous les codes qui en couvrent au moins 80 % ; un code moins couvert est mesuré seul
-  (« couverture partielle ») et garde son poids.
-- Poids optimal : combinaison de codes (positifs, total 100 %) à la plus petite erreur quadratique ;
-  poids proposé = `Shrink to current weights` (50 %) x actuel + le reste x optimal. Lignes « Mélange
-  actuel », « Mélange proposé » et « Projection finale (photo) » : erreur de chaque mélange.
+puis sa configuration dans `config/defaults.json` > `sources` (code, `urls` ou `files`) et une ligne dans `scripts/sources/__init__.py`.
 
 ## Limites connues
 
@@ -531,12 +248,12 @@ niveaux de la pondération, et propose des poids. Rien n'est réécrit dans les 
 - FantasyPros ne publie les projections `ros` qu'une fois la saison commencée ; en attendant l'import est annulé sans toucher aux données existantes.
 - Un import dont une page échoue est entièrement annulé, pour ne jamais remplacer des données complètes par des données partielles.
 
-## Tests
+## Tests et contrôle du code
 
 ```bash
 pip install -r requirements-dev.txt
-python -m pytest -q
+python -m pytest -q      # tests
+ruff check .             # contrôle du code (imports inutilisés, noms inconnus...), réglé dans ruff.toml
 ```
 
-Couvrent les noms (accents, caractères perdus, alias), les grilles de pondération, les points
-roto, l'allocation des matchs sous plafonds et l'aller-retour de l'onglet settings.
+Les deux sont lancés par GitHub (workflow `tests.yml`) à chaque pull request et à chaque envoi sur `main`.

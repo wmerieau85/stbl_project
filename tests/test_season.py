@@ -4,7 +4,8 @@ import numpy as np
 
 from scripts.draft.pool import STATS, Player, Pool
 from scripts.season import report
-from scripts.season.engine import CATEGORY_ORDER, PlayerProjection, TeamProjection, gp_inconsistencies, optimize_team, project_team
+from scripts.draft.engine import CATEGORY_ORDER
+from scripts.season.engine import PlayerProjection, TeamProjection, gp_inconsistencies, optimize_team, project_team
 
 LEAGUE = {"games": {"per_slot": 82}, "roster": {"G": 0, "F": 0, "C": 1, "UTIL": 0}}
 
