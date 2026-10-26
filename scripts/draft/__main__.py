@@ -44,7 +44,10 @@ def parse_args(argv=None):
     parser = argparse.ArgumentParser(description="Assistant de draft STBL (roto)")
     parser.add_argument("command", choices=["reco", "watch", "push-projections", "check"])
     parser.add_argument("--season")
-    parser.add_argument("--phase", help="push-projections : n'écrire que cette phase (défaut : toutes)")
+    parser.add_argument("--phase", help="push-projections : n'écrire que cette phase (défaut : toutes ; "
+                                        "les autres phases de bdd sont retirées, --drop-phases requis)")
+    parser.add_argument("--drop-phases", action="store_true",
+                        help="push-projections : accepter de retirer de bdd les phases absentes de la base")
     parser.add_argument("--xlsx", help="lire les choix dans un export Excel (colonne Team Draft de l'onglet bdd, sinon onglet draft_res)")
     parser.add_argument("--csv", help="lire les choix dans un CSV round;pick;player")
     parser.add_argument("--until", type=int, help="ne garder que les N premiers choix (mock draft)")
@@ -316,15 +319,19 @@ def watch(session):
         time.sleep(poll)
 
 
-def push_projections(session=None, season=None, phase=None):
+def push_projections(session=None, season=None, phase=None, drop_phases=False):
     """Écrit les projections finales de toutes les phases (draft, lt, st) dans l'onglet cible
     (bdd : C = phase, A / B = Team Draft / Team Season reportés sur les nouvelles lignes), sans toucher
-    aux colonnes de formules à droite."""
+    aux colonnes de formules à droite.
+
+    Garde-fou : une phase présente dans bdd mais absente de la base (base locale différente de la base
+    Drive, par exemple) arrête l'envoi sans rien écrire, sauf drop_phases (--drop-phases)."""
     if session is None:
         league, settings = load_league(), load_settings()
     else:
         league, settings = session.league, session.settings
         season, phase = session.args.season, session.args.phase
+        drop_phases = getattr(session.args, "drop_phases", False)
     gs = league.get("google_sheets", {})
     season = season or settings["active_season"]
     rows, phases = build_all_rows(season, [phase] if phase else None)
@@ -332,11 +339,22 @@ def push_projections(session=None, season=None, phase=None):
         raise ValueError(f"Aucune projection finale pour {season} : lancez d'abord python main.py.")
     book = open_spreadsheet(gs.get("projections_spreadsheet_id") or gs.get("draft_spreadsheet_id"), settings)
     tab = gs.get("projections_tab") or "bdd"
+    current = bdd.read_rows(book, gs)
+    dropped = [p for p in bdd.phases_in(current, gs) if p not in phases]
+    if dropped and not drop_phases:
+        raise ValueError(
+            f"Onglet {tab} : phase(s) {', '.join(dropped)} présente(s) dans l'onglet mais absente(s) de la base "
+            f"utilisée pour {season} : l'envoi les effacerait, rien n'a été écrit. Base de ce PC différente de la "
+            "base Drive ? Lancez la commande depuis le menu STBL, ou récupérez la base Drive (Sheets | Settings | "
+            "Drive sync = oui, ou python -m scripts.cloud pull). Pour retirer ces phases volontairement "
+            "(changement de saison, --phase...), relancez avec --drop-phases.")
+    if dropped:
+        log.warning("[Sheets] Phase(s) retirée(s) de l'onglet %s (--drop-phases) : %s.", tab, ", ".join(dropped))
     cols = bdd.layout(gs)
     teams = formulas = None
     if cols["team_draft"] is not None:
         formulas = bdd.formula_columns(book, gs)
-        teams = bdd.team_map(bdd.read_rows(book, gs), gs)
+        teams = bdd.team_map(current, gs)
     write_block(book, tab, rows, first_col=gs.get("projections_start_col") or "C")
     if teams is not None:
         # Team Draft / Team Season : une colonne de formules n'est jamais écrite (formule recopiée sur

@@ -42,6 +42,9 @@ def parse_args():
     parser.add_argument("--skip-weighting", action="store_true", help="ne pas calculer les projections finales")
     parser.add_argument("--push-sheet", action="store_true",
                         help="écrire les projections finales (toutes phases) dans Google Sheets (onglet bdd)")
+    parser.add_argument("--drop-phases", action="store_true",
+                        help="--push-sheet : accepter de retirer de bdd les phases absentes de la base "
+                             "(sinon l'envoi s'arrête sans rien écrire)")
     parser.add_argument("--no-sync-config", action="store_true",
                         help="ne pas relire l'onglet settings du classeur (fichiers config/ utilisés tels quels)")
     parser.add_argument("-v", "--verbose", action="store_true", help="logs détaillés")
@@ -143,7 +146,7 @@ def run_pipeline(args):
         from scripts.draft.__main__ import push_projections
         from scripts.sheets import SheetsError
         try:
-            push_projections(season=settings["active_season"])
+            push_projections(season=settings["active_season"], drop_phases=args.drop_phases)
         except (SheetsError, OSError, ValueError) as exc:
             log.error("Envoi vers Google Sheets impossible : %s", exc)
             results["google sheets"] = False

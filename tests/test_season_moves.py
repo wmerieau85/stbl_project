@@ -271,3 +271,39 @@ def test_auto_shows_one_trade_per_effect_on_my_team():
 
 def test_auto_interleaves_trade_sizes():
     assert moves._interleave([[1, 2, 3], ["a"], ["x", "y"]]) == [1, "a", "x", 2, "y", 3]
+
+
+def _result_slots(league, slots, cap=20):
+    """Comme _result, avec le poste Yahoo de mes joueurs (ex. IL)."""
+    result = _result(league, cap)
+    pool = result["context"]["lt_pool"]
+    roster = {"players": [{"player": n, "nba_team": "DEN", "positions": "C", "slot": slots.get(n, "C")}
+                          for n in ROSTERS["Moi"]], "games": {"C": {"remaining": cap}}}
+    result["teams"][0] = project_team("Moi", "Moi", roster, None, pool, None, GAMES, TODAY, 15, league)
+    return result
+
+
+def test_auto_free_agents_find_who_to_drop_and_who_to_add():
+    """Moi : A (5) et B (2), plafond plein ; libres : G (4), H (1). Seul « lâcher B, prendre G » fait gagner."""
+    league = _league([], {"type": "auto free agent", "manager": ""})
+    out = moves.simulate(_result(league), league)
+    assert out["mode"] == "auto free agent" and out["drops"] == 2 and out["free_count"] == 2
+    assert out["tested"] == 4
+    assert [(_names(m.give), _names(m.recv)) for m in out["moves"]] == [(["B"], ["G"])]
+    assert out["moves"][0].my_gain > 0 and out["moves"][0].stat_delta.tolist() == pytest.approx([20.0])
+    rows = moves.rows(out)
+    assert any("recherche auto de joueurs libres" in str(c) for r in rows for c in r)
+    assert "lâcher B, prendre G" in moves.console(out)
+
+
+def test_auto_free_agents_never_drop_an_injured_reserve_player():
+    """B en poste IL : le lâcher ne libère pas de place ; lâcher A pour G fait perdre : rien à proposer."""
+    league = _league([], {"type": "auto free agent", "manager": ""})
+    out = moves.simulate(_result_slots(league, {"B": "IL"}), league)
+    assert out["drops"] == 1 and out["moves"] == []
+    assert any("aucun joueur libre ne me fait gagner" in str(c) for r in moves.rows(out) for c in r)
+
+
+def test_auto_free_agent_setting_is_read():
+    cfg, _ = C.parse_rows(C.build_rows() + [["Moves | Compare", "Auto Free Agent", ""]])
+    assert cfg["league"]["moves"]["compare"] == {"type": "auto free agent", "manager": ""}

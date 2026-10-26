@@ -152,6 +152,33 @@ def test_push_projections_values_still_follow_their_player(monkeypatch):
     assert not book.requests
 
 
+def test_push_projections_refuses_to_drop_a_phase_present_in_bdd(monkeypatch):
+    """Base sans phase season (base locale différente de la base Drive) : rien n'est écrit."""
+    book = _FakeBook([["Arno", ""]])
+    writes = _setup_push(monkeypatch, book, [["Team Draft", "Team Season", "Phase", "Player"],
+                                             ["Arno", "", "draft", "Player A"],
+                                             ["Arno", "", "season", "Player A"]])
+    with pytest.raises(ValueError, match="season.*rien n'a été écrit"):
+        draft_main.push_projections()
+    assert writes == [] and not book.requests
+
+
+def test_push_projections_drops_phases_when_asked(monkeypatch):
+    book = _FakeBook([["Arno", ""]])
+    writes = _setup_push(monkeypatch, book, [["Team Draft", "Team Season", "Phase", "Player"],
+                                             ["Arno", "", "season", "Player A"]])
+    draft_main.push_projections(drop_phases=True)
+    assert [row[0] for row in writes[0][1]] == ["Phase", "draft", "draft", "lt"]
+
+
+def test_phases_in_reads_the_phase_column():
+    from scripts import bdd
+
+    rows = [["Team Draft", "Team Season", "Phase", "Player"], ["", "", "draft", "A"], ["", "", "Season", "A"],
+            ["", "", "draft", "B"], ["", ""]]
+    assert bdd.phases_in(rows, {"projections_start_col": "C"}) == ["draft", "season"]
+
+
 def test_write_team_draft_skips_formula_column():
     from scripts import bdd
 
