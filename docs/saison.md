@@ -46,6 +46,7 @@ Réglages dans l'onglet settings :
 | `Moves | Compare` | `manager` | nom du manager |
 | `Moves | Compare` | `free agent` | (vide) : je lâche les joueurs listés, qui doivent être les miens |
 | `Moves | Compare` | `auto` | (vide = tous les managers, ou un nom de manager) : recherche d'échanges sans joueur saisi, lignes `Moves | Player` ignorées |
+| `Moves | Compare` | `auto free agent` | (vide) : recherche de joueurs libres sans joueur saisi (qui lâcher, qui prendre), lignes `Moves | Player` ignorées |
 | `Optim | Moves` | `Value tolerance` | écart de valeur accepté, 10 % par défaut |
 | `Optim | Moves` | `Max results` / `Min results` / `Free agent results` / `Free agent shortlist` | 20 / 10 / 6 / 15 |
 | `Optim | Moves` | `Auto max players` / `Auto shortlist` / `Auto per manager` / `Auto min partner gain` | 2 / 40 / 5 / 0 |
@@ -77,6 +78,12 @@ Réglages dans l'onglet settings :
 - Joueurs libres (joueurs des projections absents de tous les effectifs Yahoo, statut waivers non
   vérifié) : chacun est testé à la place des joueurs lâchés ; si plusieurs sont lâchés, les 15
   meilleurs sont combinés. Les 6 meilleures options sont affichées, même si elles font perdre des points.
+- Joueurs libres, recherche auto (`Moves | Compare` = `auto free agent`) : chacun de mes joueurs (hors
+  postes IL : lâcher un blessé ne libère pas de place) contre chacun des 150 meilleurs joueurs libres, au
+  même crible rapide que la recherche auto d'échanges. Les plus prometteurs (`Free agent shortlist`, au plus
+  2 joueurs à lâcher par joueur libre) sont simulés exactement ; seuls ceux qui me font gagner des points
+  sont affichés, un par joueur libre avec le meilleur joueur à lâcher, du plus grand au plus petit gain
+  (au plus `Free agent results`). Moins d'une seconde pour 15 équipes.
 - Valeur d'un joueur : valeur par match au-dessus du niveau de remplacement (dernier joueur d'effectif
   de la ligue, 180e pour 15 x 12 ; phase st sur l'horizon court, lt ensuite) x matchs attendus d'ici la
   fin de saison. Les stats réelles restent à l'équipe qui les a faites ; mon lineup est réoptimisé,

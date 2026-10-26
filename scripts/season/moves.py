@@ -3,8 +3,9 @@
 Réglages de l'onglet settings :
 - Moves | Player 1..4 : manager | joueur. Le manager est soit le mien (je cède ces joueurs), soit celui
   de Moves | Compare (je reçois ces joueurs). Ligne sans joueur : ignorée.
-- Moves | Compare : « manager » + nom du manager (échange), « free agent » (je lâche mes joueurs), ou
-  « auto » (+ nom du manager facultatif) : recherche d'échanges sans joueur saisi (Moves | Player ignorés).
+- Moves | Compare : « manager » + nom du manager (échange), « free agent » (je lâche mes joueurs),
+  « auto » (+ nom du manager facultatif) : recherche d'échanges sans joueur saisi (Moves | Player ignorés), ou
+  « auto free agent » : recherche de joueurs libres sans joueur saisi (Moves | Player ignorés).
 - Optim | Moves : tolérance de valeur, nombre de résultats...
 
 Recherche auto : tous les échanges 1 contre 1 à N contre N (Auto max players) avec chaque manager (ou celui
@@ -22,6 +23,11 @@ mien) sont testées, celles dont la valeur s'écarte de plus de la tolérance so
 classées par gain de points roto attendus pour moi (le gain de l'autre manager est indiqué).
 Joueurs libres : chaque joueur libre est testé seul à la place des joueurs lâchés, puis (plusieurs
 joueurs lâchés) les meilleurs sont combinés.
+Joueurs libres, recherche auto : chacun de mes joueurs (hors postes IL : lâcher un blessé ne libère pas de
+place) contre chacun des meilleurs joueurs libres, au crible rapide (comme la recherche auto d'échanges) ;
+les plus prometteurs (2 joueurs lâchés au plus par joueur libre, Free agent shortlist en tout) sont simulés
+exactement ; seuls ceux qui me font gagner des points sont gardés, un par joueur libre (le meilleur joueur à
+lâcher), du plus grand au plus petit gain.
 
 Valeur d'un joueur : valeur par match au-dessus du niveau de remplacement (joueur classé au rang
 « nombre de joueurs dans les effectifs », 180 pour 15 x 12 ; st sur l'horizon court, lt ensuite) x matchs
@@ -39,13 +45,15 @@ import numpy as np
 
 from scripts.draft.engine import LOWER_IS_BETTER, UNCERTAINTY, S, category_values, roto_points
 from scripts.names import name_key
-from scripts.season.engine import apply_lineup_rate, optimize_team, project_team, standings_projection
+from scripts.season.engine import BUCKETS, apply_lineup_rate, optimize_team, project_team, standings_projection
 
 log = logging.getLogger("stbl.season.moves")
 
 MAX_PLAYERS = 4
 FA_SCREEN = 150          # joueurs libres testés un par un (les meilleurs en valeur totale)
 MAX_COMBINATIONS = 20000
+AUTO_FREE_AGENT = "auto free agent"
+IL_SLOTS = {"IL", "IL+"}   # postes blessés : lâcher ce joueur ne libère pas de place pour un joueur libre
 
 
 class MovesError(ValueError):
@@ -256,14 +264,24 @@ def _auto_plan(league):
     return {"me": me, "side": me, "mine": True, "players": [], "kind": "auto", "other": other}
 
 
+def _auto_free_agent_plan(league):
+    compare = (league.get("moves") or {}).get("compare") or {}
+    if str(compare.get("type") or "").strip().lower() != AUTO_FREE_AGENT:
+        return None
+    me = league.get("draft", {}).get("my_team")
+    return {"me": me, "side": me, "mine": True, "players": [], "kind": AUTO_FREE_AGENT, "other": ""}
+
+
 def simulate(result, league):
     """Mouvements classés : {mode, plan, moves, tested, kept, base...}."""
-    p = _auto_plan(league) or plan(league)
+    p = _auto_plan(league) or _auto_free_agent_plan(league) or plan(league)
     sim = Simulator(result, league)
     conf = league.get("moves") or {}
     me = sim.index(p["me"])
     if p["kind"] == "auto":
         out = _auto(sim, me, p, conf)
+    elif p["kind"] == AUTO_FREE_AGENT:
+        out = _auto_free_agents(sim, me, conf)
     elif p["kind"] == "manager":
         out = _trades(sim, me, p, conf)
     else:
@@ -330,13 +348,7 @@ def _free_agents(sim, me, p, conf):
     k = len(dropped)
     gone = {id(x) for x in dropped}
     kept_entries = [_entry(x) for x in my_team.players if id(x) not in gone]
-    taken = set().union(*(_keys(x) for t in sim.teams for x in t.players))
-    pool = sim.ctx["lt_pool"]
-    free = [pl for pl in pool.players if name_key(pl.name) not in taken and (pl.gp or 0) > 0]
-    free.sort(key=lambda pl: -(pl.value_tot or 0.0))
-    free = free[:FA_SCREEN]
-    if not free:
-        raise MovesError("Aucun joueur libre avec des projections.")
+    free = _free_pool(sim)
     limit = int(conf.get("fa_results", 6))
     shortlist_size = max(int(conf.get("fa_shortlist", 15)), k, limit)
 
@@ -359,6 +371,16 @@ def _free_agents(sim, me, p, conf):
     log.info("[Moves] %d joueurs libres testés (%d évaluations).", len(free), sim.evaluated)
     return {"mode": "free agent", "partner": None, "partner_team": None, "fixed": dropped, "tested": tested,
             "kept": len(moves), "tolerance": None, "moves": moves[:limit], "free_count": len(free)}
+
+
+def _free_pool(sim):
+    """Joueurs libres : projections lt absentes de tous les effectifs, les meilleurs en valeur totale."""
+    taken = set().union(*(_keys(x) for t in sim.teams for x in t.players))
+    free = [pl for pl in sim.ctx["lt_pool"].players if name_key(pl.name) not in taken and (pl.gp or 0) > 0]
+    free.sort(key=lambda pl: -(pl.value_tot or 0.0))
+    if not free:
+        raise MovesError("Aucun joueur libre avec des projections.")
+    return free[:FA_SCREEN]
 
 
 # --- Recherche auto ---------------------------------------------------------------------------
@@ -596,6 +618,53 @@ def _auto(sim, me, p, conf):
             "partners": [sim.teams[i].manager for i in partners], "moves": moves}
 
 
+def _auto_free_agents(sim, me, conf):
+    """Recherche auto de joueurs libres : (mon joueur lâché, joueur libre) au crible, puis simulation exacte."""
+    my_team, ctx = sim.teams[me], sim.ctx
+    drops = [x for x in my_team.players if str(x.slot or "").upper() not in IL_SLOTS]
+    if not drops:
+        raise MovesError("Aucun joueur à lâcher (hors postes IL) dans mon effectif.")
+    # les joueurs libres projetés comme mes joueurs (matchs attendus, stats st / lt), sans plafond
+    roster = {"players": [_fa_entry(pl) for pl in _free_pool(sim)],
+              "games": {b: {"remaining": 1e9} for b in BUCKETS}}
+    adds = [x for x in project_team("libres", "libres", roster, None, ctx["lt_pool"], ctx["st_pool"], ctx["games"],
+                                    ctx["today"], ctx["horizon"], ctx["league"]).players
+            if x.found and x.games_expected > 1e-9]
+    if not adds:
+        raise MovesError("Aucun joueur libre avec des matchs attendus d'ici la fin de saison.")
+
+    # crible : effet sur mes stats de fin de saison sans réoptimiser le lineup (voir _Side)
+    side = _Side(sim, my_team, [[d] for d in drops], [[a] for a in adds])
+    g, r = (a.ravel() for a in np.meshgrid(np.arange(len(drops)), np.arange(len(adds)), indexing="ij"))
+    values = np.repeat(sim.base_values.astype(float)[None], len(g), axis=0)
+    values[:, me] = _values_batch(np.array(my_team.final) + side.delta(g, r), sim.cats)
+    gains = _rows_points(values, [me], sim.cats, sim.weights)[:, 0] - sim.base_total[me]
+
+    limit = int(conf.get("fa_results", 6))
+    shortlist = max(int(conf.get("fa_shortlist", 15)), limit)
+    per_add = {}
+    for i in np.argsort(-gains):            # 2 joueurs à lâcher au plus par joueur libre (variété)
+        if len(per_add.setdefault(r[i], [])) < 2:
+            per_add[r[i]].append(i)
+    candidates = sorted((i for picks in per_add.values() for i in picks), key=lambda i: -gains[i])[:shortlist]
+
+    best = {}
+    for i in candidates:
+        drop, add = drops[g[i]], adds[r[i]]
+        teams, points = sim.evaluate(me, [_entry(x) for x in my_team.players if x is not drop] + [_entry(add)])
+        move = sim.move(me, [drop], [x for x in teams[me].players if x.name == add.name], teams, points)
+        move.screen_gain = float(gains[i])
+        if move.my_gain > 1e-6 and (add.name not in best or move.my_gain > best[add.name].my_gain):
+            best[add.name] = move
+    moves = sorted(best.values(), key=lambda m: (-round(m.my_gain, 3), -m.value_recv))[:limit]
+    log.info("[Moves auto joueurs libres] %d de mes joueurs x %d joueurs libres = %d combinaisons au crible, "
+             "%d simulées, %d qui me font gagner, %d affichées.", len(drops), len(adds), len(g), len(candidates),
+             len(best), len(moves))
+    return {"mode": AUTO_FREE_AGENT, "partner": None, "partner_team": None, "fixed": [], "tested": len(g),
+            "kept": len(best), "simulated": len(candidates), "drops": len(drops), "free_count": len(adds),
+            "tolerance": None, "moves": moves}
+
+
 # --- Restitution -----------------------------------------------------------------------------
 
 def _names(players):
@@ -649,6 +718,11 @@ def rows(out):
         lines.append(["Tolérance de valeur", f"±{100 * out['tolerance']:.0f} %"])
         lines.append(["Combinaisons", f"{out['tested']} testées, {out['kept']} à valeur équivalente, "
                                       f"{len(out['moves'])} affichées"])
+    elif out["mode"] == AUTO_FREE_AGENT:
+        lines.append(["Mouvement", "recherche auto de joueurs libres (statut waivers non vérifié)"])
+        lines.append(["Combinaisons", f"{out['drops']} de mes joueurs (hors IL) x {out['free_count']} joueurs "
+                                      f"libres = {out['tested']} testées au crible, {out['simulated']} simulées, "
+                                      f"{out['kept']} qui me font gagner, {len(out['moves'])} affichées"])
     else:
         lines.append(["Mouvement", "joueurs libres (statut waivers non vérifié)"])
         lines.append(["Joueurs lâchés", _names(out["fixed"])])
@@ -675,6 +749,9 @@ def rows(out):
     if not out["moves"] and auto:
         lines.append(["", "aucun échange gagnant-gagnant : élargissez la tolérance (Optim | Moves | Value "
                           "tolerance), Auto max players ou Auto shortlist, ou baissez Auto min partner gain"])
+    elif not out["moves"] and out["mode"] == AUTO_FREE_AGENT:
+        lines.append(["", "aucun joueur libre ne me fait gagner de points : effectif meilleur que les joueurs "
+                          "libres testés (ou élargissez Optim | Moves | Free agent shortlist)"])
     elif not out["moves"]:
         lines.append(["", "aucune combinaison à valeur équivalente : élargissez la tolérance "
                           "(Optim | Moves | Value tolerance)" if trade else "aucun joueur libre"])
@@ -721,6 +798,16 @@ def console(out):
                         f"{100 * m.value_diff:+.1f} %), rang {m.rank}" + (" [il perd des points]" if m.partner_loses else ""))
         if not out["moves"]:
             text.append("Aucun échange gagnant-gagnant trouvé.")
+        return "\n".join(text)
+    if out["mode"] == AUTO_FREE_AGENT:
+        text = [f"Recherche auto de joueurs libres ({out['drops']} de mes joueurs x {out['free_count']} joueurs "
+                f"libres, {out['simulated']} simulées, {out['kept']} qui me font gagner)",
+                f"Sans mouvement : {out['base_points']:.1f} pts, rang {out['base_rank']}"]
+        for i, m in enumerate(out["moves"], 1):
+            text.append(f"{i:>2}. lâcher {_names(m.give)}, prendre {_names(m.recv)} : {m.my_gain:+.2f} pts, "
+                        f"rang {m.rank} ; matchs alignés : {_games(m.recv_detail)}")
+        if not out["moves"]:
+            text.append("Aucun joueur libre ne me fait gagner de points.")
         return "\n".join(text)
     head = (f"Échange avec {out['partner_team'].manager}" if out["mode"] == "manager" else "Joueurs libres")
     text = [f"{head} - {'je cède' if p['mine'] else 'je reçois'} : {_names(out['fixed'])}",

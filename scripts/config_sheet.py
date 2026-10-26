@@ -153,7 +153,8 @@ PARAMS = [
     ("Optim | Moves", "Free agent results", "league", "moves.fa_results", "int",
      "joueurs libres : options affichées"),
     ("Optim | Moves", "Free agent shortlist", "league", "moves.fa_shortlist", "int",
-     "joueurs libres : meilleurs pris un par un, combinés ensuite quand plusieurs joueurs sont lâchés"),
+     "joueurs libres : meilleurs pris un par un, combinés ensuite quand plusieurs joueurs sont lâchés ; "
+     "recherche auto : combinaisons simulées exactement après le crible"),
     ("Optim | History", "Projections interval (days)", "league", "history.projections_days", "int",
      "photos des projections ros, des fenêtres l30 / l15 / l07 et des projections finales lt / st : une tous les N jours au plus"),
     ("Optim | History", "Stats interval (days)", "league", "history.stats_days", "int",
@@ -195,7 +196,7 @@ ORDER_SECTION = "Draft | Order"
 KEEPERS_SECTION = "Draft | Keepers"
 MANAGERS_SECTION = "Transco | Managers"
 MOVES_PLAYER_SECTION = "Moves | Player"      # Moves | Player 1..4 : manager | joueur
-MOVES_COMPARE_SECTION = "Moves | Compare"    # manager | nom du manager, ou free agent
+MOVES_COMPARE_SECTION = "Moves | Compare"    # manager | nom du manager, free agent, auto, auto free agent
 MOVES_PLAYERS = 4
 ROSTER_HELP = {"G": "postes titulaires Guard", "F": "postes titulaires Forward", "C": "postes titulaires Center",
                "UTIL": "postes titulaires Util", "BN": "banc", "IL": "blessés"}
@@ -369,8 +370,8 @@ def build_rows(cfg=None, bootstrap=None):
             "joueurs à échanger : les miens, ou ceux du manager de Moves | Compare" if i == 1 else "")
     compare = moves.get("compare") or {}
     add(MOVES_COMPARE_SECTION, compare.get("type", ""), compare.get("manager", ""),
-        "manager + nom du manager (échange), free agent (joueurs libres), ou auto + manager facultatif "
-        "(recherche d'échanges sans joueur saisi)")
+        "manager + nom du manager (échange), free agent (joueurs libres), auto + manager facultatif "
+        "(recherche d'échanges sans joueur saisi) ou auto free agent (recherche de joueurs libres sans joueur saisi)")
 
     codes = [(conf.get("code"), name, conf) for name, conf in sources.items() if conf.get("code")]
     for code, _, conf in codes:
@@ -502,8 +503,9 @@ def parse_rows(rows, cfg=None, bootstrap=None):
                 kind = _norm(param)
                 if not kind:
                     moves_compare = {}
-                elif kind not in ("manager", "free agent", "auto"):
-                    raise ValueError(f"Onglet config, {section} : « {param} », attendu manager, free agent ou auto.")
+                elif kind not in ("manager", "free agent", "auto", "auto free agent"):
+                    raise ValueError(f"Onglet config, {section} : « {param} », attendu manager, free agent, auto "
+                                     "ou auto free agent.")
                 else:
                     moves_compare = {"type": kind, "manager": value if kind in ("manager", "auto") else ""}
             elif domain == "sources" and sub in ("draft", "ros"):

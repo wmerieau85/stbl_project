@@ -45,7 +45,7 @@ lancement (saison, étape `Actual Phase`, sources, grilles).
 | En saison | `python -m scripts.yahoo rosters` | effectifs actuels des 15 équipes (+ `exports/yahoo_rosters_<saison>.csv`, bloc rosters de l'onglet `yahoo`) |
 | En saison | `python main.py --push-sheet` avec `Actual Phase = ros` | projections ROS + stats par période, phases lt / st |
 | En saison | `python -m scripts.season update` | classement projeté et effectifs, onglet `season_reco` |
-| En saison | `python -m scripts.season moves` | échanges ou joueurs libres simulés (lignes `Moves | ...`), onglet `moves_reco` |
+| En saison | `python -m scripts.season moves` | échanges ou joueurs libres simulés (lignes `Moves | ...`, `auto` / `auto free agent` : recherche automatique), onglet `moves_reco` |
 | Maintenance | `python -m scripts.player_linker` | relance le rapprochement des joueurs |
 | Maintenance | `python -m scripts.config_sheet push` | réécrit les onglets settings / players depuis la configuration locale (remise à plat) |
 | Maintenance | `python -m pytest -q` | tests (voir [Tests](#tests-et-contrôle-du-code)) |
@@ -55,6 +55,10 @@ que la phase draft ; `ros` importe les projections ros et les stats par période
 que lt / st. Les autres phases restent telles quelles en base et sont réécrites à l'identique dans
 `bdd`. Une phase sans aucune donnée garde son calcul précédent.
 
+Garde-fou : si une phase présente dans `bdd` est absente de la base utilisée (base de ce PC différente de la
+base Drive, par exemple), l'envoi vers le classeur s'arrête sans rien écrire. Pour retirer une phase
+volontairement (changement de saison), ajouter `--drop-phases`.
+
 Autres options utiles :
 
 ```bash
@@ -63,6 +67,7 @@ python main.py --sources fantasypros    # une seule source
 python main.py --file fanscout=C:\chemin\table.csv   # fichier CSV précis
 python main.py --skip-link -v           # sans rapprochement, logs détaillés
 python main.py --skip-yahoo             # sans le pré-classement / ADP Yahoo
+python main.py --skip-import --push-sheet --drop-phases   # retire de bdd les phases absentes de la base
 python -m scripts.weighting --phase draft   # pondération d'une phase seule
 python -m scripts.exports               # réexporte seulement les projections brutes
 python -m scripts.sources.cbs           # une source seule
