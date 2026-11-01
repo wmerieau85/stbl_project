@@ -162,7 +162,9 @@ match chez 9cat). Avant la pondération lt, chaque source qui donne des minutes 
   consensus des sources ; même ordre pour toutes les sources ;
 - les `Protected players` (7) premiers ne sont jamais réduits ; le surplus est retiré d'abord aux joueurs
   au-delà de `Rotation size` (10), sans descendre ce groupe sous `Deep bench floor` (15 min / match), puis
-  aux autres ; aucun joueur n'est ramené sous son MPG réel (la cible peut donc ne pas être atteinte) ;
+  aux autres ; aucun joueur n'est ramené sous son MPG réel ni réduit de plus de `Max cut per player`
+  (30 %) dans une source (la cible peut donc ne pas être atteinte, ex. effectif surchargé au retour des
+  blessés) ;
 - MPG, minutes et totaux réduits du même facteur (GP et stats par minute inchangés) ; un blessé ne compte
   que les matchs après son retour ; joueurs sans équipe (FA) et sources sans minutes non concernés ;
 - une ligne `[Minutes lt]` par source dans le log ; `Optim | Minutes | Normalize` = non pour désactiver.

@@ -3,8 +3,9 @@ from datetime import date
 from scripts.weighting import minutes
 
 TODAY = date(2026, 11, 1)
+# max_cut = 1 : mécanique des paliers sans plafond individuel (testé à part)
 LEAGUE = {"minutes": {"enabled": True, "target": 240, "protected": 2, "rotation": 3, "deep_floor": 10,
-                      "min_real_games": 3}}
+                      "min_real_games": 3, "max_cut": 1.0}}
 
 
 def _games(n=10, team="OKC"):
@@ -96,3 +97,15 @@ def test_real_mpg_reads_season_stats(tmp_path, monkeypatch):
             conn.execute("INSERT INTO raw_projections (player_id, player, player_key, source, season, stage, gp, mpg) "
                          "VALUES (?, 'x', ?, ?, '2026-27', 'sea', ?, ?)", (pid, f"k{pid}{src}", src, gp, mpg))
         assert minutes.real_mpg(conn, "2026-27", 3) == {1: 30.0}
+
+
+def test_max_cut_per_player():
+    # banc profond (P4-P8, 150 min) devrait perdre 60 min (x0,6) : plafonné à -30 %, reste pris aux 8e-10e
+    capped = {"minutes": dict(LEAGUE["minutes"], max_cut=0.3, deep_floor=0)}
+    data = _team(60, 50, 40, 36, 34, 30, 30, 20)
+    minutes.normalize([(_slot(), data)], "lt", capped, _games(), today=TODAY)
+    assert round(data[4]["mpg"], 6) == round(36 * 0.7, 6)          # -30 % au plus
+    assert round(data[3]["mpg"], 6) == round(40 * 0.7, 6)          # 3e (8e-10e) aussi plafonné
+    assert (data[1]["mpg"], data[2]["mpg"]) == (60, 50)
+    assert round(_per_game(data)) == 300 - 45 - 12                 # 243 : cible non atteinte, acceptée
+    assert minutes.params({"minutes": {"max_cut": 30}})["max_cut"] == 0.3   # saisi en pourcentage
