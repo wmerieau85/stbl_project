@@ -202,6 +202,9 @@ def test_return_after_season_end_zeroed_and_kept_in_lt_and_st(tmp_path, monkeypa
             conn.execute("INSERT INTO raw_projections (player_id, player, player_key, team, source, season, stage, "
                          "gp, mpg, pts, fga, fgp) VALUES (?, ?, ?, 'ATL', 'FantasyPros', '2026-27', 'ros', 50, 20, "
                          "400, 300, 0.5)", (pid, key, key))
+            conn.execute("INSERT INTO raw_projections (player_id, player, player_key, team, source, season, "
+                         "stage, gp, mpg, pts) VALUES (?, ?, ?, 'ATL', 'FantasyPros', '2026-27', 'sea', 2, 20, "
+                         "20)", (pid, key, key))
     settings = {"active_season": "2026-27", "active_stage": "ros"}
     assert engine.compute_phase("lt", settings) == 2
     assert engine.compute_phase("st", settings) == 2

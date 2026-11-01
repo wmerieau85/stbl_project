@@ -48,6 +48,38 @@ def test_lt_phase_caps_gp(tmp_path, monkeypatch):
         conn.execute("INSERT INTO players (player_id, canonical_name, name_key) VALUES (1, 'Sharp', 'sharp')")
         conn.execute("INSERT INTO raw_projections (player_id, player, player_key, team, source, season, stage, "
                      "gp, mpg, pts) VALUES (1, 'sharp', 'sharp', 'TOR', 'FantasyPros', '2026-27', 'ros', 82, 10, 400)")
+        # un match joué : le joueur, projeté par une seule source, n'est pas retiré (drop_unreliable)
+        conn.execute("INSERT INTO raw_projections (player_id, player, player_key, team, source, season, stage, "
+                     "gp, mpg, pts) VALUES (1, 'sharp', 'sharp', 'TOR', 'FantasyPros', '2026-27', 'sea', 1, 10, 5)")
     engine.compute_phase("lt", {"active_season": "2026-27", "active_stage": "ros"})
     with db.get_connection() as conn:
         assert conn.execute("SELECT gp, pts FROM final_projections WHERE phase='lt'").fetchone() == (40, 195.12)
+
+
+def _loaded():
+    def slot(code):
+        return {"code": code, "weights": {"gp": 0.5, "min": 0.5, "stats": {"pts": 0.5}}}
+    fp = {1: {"player": "Deux sources", "team": "OKC"}, 2: {"player": "Libre", "team": "FA"},
+          4: {"player": "Joue déjà", "team": "BOS"}}
+    nc = {1: {"player": "Deux sources", "team": "OKC"}, 3: {"player": "Isolé", "team": "TOR"},
+          2: {"player": "Libre", "team": ""}, 5: {"player": "Isolé FA", "team": "FA"}}
+    return [(slot("fp.ros"), fp), (slot("nc.ros"), nc)]
+
+
+def test_drop_unreliable():
+    from scripts.weighting.engine import drop_unreliable
+
+    loaded = _loaded()
+    removed = drop_unreliable(loaded, "lt", played={4, 5}, min_sources=2)
+    # Isolé : 1 source, aucun match ; Libre / Isolé FA : sans équipe NBA (même avec des matchs joués)
+    assert removed == ["Isolé", "Isolé FA", "Libre"]
+    assert set(loaded[0][1]) == {1, 4} and set(loaded[1][1]) == {1}
+    assert drop_unreliable(_loaded(), "lt", played={3, 4}, min_sources=2) == ["Isolé FA", "Libre"]   # ont joué
+    assert drop_unreliable(_loaded(), "lt", played=set(), min_sources=1) == ["Isolé FA", "Libre"]    # FA seuls
+
+
+def test_drop_unreliable_keeps_injured_players():
+    from scripts.weighting.engine import drop_unreliable
+
+    removed = drop_unreliable(_loaded(), "lt", played=set(), min_sources=2, keep={"isole": "season"})
+    assert "Isolé" not in removed and "Libre" in removed

@@ -337,6 +337,45 @@ def _round(value, digits):
     return None if value is None else round(value, digits)
 
 
+def played_ids(conn, season):
+    """Joueurs ayant joué au moins un match cette saison (stats réelles, étape sea)."""
+    return {pid for (pid,) in conn.execute(
+        "SELECT DISTINCT player_id FROM raw_projections WHERE season=? AND stage='sea' AND gp > 0 "
+        "AND player_id IS NOT NULL", (season,))}
+
+
+def drop_unreliable(loaded, phase, played, min_sources=2, keep=None):
+    """Phase lt, avant la normalisation des minutes : retire les joueurs sans équipe NBA (FA) et ceux
+    projetés par moins de `min_sources` sources sans avoir joué un match cette saison (projections
+    isolées : joueur non signé, recrue projetée par une seule source...). Dès son premier match, le
+    joueur revient. Un joueur de la liste des blessés (`keep` : clés de nom) n'est jamais retiré : c'est un
+    joueur NBA, gardé même absent jusqu'à la fin de saison. Modifie `loaded` en place ; retourne les noms
+    retirés."""
+    from scripts.names import name_key
+    from scripts.season.schedule import team_code
+
+    count, teams, names = {}, {}, {}
+    for _, data in loaded:
+        for pid, row in data.items():
+            count[pid] = count.get(pid, 0) + 1
+            names.setdefault(pid, row.get("player") or "")
+            team = team_code(row.get("team") or "")
+            if team not in ("", "FA"):
+                teams[pid] = team
+    keep = keep or {}
+    drop = {pid for pid in count if name_key(names[pid]) not in keep
+            and (pid not in teams or (count[pid] < min_sources and pid not in played))}
+    for _, data in loaded:
+        for pid in drop & set(data):
+            del data[pid]
+    removed = sorted(names[pid] for pid in drop)
+    if removed:
+        log.info("[Pondération %s] %d joueur(s) retiré(s) (sans équipe NBA, ou moins de %d source(s) sans "
+                 "match joué) : %s%s", phase, len(removed), min_sources, ", ".join(removed[:25]),
+                 " ..." if len(removed) > 25 else "")
+    return removed
+
+
 def cap_games_left(results, phase, games, today=None):
     """Phase lt : GP plafonné aux matchs restants de l'équipe (totaux réduits dans la même proportion).
     Joueur sans équipe reconnue (FA...) : inchangé. Retourne le nombre de joueurs plafonnés."""
@@ -433,6 +472,11 @@ def compute_phase(phase, settings=None, grid_path=None):
         games = _games(phase, season, settings)
         # retour après le dernier match de la saison (ESPN : 2027-07-01...) = absent jusqu'à la fin de saison
         availability = season_end_as_out(availability, games)
+    if is_lt:
+        min_sources = int((league.get("season") or {}).get("min_sources_no_games", 2) or 0)
+        if min_sources > 0:
+            with get_connection() as conn:
+                drop_unreliable(loaded, phase, played_ids(conn, season), min_sources, keep=availability)
     if normalize and games:
         with get_connection() as conn:
             real = minutes.real_mpg(conn, season, minutes.params(league)["min_real_games"])

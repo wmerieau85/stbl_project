@@ -137,6 +137,9 @@ PARAMS = [
     ("Optim | Season", "Injury GP ratio", "league", "season.injury_gp_ratio", "float",
      "blessé avec date de retour : source exclue du niveau GP si matchs projetés / matchs restants après "
      "le retour > ce seuil (1 = impossible ; 0,95 plus strict)"),
+    ("Optim | Season", "Min sources if no game played", "league", "season.min_sources_no_games", "int",
+     "phase lt : joueur sans match joué cette saison retiré s'il a moins de sources que ce nombre ; joueurs sans "
+     "équipe NBA (FA) retirés aussi ; 0 = désactivé"),
     ("Optim | Season", "Simulations", "league", "season.simulations", "int", "tirages pour les probabilités de classement"),
     ("Optim | Minutes", "Normalize", "league", "minutes.enabled", "bool",
      "phase lt : minutes de chaque source ramenées, par équipe, à Team target par match restant (banc réduit)"),
