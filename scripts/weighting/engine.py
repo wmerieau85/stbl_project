@@ -401,7 +401,11 @@ def compute_phase(phase, settings=None, grid_path=None):
 
     games = None
     if any(v != "season" for v in availability.values()):
+        from scripts.injuries import season_end_as_out
+
         games = _games(phase, season, settings)
+        # retour après le dernier match de la saison (ESPN : 2027-07-01...) = absent jusqu'à la fin de saison
+        availability = season_end_as_out(availability, games)
     ratio_max = injury_gp_ratio(league)
     gp_notes = {}
 
