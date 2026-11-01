@@ -356,7 +356,7 @@ def build_rows(cfg=None, bootstrap=None):
              ("Settings | Phases", None), ("Settings | Draft", None), ("Sheets | Settings", None),
              ("Sheets | Tab", None), ("Sheets | Draft", None), ("Sheets | Projections", None),
              ("Sheets | Season", None), ("Optim | Draft", None), ("Optim | Season", None),
-             ("Optim | Moves", None), ("Optim | History", None), ("Pipeline | Import", None), ("Pipeline | Export", None), ("Draft Lottery | Managers", None),
+             ("Optim | Minutes", None), ("Optim | Moves", None), ("Optim | History", None), ("Pipeline | Import", None), ("Pipeline | Export", None), ("Draft Lottery | Managers", None),
              ("Draft Lottery | Active", None), ("Draft Lottery | Number Balls", None),
              ("Draft Lottery | Lottery Number", None), ("Draft Lottery | Balls", None)]
     for section, special in order:

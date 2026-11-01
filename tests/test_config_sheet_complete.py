@@ -32,6 +32,19 @@ def test_full_tab_has_nothing_missing():
     assert C.missing_rows(C.build_rows()) == []
 
 
+def test_every_param_section_is_written():
+    """Chaque réglage de PARAMS figure dans l'onglet reconstruit (sinon Compléter settings ne le propose jamais)."""
+    built = {(C._norm(r[0]), C._norm(r[1])) for r in C.build_rows()[1:]}
+    absent = [(sec, par) for sec, par, *_ in C.PARAMS if (C._norm(sec), C._norm(par)) not in built]
+    assert absent == []
+
+
+def test_minutes_params_proposed_when_absent():
+    rows = [r for r in C.build_rows() if C._norm(r[0]) != C._norm("Optim | Minutes")]
+    missing = [(r[0], r[1]) for r in C.missing_rows(rows)]
+    assert ("Optim | Minutes", "Team target") in missing and len(missing) == 6
+
+
 def test_missing_params_are_listed_with_current_value():
     rows = _without(C.build_rows(), ("Optim | Season", "Opponent default rate"), ("Optim | Moves", "Auto shortlist"))
     missing = C.missing_rows(rows)
