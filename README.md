@@ -168,6 +168,14 @@ match chez 9cat). Avant la pondération lt, chaque source qui donne des minutes 
 - une ligne `[Minutes lt]` par source dans le log ; `Optim | Minutes | Normalize` = non pour désactiver.
   L'onglet `bdd_detail` garde les projections brutes des sources.
 
+### Fiabilité des matchs projetés (GP)
+
+- Phase lt : le GP d'un joueur est plafonné aux matchs restants de son équipe (calendrier NBA), totaux
+  réduits dans la même proportion ; la phase st, qui reprend le GP de lt, en profite directement.
+- 9cat (étapes draft / ros) : les projections « modèles » (exactement 30 matchs et un MPG partagé par au
+  moins 3 joueurs, valeurs par défaut données surtout aux recrues) sont écartées à l'import ; le joueur garde
+  ses autres sources. Le log de l'import 9cat les liste.
+
 ### Blessures (ESPN, onglet `injuries`)
 
 La liste des blessés d'[ESPN](https://www.espn.com/nba/injuries) (API publique, statut et date de retour
