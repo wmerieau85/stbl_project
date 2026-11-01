@@ -181,6 +181,14 @@
       "opponent_default_rate": 0.95,
       "opponent_ramp_days": 42
     },
+    "minutes": {
+      "enabled": true,
+      "target": 240,
+      "protected": 7,
+      "rotation": 10,
+      "deep_floor": 15,
+      "min_real_games": 3
+    },
     "moves": {
       "value_tolerance": 0.1,
       "max_results": 20,

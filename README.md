@@ -151,6 +151,23 @@ poids des sources déjà configurées sont réduits en gardant leurs proportions
 modifié : `python -m scripts.config_sheet push` y écrit ces réglages, après vérification de la copie
 locale (cette commande réécrit tout l'onglet `settings` et `players`).
 
+### Minutes d'équipe (phase lt)
+
+Additionnées par équipe, les minutes projetées dépassent souvent ce qu'une équipe peut jouer (5 x 48 =
+240 min / match) : chaque source projette ses joueurs un par un, surtout le fond de banc (jusqu'à 340 min /
+match chez 9cat). Avant la pondération lt, chaque source qui donne des minutes est ramenée, équipe par
+équipe, à `Optim | Minutes | Team target` (240) par match restant (calendrier NBA) :
+
+- rang des joueurs d'une équipe : MPG réel de la saison (au moins `Min real games` matchs), sinon MPG de
+  consensus des sources ; même ordre pour toutes les sources ;
+- les `Protected players` (7) premiers ne sont jamais réduits ; le surplus est retiré d'abord aux joueurs
+  au-delà de `Rotation size` (10), sans descendre ce groupe sous `Deep bench floor` (15 min / match), puis
+  aux autres ; aucun joueur n'est ramené sous son MPG réel (la cible peut donc ne pas être atteinte) ;
+- MPG, minutes et totaux réduits du même facteur (GP et stats par minute inchangés) ; un blessé ne compte
+  que les matchs après son retour ; joueurs sans équipe (FA) et sources sans minutes non concernés ;
+- une ligne `[Minutes lt]` par source dans le log ; `Optim | Minutes | Normalize` = non pour désactiver.
+  L'onglet `bdd_detail` garde les projections brutes des sources.
+
 ### Blessures (ESPN, onglet `injuries`)
 
 La liste des blessés d'[ESPN](https://www.espn.com/nba/injuries) (API publique, statut et date de retour
