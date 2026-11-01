@@ -895,8 +895,12 @@ def complete(spreadsheet, tab=None):
     for row in add:
         at = last.get(_norm(row[0]))
         (groups.setdefault(at, []) if at else tail).append([_cell(v) for v in row])
+    grid = getattr(ws, "row_count", None)
     for at in sorted(groups, reverse=True):     # du bas vers le haut : les numéros restent valables
-        ws.insert_rows(groups[at], row=at + 1, value_input_option="RAW")
+        # section en dernière ligne de la grille : Sheets n'accepte l'insertion après la dernière ligne
+        # qu'en héritant de la mise en forme de la ligne précédente
+        ws.insert_rows(groups[at], row=at + 1, value_input_option="RAW",
+                       inherit_from_before=grid is not None and at >= grid)
     if tail:
         ws.append_rows(tail, value_input_option="RAW", table_range="A1")
     for row in add:

@@ -2,13 +2,22 @@ from scripts import config_sheet as C
 
 
 class FakeWS:
+    """Grille de la taille exacte des lignes (comme un onglet sans ligne vide en bas)."""
+
     def __init__(self, rows):
         self.rows = [list(r) for r in rows]
+
+    @property
+    def row_count(self):
+        return len(self.rows)
 
     def get(self, rng):
         return [list(r) for r in self.rows]
 
-    def insert_rows(self, values, row, value_input_option=None):
+    def insert_rows(self, values, row, value_input_option=None, inherit_from_before=False):
+        # comme l'API Sheets : après la dernière ligne, seulement en héritant de la ligne précédente
+        if row - 1 >= self.row_count and not inherit_from_before:
+            raise ValueError("range.startIndex must be less than the grid size if inheritFromBefore is false")
         self.rows[row - 1:row - 1] = [list(v) for v in values]
 
     def append_rows(self, values, value_input_option=None, table_range=None):
@@ -77,3 +86,14 @@ def test_complete_inserts_at_end_of_section_without_touching_other_rows(monkeypa
     assert ws.rows[-1][0].startswith("Optim | History")                     # section absente : en fin d'onglet
     assert C.missing_rows(ws.rows) == []
     assert C.complete(FakeBook(ws), "settings") == []
+
+
+def test_complete_when_section_is_last_row_of_sheet():
+    """Section en fin d'onglet (ajoutée par un Compléter précédent) : insertion après la dernière ligne."""
+    rows = C.build_rows()
+    minutes = [r for r in rows if C._norm(r[0]) == C._norm("Optim | Minutes")]
+    rows = [r for r in rows if C._norm(r[0]) != C._norm("Optim | Minutes")] + minutes[:-1]
+    ws = FakeWS(rows)
+    added = C.complete(FakeBook(ws), "settings")
+    assert [(r[0], r[1]) for r in added] == [(minutes[-1][0], minutes[-1][1])]
+    assert ws.rows[-1][1] == minutes[-1][1]
