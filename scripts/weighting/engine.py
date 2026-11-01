@@ -212,6 +212,60 @@ def _finalize_shooting(results):
         r["min"] = r["gp"] * r["mpg"] if r["gp"] is not None and r["mpg"] is not None else None
 
 
+INJURY_PHASES = ("lt",)   # projections du reste de saison (gp = matchs restants)
+
+
+def apply_injuries(results, phase, season, settings, league, availability=None, games=None, today=None):
+    """Blessés (onglet injuries / ESPN) : matchs projetés limités aux matchs de leur équipe après la date de
+    retour (0 si absent jusqu'à la fin de saison) ; totaux réduits dans la même proportion (stats par match
+    inchangées). Retourne le nombre de joueurs ajustés."""
+    from datetime import date
+
+    from scripts import injuries
+    from scripts.names import name_key
+    from scripts.season.schedule import games_by_team, load_games, team_code
+
+    today = today or date.today()
+    if availability is None:
+        try:
+            availability = injuries.load(league, settings, today=today,
+                                         timeout=settings.get("http", {}).get("timeout", 30))
+        except Exception as exc:   # ne doit jamais bloquer la pondération
+            log.warning("[Pondération %s] Blessures non prises en compte (%s).", phase, exc)
+            return 0
+    if not availability:
+        return 0
+    if games is None:
+        try:
+            games = load_games(season, timeout=settings.get("http", {}).get("timeout", 30))
+        except Exception as exc:
+            log.warning("[Pondération %s] Calendrier NBA indisponible (%s) : blessures ignorées.", phase, exc)
+            return 0
+    cache, changed = {}, []
+    for r in results:
+        back = availability.get(name_key(r.get("player") or ""))
+        if back is None or not r.get("gp"):
+            continue
+        if back == injuries.SEASON:
+            left = 0
+        else:
+            if back not in cache:
+                cache[back] = games_by_team(games, back)
+            left = cache[back].get(team_code(r.get("team") or ""), 0)
+        if r["gp"] <= left:
+            continue
+        factor = left / r["gp"]
+        changed.append(f"{r['player']} {r['gp']:.0f} -> {left}")
+        r["gp"] = float(left)
+        for cat in COUNTING + ("fgm", "ftm", "min"):
+            if r.get(cat) is not None:
+                r[cat] = r[cat] * factor
+    if changed:
+        log.info("[Pondération %s] Blessures : matchs projetés réduits pour %d joueur(s) : %s", phase,
+                 len(changed), ", ".join(changed[:20]))
+    return len(changed)
+
+
 def _round(value, digits):
     return None if value is None else round(value, digits)
 
@@ -259,8 +313,11 @@ def compute_phase(phase, settings=None, grid_path=None):
         # précédent plutôt que de vider la phase
         log.warning("[Pondération %s] Aucun joueur calculé : projections précédentes conservées.", phase)
         return 0
+    league = load_league()
+    if phase in INJURY_PHASES:
+        apply_injuries(results, phase, season, settings, league)
     _finalize_shooting(results)
-    add_zscores(results, load_league())
+    add_zscores(results, league)
     computed_at = datetime.now().isoformat(timespec="seconds")
     rows = []
     for r in results:

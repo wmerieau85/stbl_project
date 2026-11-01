@@ -29,6 +29,7 @@ import numpy as np
 
 from scripts.draft.engine import LOWER_IS_BETTER, UNCERTAINTY, S, category_values, roto_points
 from scripts.draft.pool import STATS
+from scripts.injuries import available_from
 from scripts.names import strip_accents
 from scripts.season.schedule import games_by_team, team_code
 
@@ -66,6 +67,7 @@ class PlayerProjection:
     games_st_used: float = 0.0   # matchs affectés à ST après plafonds
     games_lt_used: float = 0.0   # matchs affectés à LT après plafonds
     games_past_sched: int = 0    # matchs NBA déjà joués par son équipe depuis le début de saison
+    out_until: str = ""          # blessure (onglet injuries) : date de retour AAAA-MM-JJ ou « season »
     p_play: float = 0.0          # probabilité de jouer un match (matchs projetés lt / matchs restants)
     games_lost_caps: float = 0.0          # matchs non joués faute de plafond
     games_left_voluntarily: float = 0.0   # matchs écartés par l'optimisation (plafond encore libre)
@@ -107,17 +109,29 @@ def project_team(manager, team_name, roster, standing, lt_pool, st_pool, games, 
     sched_lt = games_by_team(games, end_st)
     season_start = min((g[0] for g in games), default=today.isoformat())
     sched_past = games_by_team(games, season_start, today)
+    injuries = league.get("_injuries") or {}
     players = []
     for entry in roster["players"]:
         lt = lt_pool.find(entry["player"])
         st = st_pool.find(entry["player"]) if st_pool is not None else None
         nba = team_code(entry["nba_team"] or (lt.team if lt else ""))
         g_st, g_lt = sched_st.get(nba, 0), sched_lt.get(nba, 0)
+        back = available_from(injuries, entry["player"], today)
+        if back == today and lt is not None and lt.name != entry["player"]:
+            back = available_from(injuries, lt.name, today)
+        out_until = ""
+        if back is None:                       # absent jusqu'à la fin de saison
+            g_st = g_lt = 0
+            out_until = "season"
+        elif back > today:                     # aucun match avant la date de retour
+            g_st = games_by_team(games, back, end_st).get(nba, 0) if back < end_st else 0
+            g_lt = games_by_team(games, max(back, end_st)).get(nba, 0)
+            out_until = back.isoformat()
         pp = PlayerProjection(entry["player"], nba, entry["positions"] or (lt.positions if lt else ""),
                               entry["slot"], lt is not None,
                               display=lt.name if lt else strip_accents(entry["player"]), games_sched=g_st + g_lt,
                               games_st_sched=g_st, games_lt_sched=g_lt,
-                              games_past_sched=sched_past.get(nba, 0))
+                              games_past_sched=sched_past.get(nba, 0), out_until=out_until)
         pp.per_game_st = _per_game(st if st is not None else lt)
         pp.per_game_lt = _per_game(lt)
         if lt is not None and pp.games_sched:

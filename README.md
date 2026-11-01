@@ -151,6 +151,23 @@ poids des sources déjà configurées sont réduits en gardant leurs proportions
 modifié : `python -m scripts.config_sheet push` y écrit ces réglages, après vérification de la copie
 locale (cette commande réécrit tout l'onglet `settings` et `players`).
 
+### Blessures (ESPN, onglet `injuries`)
+
+La liste des blessés d'[ESPN](https://www.espn.com/nba/injuries) (API publique, statut et date de retour
+estimée) fait foi : elle est relue à chaque pondération lt et à chaque projection de saison / Moves, puis
+recopiée dans l'onglet `injuries` (`Player | NBA | Status | ESPN return | Override | Return used | Updated |
+Comment`).
+
+- Joueur « Out » avec date de retour : aucun match avant cette date. Les matchs projetés de la phase lt
+  sont ramenés aux matchs de son équipe après le retour (totaux réduits dans la même proportion, stats par
+  match inchangées) ; même règle dans la projection de saison (ST et LT). Statut « season » : 0 match.
+- « Day-To-Day », « Out » sans date, date passée : ignorés.
+- Colonne `Override` (conservée d'une mise à jour à l'autre) : une date (`2027-03-02` ou `02/03/2027`),
+  `season` / `saison` (fin de saison) ou `ok` (blessure ignorée). Une ligne ajoutée à la main avec un
+  Override est gardée même si ESPN ne liste pas le joueur.
+- ESPN indisponible : dernière version de l'onglet. Réglage `Optim | Season | Injuries` : `espn`
+  (défaut), `sheet` (onglet seul) ou `off`. Colonne « Blessé jusqu'au » dans `season_reco`.
+
 ## Menu du classeur (lancement sans le PC)
 
 Menu **STBL** du classeur (Apps Script, `apps_script/stbl_menu.gs`) -> traitement GitHub Actions

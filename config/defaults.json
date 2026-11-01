@@ -160,6 +160,7 @@
       "yahoo_tab": "yahoo",
       "season_reco_tab": "season_reco",
       "moves_reco_tab": "moves_reco",
+      "injuries_tab": "injuries",
       "runs_tab": "runs",
       "accuracy_tab": "sources_accuracy",
       "drive_folder_id": "",
@@ -170,6 +171,7 @@
     },
     "season": {
       "st_days": 15,
+      "injuries": "espn",
       "lt_phase": "lt",
       "st_phase": "st",
       "simulations": 2000,

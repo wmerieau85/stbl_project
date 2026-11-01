@@ -130,7 +130,7 @@ def my_roster_rows(team, cats):
             ["Joueur", "Postes", "NBA", "Poste Yahoo", "Matchs calendrier ST", "Matchs attendus ST",
              "Matchs affectés ST", "Matchs calendrier LT", "Matchs attendus LT", "Matchs affectés LT",
              "Matchs attendus total", "Matchs affectés total", "Perdus (plafonds)",
-             "Laissés volontairement", "Valeur/match (lt)", "Valeur/match (st)", "Écart st - lt"] + labels]
+             "Laissés volontairement", "Valeur/match (lt)", "Valeur/match (st)", "Écart st - lt", "Blessé jusqu'au"] + labels]
     for p in sorted(team.players, key=lambda x: -x.value):
         rows.append([p.display or p.name, p.positions, p.nba_team, p.slot,
                      p.games_st_sched, round(p.games_st_expected, 1), round(p.games_st_used, 1),
@@ -139,9 +139,16 @@ def my_roster_rows(team, cats):
                      round(p.games_left_voluntarily, 1),
                      round(p.value, 2) if p.found else "sans projection",
                      round(p.value_st, 2) if p.value_st is not None else "",
-                     round(p.value_st - p.value, 2) if p.value_st is not None and p.found else ""]
+                     round(p.value_st - p.value, 2) if p.value_st is not None and p.found else "",
+                     _out(p)]
                     + [_contribution(p.totals, c) for c in cats])
     return rows
+
+
+def _out(p):
+    """Blessure retenue (onglet injuries) : date de retour, « fin de saison » ou vide."""
+    v = getattr(p, "out_until", "")
+    return "fin de saison" if v == "season" else v
 
 
 def roster_rows(result):
@@ -150,7 +157,8 @@ def roster_rows(result):
              "Matchs calendrier ST", "Matchs attendus ST", "Matchs affectés ST",
              "Matchs calendrier LT", "Matchs attendus LT", "Matchs affectés LT",
              "Matchs attendus total", "Matchs affectés total", "Perdus (plafonds)",
-             "Laissés volontairement", "Valeur/match (lt)", "Valeur/match (st)", "Taux d'alignement %"]]
+             "Laissés volontairement", "Valeur/match (lt)", "Valeur/match (st)", "Taux d'alignement %",
+             "Blessé jusqu'au"]]
     for t in result["teams"]:
         for p in sorted(t.players, key=lambda x: -x.value):
             rows.append([t.manager, t.team_name, p.display, p.positions, p.nba_team, p.slot,
@@ -159,7 +167,7 @@ def roster_rows(result):
                          round(p.games_lt_used, 1), round(p.games_expected, 1), round(p.games_used, 1),
                          round(p.games_lost_caps, 1), round(p.games_left_voluntarily, 1),
                          round(p.value, 2), round(p.value_st, 2) if p.value_st is not None else "",
-                         _pct(t.lineup_rate)])
+                         _pct(t.lineup_rate), _out(p)])
     return rows
 
 
