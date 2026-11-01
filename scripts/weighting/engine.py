@@ -19,6 +19,10 @@ Modèle à 3 niveaux, chacun pondéré par sa ligne de la grille :
 
 Si une source ne couvre pas un joueur (ou une stat), les poids des sources présentes
 sont renormalisés ; les colonnes *_coverage indiquent la part du poids réellement présente.
+
+Blessés (onglet injuries / ESPN), phases lt et st : avec une date de retour, les sources du niveau GP qui
+projettent plus de matchs que l'équipe n'en jouera après le retour (ratio > Injury GP ratio) sont retirées
+du niveau GP, puis le GP est plafonné aux matchs restants ; absent jusqu'à la fin de saison : tout à 0.
 """
 
 import hashlib
@@ -242,6 +246,36 @@ def is_out_for_season(availability, player):
     return bool(availability) and availability.get(name_key(player or "")) == injuries.SEASON
 
 
+def injury_gp_ratio(league):
+    """Seuil Optim | Season | Injury GP ratio (1 par défaut)."""
+    try:
+        return float((league.get("season") or {}).get("injury_gp_ratio", 1.0) or 1.0)
+    except (TypeError, ValueError):
+        return 1.0
+
+
+def filter_injured_gp(entries, left, ratio_max):
+    """Blessé avec date de retour : sources du niveau GP qui projettent plus de matchs que `left` x seuil
+    (blessure non prise en compte) retirées du niveau GP ; poids des autres renormalisés par compute_player.
+
+    Retourne (entrées, [(code, matchs projetés)] exclues). Toutes exclues : entrées inchangées (le plafond
+    d'apply_injuries s'applique)."""
+    if left <= 0:
+        return entries, []
+    excluded, kept = [], 0
+    for s, r in entries:
+        if s["weights"]["gp"] > 0 and r.get("gp") is not None:
+            if r["gp"] / left > ratio_max:
+                excluded.append((s["code"], r["gp"]))
+            else:
+                kept += 1
+    if not excluded or not kept:
+        return entries, excluded
+    codes = {c for c, _ in excluded}
+    out = [(dict(s, weights=dict(s["weights"], gp=0.0)) if s["code"] in codes else s, r) for s, r in entries]
+    return out, excluded
+
+
 def apply_injuries(results, phase, season, settings, league, availability=None, games=None, today=None):
     """Blessés (onglet injuries / ESPN).
 
@@ -302,6 +336,47 @@ def _round(value, digits):
     return None if value is None else round(value, digits)
 
 
+def _games(phase, season, settings):
+    from scripts.season.schedule import load_games
+
+    try:
+        return load_games(season, timeout=settings.get("http", {}).get("timeout", 30))
+    except Exception as exc:
+        log.warning("[Pondération %s] Calendrier NBA indisponible (%s) : dates de retour ignorées.", phase, exc)
+        return []
+
+
+def _games_left(availability, games, entries):
+    """Matchs de l'équipe du joueur après sa date de retour ; None si pas blessé (ou fin de saison)."""
+    from datetime import date
+
+    from scripts.names import name_key
+    from scripts.season.schedule import games_by_team, team_code
+
+    if not availability or not games:
+        return None
+    back = availability.get(name_key(entries[0][1]["player"] or ""))
+    if not isinstance(back, date):
+        return None
+    team = _pick_text([(s["weights"]["stats"]["pts"], r) for s, r in entries], "team")
+    return games_by_team(games, back).get(team_code(team), 0)
+
+
+def _log_gp_filter(phase, notes, results):
+    if not notes:
+        return
+    gp = {r["player"]: r.get("gp") for r in results}
+    parts = []
+    for player, (left, excluded, applied) in notes.items():
+        detail = ", ".join(f"{code} {g:.0f}/{left}" for code, g in excluded)
+        final = gp.get(player)
+        tail = f"GP = {final:.0f}" if final is not None else "GP = ?"
+        if not applied:
+            tail += " (toutes les sources exclues : plafond des matchs restants)"
+        parts.append(f"{player} : {detail} exclues ; {tail}")
+    log.info("[Pondération %s] Blessures, sources du niveau GP exclues : %s", phase, " | ".join(parts[:20]))
+
+
 def compute_phase(phase, settings=None, grid_path=None):
     """Calcule et enregistre les projections finales d'une phase. Retourne le nombre de joueurs."""
     settings = settings or load_settings()
@@ -324,8 +399,20 @@ def compute_phase(phase, settings=None, grid_path=None):
     league = load_league()
     availability = load_availability(phase, settings, league) if phase in injury_phases(league) else {}
 
+    games = None
+    if any(v != "season" for v in availability.values()):
+        games = _games(phase, season, settings)
+    ratio_max = injury_gp_ratio(league)
+    gp_notes = {}
+
     results = []
     for player_id, entries in by_player.items():
+        left = _games_left(availability, games, entries)
+        if left is not None:
+            filtered, excluded = filter_injured_gp(entries, left, ratio_max)
+            if excluded:
+                gp_notes[entries[0][1]["player"]] = (left, excluded, filtered is not entries)
+            entries = filtered
         result = compute_player(entries)
         # sans match projeté : écarté, sauf blessé jusqu'à la fin de saison (gardé, tout à 0)
         if not result["gp"] and not is_out_for_season(availability, entries[0][1]["player"]):
@@ -350,7 +437,8 @@ def compute_phase(phase, settings=None, grid_path=None):
         log.warning("[Pondération %s] Aucun joueur calculé : projections précédentes conservées.", phase)
         return 0
     if availability:
-        apply_injuries(results, phase, season, settings, league, availability=availability)
+        apply_injuries(results, phase, season, settings, league, availability=availability, games=games or [])
+        _log_gp_filter(phase, gp_notes, results)
     _finalize_shooting(results)
     add_zscores(results, league)
     computed_at = datetime.now().isoformat(timespec="seconds")

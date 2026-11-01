@@ -172,6 +172,7 @@
     "season": {
       "st_days": 15,
       "injuries": "espn",
+      "injury_gp_ratio": 1.0,
       "lt_phase": "lt",
       "st_phase": "st",
       "simulations": 2000,

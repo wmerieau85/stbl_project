@@ -158,9 +158,12 @@ estimée) fait foi : elle est relue à chaque pondération lt et à chaque proje
 recopiée dans l'onglet `injuries` (`Player | NBA | Status | ESPN return | Override | Return used | Updated |
 Comment`).
 
-- Joueur « Out » avec date de retour : aucun match avant cette date. Les matchs projetés des phases lt et
-  st sont ramenés aux matchs de son équipe après le retour (totaux réduits dans la même proportion, stats
-  par match inchangées) ; même règle dans la projection de saison (ST et LT).
+- Joueur « Out » avec date de retour : aucun match avant cette date. Au niveau GP de la pondération, une
+  source qui projette plus de matchs que son équipe n'en jouera après le retour (ratio matchs projetés /
+  matchs restants > `Optim | Season | Injury GP ratio`, 1 par défaut) n'a pas pris la blessure en compte :
+  elle est exclue du GP, les poids des autres sont renormalisés (niveaux MIN et STATS inchangés). Toutes
+  exclues : GP plafonné aux matchs restants. Le log liste les sources exclues. Même règle de calendrier dans
+  la projection de saison (ST et LT) ; la phase st reprend les matchs de lt.
 - Absent jusqu'à la fin de saison (statut « season » ou Override `season`) : le joueur reste listé dans les
   phases lt et st, avec matchs, minutes, stats et pourcentages à 0.
 - Noms ESPN rapprochés de la base avec les alias de l'onglet `players` ; un blessé introuvable dans la base

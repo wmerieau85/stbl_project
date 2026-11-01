@@ -134,6 +134,9 @@ PARAMS = [
     ("Optim | Season", "Injuries", "league", "season.injuries", "choice:espn,sheet,off",
      "espn = liste https://www.espn.com/nba/injuries + Override de l'onglet injuries ; sheet = onglet seul ; "
      "off = blessures ignorées"),
+    ("Optim | Season", "Injury GP ratio", "league", "season.injury_gp_ratio", "float",
+     "blessé avec date de retour : source exclue du niveau GP si matchs projetés / matchs restants après "
+     "le retour > ce seuil (1 = impossible ; 0,95 plus strict)"),
     ("Optim | Season", "Simulations", "league", "season.simulations", "int", "tirages pour les probabilités de classement"),
     ("Optim | Season", "Opponent model", "league", "season.opponent_model", "choice:usage,value",
      "usage = taux d'alignement calibré sur chaque adversaire ; value = tous les matchs attendus alignés"),

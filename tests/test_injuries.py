@@ -129,3 +129,51 @@ def test_canonical_map_applies_aliases(monkeypatch):
                         lambda names: {n: ("Nicolas Claxton" if n == "Nic Claxton" else None) for n in names})
     lst = injuries.merge([_inj("Nic Claxton", "Out", "2026-12-01"), _inj("Healthy Guy", "Day-To-Day")], [])
     assert injuries.canonical_map(lst) == {"Nic Claxton": "Nicolas Claxton"}
+
+
+def _slot(code, gp_weight):
+    return {"code": code, "weights": {"gp": gp_weight, "min": 0.2, "stats": {"pts": 0.2}}}
+
+
+def test_filter_injured_gp_excludes_impossible_sources():
+    from scripts.weighting.engine import filter_injured_gp
+
+    entries = [(_slot("fp.ros", 0.3), {"gp": 69}), (_slot("le.ros", 0.2), {"gp": 19}),
+               (_slot("dr.ros", 0.5), {"gp": None})]
+    out, excluded = filter_injured_gp(entries, 45, 1.0)
+    assert excluded == [("fp.ros", 69)]
+    assert [s["weights"]["gp"] for s, _ in out] == [0.0, 0.2, 0.5]
+    assert entries[0][0]["weights"]["gp"] == 0.3                 # grille d'origine intacte
+    assert filter_injured_gp(entries, 45, 0.4)[1] == [("fp.ros", 69), ("le.ros", 19)]   # seuil réglable
+
+
+def test_filter_injured_gp_all_excluded_keeps_entries():
+    from scripts.weighting.engine import filter_injured_gp
+
+    entries = [(_slot("fp.ros", 0.3), {"gp": 69}), (_slot("nc.ros", 0.3), {"gp": 67})]
+    out, excluded = filter_injured_gp(entries, 45, 1.0)
+    assert out is entries and len(excluded) == 2                  # plafond d'apply_injuries ensuite
+
+
+def test_lt_phase_gp_from_sources_aware_of_injury(tmp_path, monkeypatch):
+    from scripts import db
+    from scripts.weighting import engine
+
+    monkeypatch.setattr(db, "DB_PATH", str(tmp_path / "t.sqlite"))
+    monkeypatch.setattr(engine, "export_csv", lambda *a, **k: None)
+    monkeypatch.setattr(engine, "_games", lambda *a, **k: _games())
+    monkeypatch.setattr(engine, "load_availability", lambda *a, **k: {"jalen williams": date(2026, 12, 1)})
+    db.init_db()
+    with db.get_connection() as conn, conn:
+        conn.execute("INSERT INTO players (player_id, canonical_name, name_key) VALUES (1, 'Jalen Williams', "
+                     "'jalen williams'), (2, 'Healthy', 'healthy')")
+        for pid, key, src, gp in ((1, "jalen williams", "FantasyPros", 69), (1, "jalen williams", "LineupExperts", 19),
+                                  (2, "healthy", "FantasyPros", 60), (2, "healthy", "LineupExperts", 58)):
+            conn.execute("INSERT INTO raw_projections (player_id, player, player_key, team, source, season, stage, "
+                         "gp, mpg, pts) VALUES (?, ?, ?, 'OKC', ?, '2026-27', 'ros', ?, 30, ?)",
+                         (pid, key, key, src, gp, gp * 20))
+    engine.compute_phase("lt", {"active_season": "2026-27", "active_stage": "ros"})
+    with db.get_connection() as conn:
+        gp = dict(conn.execute("SELECT player_id, gp FROM final_projections WHERE phase='lt'").fetchall())
+    assert gp[1] == 19                    # FantasyPros (69 > 31 matchs après le 1er décembre) exclue
+    assert gp[2] == 59                    # joueur sain : moyenne habituelle
