@@ -34,6 +34,7 @@ from statistics import median
 from scripts.config import load_league, load_settings
 from scripts.db import get_connection
 from scripts.exports import write_csv
+from scripts.weighting import minutes
 from scripts.weighting.weights import load_grid
 from scripts.weighting.zscores import add_zscores, zscore_columns
 
@@ -384,7 +385,7 @@ def compute_phase(phase, settings=None, grid_path=None):
     grid = load_grid(phase, season, grid_path)
     grid_hash = hashlib.sha1(json.dumps(grid["slots"], sort_keys=True, default=str).encode()).hexdigest()[:10]
 
-    by_player = {}
+    by_player, loaded = {}, []
     with get_connection() as conn:
         for slot in grid["slots"]:
             data = _load_slot(conn, slot)
@@ -393,19 +394,26 @@ def compute_phase(phase, settings=None, grid_path=None):
                 log.warning("[Pondération %s] %s : aucune donnée, poids redistribués.", phase, label)
                 continue
             log.info("[Pondération %s] %s : %d joueurs.", phase, label, len(data))
-            for player_id, row in data.items():
-                by_player.setdefault(player_id, []).append((slot, row))
+            loaded.append((slot, data))
 
     league = load_league()
     availability = load_availability(phase, settings, league) if phase in injury_phases(league) else {}
+    normalize = phase == ((league.get("season") or {}).get("lt_phase") or "lt") and minutes.params(league)["enabled"]
 
     games = None
-    if any(v != "season" for v in availability.values()):
+    if normalize or any(v != "season" for v in availability.values()):
         from scripts.injuries import season_end_as_out
 
         games = _games(phase, season, settings)
         # retour après le dernier match de la saison (ESPN : 2027-07-01...) = absent jusqu'à la fin de saison
         availability = season_end_as_out(availability, games)
+    if normalize and games:
+        with get_connection() as conn:
+            real = minutes.real_mpg(conn, season, minutes.params(league)["min_real_games"])
+        minutes.normalize(loaded, phase, league, games, availability, real)
+    for slot, data in loaded:
+        for player_id, row in data.items():
+            by_player.setdefault(player_id, []).append((slot, row))
     ratio_max = injury_gp_ratio(league)
     gp_notes = {}
 
