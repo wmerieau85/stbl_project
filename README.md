@@ -164,8 +164,10 @@ Comment`).
   elle est exclue du GP, les poids des autres sont renormalisés (niveaux MIN et STATS inchangés). Toutes
   exclues : GP plafonné aux matchs restants. Le log liste les sources exclues. Même règle de calendrier dans
   la projection de saison (ST et LT) ; la phase st reprend les matchs de lt.
-- Absent jusqu'à la fin de saison (statut « season » ou Override `season`) : le joueur reste listé dans les
-  phases lt et st, avec matchs, minutes, stats et pourcentages à 0.
+- Absent jusqu'à la fin de saison (Override `season`, statut contenant « season », ou date de retour après
+  le dernier match de la saison régulière : c'est ainsi qu'ESPN note une blessure de fin de saison, par
+  exemple 2027-07-01) : le joueur reste listé dans les phases lt et st, avec matchs, minutes, stats et
+  pourcentages à 0 ; « Blessé jusqu'au » = fin de saison dans `season_reco`.
 - Noms ESPN rapprochés de la base avec les alias de l'onglet `players` ; un blessé introuvable dans la base
   est signalé dans le log (alias à ajouter).
 - « Day-To-Day », « Out » sans date, date passée : ignorés.

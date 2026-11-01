@@ -199,6 +199,20 @@ def canonical_map(injuries):
     return mapping
 
 
+def season_end_as_out(availability_map, games):
+    """Date de retour après le dernier match de la saison régulière (ESPN note ainsi les blessures de fin de
+    saison : 2027-07-01, 2027-10-01...) : convertie en « season ». Sans calendrier : inchangé."""
+    if not availability_map or not games:
+        return availability_map
+    last = max(g[0] for g in games)
+    out = {}
+    for key, value in availability_map.items():
+        if isinstance(value, date) and value.isoformat() > last:
+            value = SEASON
+        out[key] = value
+    return out
+
+
 def _open_book(league, settings):
     gs = league.get("google_sheets", {})
     if not gs.get("draft_spreadsheet_id"):
@@ -255,8 +269,10 @@ def load(league, settings=None, book=None, today=None, write=True, timeout=30):
 
             write_tab(book, tab, to_rows(injuries))
     out = availability(injuries, today, canonical_map(injuries))
-    log.info("[Blessures] %d joueurs listés, %d indisponibles après le %s (%d jusqu'à la fin de saison).",
-             len(injuries), len(out), today.isoformat(), sum(1 for v in out.values() if v == SEASON))
+    unavailable = [i for i in injuries if name_key(i.player) in out]
+    log.info("[Blessures] %d joueurs listés, %d indisponibles après le %s (%d marqués « season » ; une date de "
+             "retour après la fin de saison compte aussi comme fin de saison).", len(injuries), len(unavailable),
+             today.isoformat(), sum(1 for i in unavailable if out[name_key(i.player)] == SEASON))
     _CACHE[key] = out
     return out
 

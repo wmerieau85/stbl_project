@@ -126,7 +126,7 @@ def project_team(manager, team_name, roster, standing, lt_pool, st_pool, games, 
         elif back > today:                     # aucun match avant la date de retour
             g_st = games_by_team(games, back, end_st).get(nba, 0) if back < end_st else 0
             g_lt = games_by_team(games, max(back, end_st)).get(nba, 0)
-            out_until = back.isoformat()
+            out_until = back.isoformat() if g_st + g_lt else "season"   # retour après la fin de saison
         pp = PlayerProjection(entry["player"], nba, entry["positions"] or (lt.positions if lt else ""),
                               entry["slot"], lt is not None,
                               display=lt.name if lt else strip_accents(entry["player"]), games_sched=g_st + g_lt,

@@ -177,3 +177,44 @@ def test_lt_phase_gp_from_sources_aware_of_injury(tmp_path, monkeypatch):
         gp = dict(conn.execute("SELECT player_id, gp FROM final_projections WHERE phase='lt'").fetchall())
     assert gp[1] == 19                    # FantasyPros (69 > 31 matchs après le 1er décembre) exclue
     assert gp[2] == 59                    # joueur sain : moyenne habituelle
+
+
+def test_season_end_as_out():
+    av = {"veesaar": date(2027, 7, 1), "jalen williams": date(2026, 12, 1), "out": "season"}
+    out = injuries.season_end_as_out(av, _games())               # dernier match : 2026-12-31
+    assert out == {"veesaar": "season", "jalen williams": date(2026, 12, 1), "out": "season"}
+    assert injuries.season_end_as_out(av, []) == av             # sans calendrier : inchangé
+
+
+def test_return_after_season_end_zeroed_and_kept_in_lt_and_st(tmp_path, monkeypatch):
+    from scripts import db
+    from scripts.weighting import engine
+
+    monkeypatch.setattr(db, "DB_PATH", str(tmp_path / "t.sqlite"))
+    monkeypatch.setattr(engine, "export_csv", lambda *a, **k: None)
+    monkeypatch.setattr(engine, "_games", lambda *a, **k: _games())
+    monkeypatch.setattr(engine, "load_availability", lambda *a, **k: {"henri veesaar": date(2027, 7, 1)})
+    db.init_db()
+    with db.get_connection() as conn, conn:
+        conn.execute("INSERT INTO players (player_id, canonical_name, name_key) VALUES (1, 'Henri Veesaar', "
+                     "'henri veesaar'), (2, 'Healthy', 'healthy')")
+        for pid, key in ((1, "henri veesaar"), (2, "healthy")):
+            conn.execute("INSERT INTO raw_projections (player_id, player, player_key, team, source, season, stage, "
+                         "gp, mpg, pts, fga, fgp) VALUES (?, ?, ?, 'ATL', 'FantasyPros', '2026-27', 'ros', 50, 20, "
+                         "400, 300, 0.5)", (pid, key, key))
+    settings = {"active_season": "2026-27", "active_stage": "ros"}
+    assert engine.compute_phase("lt", settings) == 2
+    assert engine.compute_phase("st", settings) == 2
+    with db.get_connection() as conn:
+        rows = conn.execute("SELECT phase, gp, mpg, pts, fgp FROM final_projections WHERE player_id=1 "
+                            "ORDER BY phase").fetchall()
+    assert rows == [("lt", 0, 0, 0, 0), ("st", 0, 0, 0, 0)]
+
+
+def test_project_team_return_after_season_end_shown_as_season():
+    pool = Pool([_player(1, "Henri Veesaar", 50)])
+    roster = {"players": [{"player": "Henri Veesaar", "nba_team": "OKC", "positions": "C", "slot": "C"}],
+              "games": {"C": {"remaining": 200}}}
+    league = dict(LEAGUE, _injuries={"henri veesaar": date(2027, 7, 1)})
+    (p,) = project_team("Moi", "Equipe", roster, None, pool, None, _games(), TODAY, 15, league).players
+    assert p.games_sched == 0 and p.out_until == "season"
