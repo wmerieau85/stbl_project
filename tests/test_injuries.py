@@ -85,3 +85,47 @@ def test_weighting_caps_gp_after_return():
     assert jw["gp"] == 31 and abs(jw["pts"] - 620) < 1e-9 and abs(jw["reb"] - 155) < 1e-9
     assert out["gp"] == 0 and out["pts"] == 0
     assert ok["gp"] == 60 and ok["pts"] == 600
+
+
+def test_weighting_out_for_season_all_zero():
+    r = {"player": "Jalen Williams", "team": "OKC", "gp": 19.0, "mpg": 32.5, "min": 617.5, "pts": 380.0,
+         "fga": 266.0, "fgp": 0.485, "ftp": 0.82, "fg3p": 0.35, "fgm": None}
+    apply_injuries([r], "lt", "2026-27", {}, {}, availability={"jalen williams": "season"}, games=[], today=TODAY)
+    assert all(r[c] == 0 for c in ("gp", "mpg", "min", "pts", "fga", "fgp", "ftp", "fg3p"))
+
+
+def test_out_for_season_kept_in_st_phase(tmp_path, monkeypatch):
+    """Phase st : GP repris de lt (0 pour un blessé jusqu'à la fin de saison) ; le joueur reste listé, à 0."""
+    from scripts import db
+    from scripts.weighting import engine
+
+    monkeypatch.setattr(db, "DB_PATH", str(tmp_path / "t.sqlite"))
+    monkeypatch.setattr(engine, "export_csv", lambda *a, **k: None)
+    monkeypatch.setattr(engine, "load_availability", lambda *a, **k: {"jalen williams": "season"})
+    db.init_db()
+    with db.get_connection() as conn, conn:
+        engine.ensure_table(conn)
+        for pid, name, gp in ((1, "Jalen Williams", 0.0), (2, "Healthy", 60.0)):
+            conn.execute("INSERT INTO final_projections (phase, season, player_id, player, team, gp, mpg, pts, "
+                         "fga, fgp) VALUES ('lt', '2026-27', ?, ?, 'OKC', ?, 30, ?, ?, 0.5)",
+                         (pid, name, gp, gp * 20, gp * 15))
+    assert engine.compute_phase("st", {"active_season": "2026-27", "active_stage": "ros"}) == 2
+    with db.get_connection() as conn:
+        row = conn.execute("SELECT gp, mpg, pts, fgp FROM final_projections WHERE phase='st' AND player_id=1").fetchone()
+    assert row == (0, 0, 0, 0)
+
+
+def test_availability_uses_reference_names():
+    lst = injuries.merge([_inj("Nic Claxton", "Out", "2026-12-01"), _inj("Inconnu", "Out")], [])
+    av = injuries.availability(lst, TODAY, {"Nic Claxton": "Nicolas Claxton"})
+    assert av[injuries.name_key("Nicolas Claxton")] == date(2026, 12, 1)
+    assert av[injuries.name_key("Nic Claxton")] == date(2026, 12, 1)
+
+
+def test_canonical_map_applies_aliases(monkeypatch):
+    from scripts import player_linker
+
+    monkeypatch.setattr(player_linker, "canonical_names",
+                        lambda names: {n: ("Nicolas Claxton" if n == "Nic Claxton" else None) for n in names})
+    lst = injuries.merge([_inj("Nic Claxton", "Out", "2026-12-01"), _inj("Healthy Guy", "Day-To-Day")], [])
+    assert injuries.canonical_map(lst) == {"Nic Claxton": "Nicolas Claxton"}

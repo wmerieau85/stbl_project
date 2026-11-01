@@ -158,9 +158,13 @@ estimée) fait foi : elle est relue à chaque pondération lt et à chaque proje
 recopiée dans l'onglet `injuries` (`Player | NBA | Status | ESPN return | Override | Return used | Updated |
 Comment`).
 
-- Joueur « Out » avec date de retour : aucun match avant cette date. Les matchs projetés de la phase lt
-  sont ramenés aux matchs de son équipe après le retour (totaux réduits dans la même proportion, stats par
-  match inchangées) ; même règle dans la projection de saison (ST et LT). Statut « season » : 0 match.
+- Joueur « Out » avec date de retour : aucun match avant cette date. Les matchs projetés des phases lt et
+  st sont ramenés aux matchs de son équipe après le retour (totaux réduits dans la même proportion, stats
+  par match inchangées) ; même règle dans la projection de saison (ST et LT).
+- Absent jusqu'à la fin de saison (statut « season » ou Override `season`) : le joueur reste listé dans les
+  phases lt et st, avec matchs, minutes, stats et pourcentages à 0.
+- Noms ESPN rapprochés de la base avec les alias de l'onglet `players` ; un blessé introuvable dans la base
+  est signalé dans le log (alias à ajouter).
 - « Day-To-Day », « Out » sans date, date passée : ignorés.
 - Colonne `Override` (conservée d'une mise à jour à l'autre) : une date (`2027-03-02` ou `02/03/2027`),
   `season` / `saison` (fin de saison) ou `ok` (blessure ignorée). Une ligne ajoutée à la main avec un

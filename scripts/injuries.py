@@ -12,7 +12,10 @@ la liste ESPN est relue et l'onglet est réécrit :
 - Sans Override : date de retour ESPN des joueurs « Out » ; « Day-To-Day » ignoré (retour imminent),
   « Out » sans date : ignoré (signalé), statut contenant « season » : fin de saison.
 - Return used : date retenue ; aucun match avant cette date (ni en ST ni en LT), matchs projetés
-  ramenés au calendrier restant après le retour (phase lt et simulation de saison).
+  ramenés au calendrier restant après le retour (phases lt / st et simulation de saison) ; « season » :
+  joueur gardé dans les phases lt / st avec toutes ses projections à 0.
+- Noms ESPN rapprochés des noms de référence de la base avec les alias de l'onglet players
+  (player_linker.canonical_names) ; blessé introuvable dans la base : signalé.
 ESPN indisponible : la dernière version de l'onglet est utilisée telle quelle.
 
 Réglages : Optim | Season | Injuries (espn = ESPN + onglet, sheet = onglet seul, off) et
@@ -152,18 +155,48 @@ def to_rows(injuries):
                         i.comment] for i in order]
 
 
-def availability(injuries, today):
-    """{clé du nom: date de retour (date) ou 'season'} des joueurs indisponibles après `today`."""
+def availability(injuries, today, canonical=None):
+    """{clé du nom: date de retour (date) ou 'season'} des joueurs indisponibles après `today`.
+
+    canonical = {nom ESPN / onglet: nom de référence de la base} (alias de l'onglet players appliqués) :
+    le joueur est indexé sous les deux noms."""
     out = {}
     for inj in injuries:
         used = inj.return_used
         if used == SEASON:
-            out[name_key(inj.player)] = SEASON
+            value = SEASON
         elif used:
             d = _parse_date(used)
-            if d and d > today:
-                out[name_key(inj.player)] = d
+            if not d or d <= today:
+                continue
+            value = d
+        else:
+            continue
+        out[name_key(inj.player)] = value
+        ref = (canonical or {}).get(inj.player)
+        if ref:
+            out[name_key(ref)] = value
     return out
+
+
+def canonical_map(injuries):
+    """{nom: nom de référence} via les alias (onglet players) et la table players ; signale les blessés
+    indisponibles introuvables dans la base (alias à ajouter)."""
+    names = [i.player for i in injuries if i.return_used]
+    if not names:
+        return {}
+    try:
+        from scripts.player_linker import canonical_names
+
+        mapping = canonical_names(names)
+    except Exception as exc:  # base absente (tests, première installation) : noms ESPN seuls
+        log.debug("Noms de référence non lus (%s).", exc)
+        return {}
+    missing = sorted(n for n, ref in mapping.items() if not ref)
+    if missing:
+        log.warning("[Blessures] %d blessé(s) introuvable(s) dans la base (alias à ajouter dans l'onglet "
+                    "players ?) : %s", len(missing), ", ".join(missing[:30]))
+    return mapping
 
 
 def _open_book(league, settings):
@@ -221,7 +254,7 @@ def load(league, settings=None, book=None, today=None, write=True, timeout=30):
             from scripts.sheets import write_tab
 
             write_tab(book, tab, to_rows(injuries))
-    out = availability(injuries, today)
+    out = availability(injuries, today, canonical_map(injuries))
     log.info("[Blessures] %d joueurs listés, %d indisponibles après le %s (%d jusqu'à la fin de saison).",
              len(injuries), len(out), today.isoformat(), sum(1 for v in out.values() if v == SEASON))
     _CACHE[key] = out
