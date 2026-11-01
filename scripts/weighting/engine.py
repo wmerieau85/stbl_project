@@ -337,6 +337,31 @@ def _round(value, digits):
     return None if value is None else round(value, digits)
 
 
+def cap_games_left(results, phase, games, today=None):
+    """Phase lt : GP plafonné aux matchs restants de l'équipe (totaux réduits dans la même proportion).
+    Joueur sans équipe reconnue (FA...) : inchangé. Retourne le nombre de joueurs plafonnés."""
+    from datetime import date
+
+    from scripts.season.schedule import games_by_team, team_code
+
+    left = games_by_team(games, today or date.today())
+    capped = []
+    for r in results:
+        n = left.get(team_code(r.get("team") or ""))
+        if not n or not r.get("gp") or r["gp"] <= n:
+            continue
+        factor = n / r["gp"]
+        capped.append(f"{r['player']} {r['gp']:.0f} -> {n}")
+        r["gp"] = float(n)
+        for cat in COUNTING + ("fgm", "ftm", "min"):
+            if r.get(cat) is not None:
+                r[cat] = r[cat] * factor
+    if capped:
+        log.info("[Pondération %s] GP plafonné aux matchs restants de l'équipe pour %d joueur(s) : %s", phase,
+                 len(capped), ", ".join(capped[:20]))
+    return len(capped)
+
+
 def _games(phase, season, settings):
     from scripts.season.schedule import load_games
 
@@ -398,10 +423,11 @@ def compute_phase(phase, settings=None, grid_path=None):
 
     league = load_league()
     availability = load_availability(phase, settings, league) if phase in injury_phases(league) else {}
-    normalize = phase == ((league.get("season") or {}).get("lt_phase") or "lt") and minutes.params(league)["enabled"]
+    is_lt = phase == ((league.get("season") or {}).get("lt_phase") or "lt")
+    normalize = is_lt and minutes.params(league)["enabled"]
 
     games = None
-    if normalize or any(v != "season" for v in availability.values()):
+    if is_lt or any(v != "season" for v in availability.values()):
         from scripts.injuries import season_end_as_out
 
         games = _games(phase, season, settings)
@@ -448,6 +474,8 @@ def compute_phase(phase, settings=None, grid_path=None):
         # précédent plutôt que de vider la phase
         log.warning("[Pondération %s] Aucun joueur calculé : projections précédentes conservées.", phase)
         return 0
+    if is_lt and games:
+        cap_games_left(results, phase, games)
     if availability:
         apply_injuries(results, phase, season, settings, league, availability=availability, games=games or [])
         _log_gp_filter(phase, gp_notes, results)

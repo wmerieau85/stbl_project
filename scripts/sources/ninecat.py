@@ -7,16 +7,24 @@ api.fantasy.365scores.com (JSON, sans compte).
 
 Les stats sont identifiées par un numéro (Transco | <colonne>, ex. 2 = PTS, 3 = FGM, 4 = FGA...).
 Équipe et postes viennent de la liste des joueurs (Sources | Players).
+
+Projections « modèles » (draft / ros) : 9cat donne à une cinquantaine de joueurs, surtout des recrues, des
+valeurs par défaut (exactement 30 matchs et une poignée de MPG répétés : 22,6 / 26,1 / 21,7...). Une ligne
+à TEMPLATE_GP matchs dont le MPG est partagé par au moins TEMPLATE_MIN_GROUP joueurs est écartée : le
+joueur garde ses autres sources (sans aucune, il sort des projections ros).
 """
 
 import json
 import logging
+from collections import Counter
 
 from scripts.sources.base import ProjectionSource
 
 log = logging.getLogger(__name__)
 
 POSITIONS = {18: "PG", 19: "SG", 20: "SF", 21: "PF", 22: "C", 6: "G", 7: "F"}
+TEMPLATE_GP = 30
+TEMPLATE_MIN_GROUP = 3
 
 
 class NineCatSource(ProjectionSource):
@@ -42,6 +50,37 @@ class NineCatSource(ProjectionSource):
 
     def parse_page(self, text, players):
         return parse_ninecat(json.loads(text), players, self.stage)
+
+    def fetch(self):
+        records = super().fetch()
+        if records is None or self.stage not in ("draft", "ros"):
+            return records
+        kept, dropped = drop_templates(records)
+        if dropped:
+            log.info("[9cat] %d projection(s) « modèle » écartée(s) (%d matchs, MPG répété) : %s%s", len(dropped),
+                     TEMPLATE_GP, ", ".join(dropped[:15]), " ..." if len(dropped) > 15 else "")
+        return kept
+
+
+def _mpg(record):
+    if record.get("mpg"):
+        return round(record["mpg"], 1)
+    if record.get("min") and record.get("gp"):
+        return round(record["min"] / record["gp"], 1)
+    return None
+
+
+def drop_templates(records):
+    """(lignes gardées, noms écartés) : TEMPLATE_GP matchs et MPG partagé par TEMPLATE_MIN_GROUP joueurs ou plus."""
+    groups = Counter(_mpg(r) for r in records if r.get("gp") == TEMPLATE_GP)
+    template = {m for m, n in groups.items() if m is not None and n >= TEMPLATE_MIN_GROUP}
+    kept, dropped = [], []
+    for r in records:
+        if r.get("gp") == TEMPLATE_GP and _mpg(r) in template:
+            dropped.append(r["player"])
+        else:
+            kept.append(r)
+    return kept, dropped
 
 
 def parse_ninecat(stats, players, stage="draft"):
