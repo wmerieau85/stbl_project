@@ -149,6 +149,9 @@ PARAMS = [
      "minutes / match gardées au moins par les joueurs au-delà de Rotation size (réel : ~16)"),
     ("Optim | Minutes", "Min real games", "league", "minutes.min_real_games", "int",
      "matchs joués pour utiliser le MPG réel (rang et plancher individuel)"),
+    ("Optim | Minutes", "Max cut per player", "league", "minutes.max_cut", "float",
+     "réduction maximale des minutes d'un joueur dans une source (0,3 = 30 %), ex. blessé de retour dans un "
+     "effectif surchargé"),
     ("Optim | Season", "Opponent model", "league", "season.opponent_model", "choice:usage,value",
      "usage = taux d'alignement calibré sur chaque adversaire ; value = tous les matchs attendus alignés"),
     ("Optim | Season", "Opponent default rate", "league", "season.opponent_default_rate", "float",

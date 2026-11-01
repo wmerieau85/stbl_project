@@ -187,7 +187,8 @@
       "protected": 7,
       "rotation": 10,
       "deep_floor": 15,
-      "min_real_games": 3
+      "min_real_games": 3,
+      "max_cut": 0.3
     },
     "moves": {
       "value_tolerance": 0.1,

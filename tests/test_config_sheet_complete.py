@@ -42,7 +42,7 @@ def test_every_param_section_is_written():
 def test_minutes_params_proposed_when_absent():
     rows = [r for r in C.build_rows() if C._norm(r[0]) != C._norm("Optim | Minutes")]
     missing = [(r[0], r[1]) for r in C.missing_rows(rows)]
-    assert ("Optim | Minutes", "Team target") in missing and len(missing) == 6
+    assert ("Optim | Minutes", "Team target") in missing and len(missing) == 7
 
 
 def test_missing_params_are_listed_with_current_value():

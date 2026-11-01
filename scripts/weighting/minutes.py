@@ -14,7 +14,8 @@ chaque source qui donne des minutes (MIN, ou GP x MPG) et chaque équipe NBA, su
 - rang d'un joueur dans son équipe : son MPG réel (stats de la saison, au moins Min real games matchs),
   sinon le MPG de consensus des sources de la grille (blessé, recrue) : même ordre pour toutes les sources,
   car l'ordre propre à une source reflète mal le rôle réel (ex. un titulaire classé 11e derrière des blessés) ;
-- un joueur n'est jamais ramené sous son MPG réel ;
+- un joueur n'est jamais ramené sous son MPG réel, ni réduit de plus de Max cut per player (30 %) dans une
+  source : dans un effectif surchargé (blessés de retour), la cible peut donc ne pas être atteinte ;
 - réduction = MPG, MIN et totaux multipliés par le même facteur : GP et stats par minute inchangés ;
 - pas de calendrier, joueur sans équipe (FA) ou source sans minutes : rien n'est modifié.
 """
@@ -30,14 +31,16 @@ log = logging.getLogger(__name__)
 
 SCALED = ("mpg", "min", "pts", "reb", "ast", "stl", "blk", "tov", "fg3m", "fg3a", "fga", "fgm", "fta", "ftm")
 DEFAULTS = {"enabled": True, "target": 240.0, "protected": 7, "rotation": 10, "deep_floor": 15.0,
-            "min_real_games": 3}
+            "min_real_games": 3, "max_cut": 0.30}
 
 
 def params(league):
     conf = dict(DEFAULTS, **{k: v for k, v in (league.get("minutes") or {}).items() if v not in (None, "")})
     conf["enabled"] = str(conf["enabled"]).strip().lower() not in ("false", "0", "non", "no", "off")
-    for key in ("target", "deep_floor"):
+    for key in ("target", "deep_floor", "max_cut"):
         conf[key] = float(conf[key])
+    if conf["max_cut"] > 1:                     # saisi en pourcentage (30) plutôt qu'en fraction (0,3)
+        conf["max_cut"] /= 100
     for key in ("protected", "rotation", "min_real_games"):
         conf[key] = int(conf[key])
     conf["rotation"] = max(conf["rotation"], conf["protected"])
@@ -128,8 +131,8 @@ def normalize(loaded, phase, league, games, availability=None, real=None, today=
             players.sort(key=lambda p: -p[0])
             mid = players[conf["protected"]:conf["rotation"]]
             deep = players[conf["rotation"]:]
-            taken = _take(data, deep, surplus, conf["deep_floor"] * g, real)
-            taken += _take(data, mid, surplus - taken, 0.0, real)
+            taken = _take(data, deep, surplus, conf["deep_floor"] * g, real, conf["max_cut"])
+            taken += _take(data, mid, surplus - taken, 0.0, real, conf["max_cut"])
             if taken / g >= 0.5:        # moins d'une demi-minute par match : non signalé
                 changed.append((team, total / g, (total - taken) / g))
         if changed:
@@ -138,9 +141,10 @@ def normalize(loaded, phase, league, games, availability=None, real=None, today=
     return report
 
 
-def _take(data, group, wanted, floor, real):
+def _take(data, group, wanted, floor, real, max_cut=1.0):
     """Retire jusqu'à `wanted` minutes au groupe (même facteur pour tous), sans descendre le groupe sous
-    `floor` minutes ni un joueur sous son MPG réel. Retourne les minutes retirées."""
+    `floor` minutes, un joueur sous son MPG réel, ni réduire un joueur de plus de `max_cut`.
+    Retourne les minutes retirées."""
     if wanted <= 0 or not group:
         return 0.0
     total = sum(m for _, _, m, _ in group)
@@ -150,7 +154,7 @@ def _take(data, group, wanted, floor, real):
     factor = 1 - min(wanted, room) / total
     taken = 0.0
     for _, pid, minutes, mpg in group:
-        f = factor
+        f = max(factor, 1 - max_cut)
         if real.get(pid):
             f = max(f, min(1.0, real[pid] / mpg))
         if f >= 1:
