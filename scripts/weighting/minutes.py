@@ -130,7 +130,7 @@ def normalize(loaded, phase, league, games, availability=None, real=None, today=
             deep = players[conf["rotation"]:]
             taken = _take(data, deep, surplus, conf["deep_floor"] * g, real)
             taken += _take(data, mid, surplus - taken, 0.0, real)
-            if taken > 0:
+            if taken / g >= 0.5:        # moins d'une demi-minute par match : non signalé
                 changed.append((team, total / g, (total - taken) / g))
         if changed:
             report[slot["code"]] = changed
