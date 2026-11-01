@@ -85,6 +85,8 @@ PARAMS = [
     ("Sheets | Tab", "Config", "bootstrap", "config_tab", "str", "cet onglet (indicatif : nom lu dans config/bootstrap.json)"),
     ("Sheets | Tab", "Moves Reco", "league", "google_sheets.moves_reco_tab", "str",
      "simulation d'échanges / joueurs libres (python -m scripts.season moves)"),
+    ("Sheets | Tab", "Injuries", "league", "google_sheets.injuries_tab", "str",
+     "blessés et date de retour (ESPN), colonne Override modifiable : date, season ou ok"),
     ("Sheets | Tab", "Season Reco", "league", "google_sheets.season_reco_tab", "str",
      "projection de saison : classement, mon effectif, adversaires, effectifs des 15 équipes"),
     ("Sheets | Tab", "Players source", "league", "google_sheets.alias_tab", "str",
@@ -129,6 +131,12 @@ PARAMS = [
      "mode need : prochains joueurs de l'ADP départagés par les besoins"),
     ("Optim | Season", "Short-term horizon (days)", "league", "season.st_days", "int",
      "jours projetés avec la phase st, ensuite lt"),
+    ("Optim | Season", "Injuries", "league", "season.injuries", "choice:espn,sheet,off",
+     "espn = liste https://www.espn.com/nba/injuries + Override de l'onglet injuries ; sheet = onglet seul ; "
+     "off = blessures ignorées"),
+    ("Optim | Season", "Injury GP ratio", "league", "season.injury_gp_ratio", "float",
+     "blessé avec date de retour : source exclue du niveau GP si matchs projetés / matchs restants après "
+     "le retour > ce seuil (1 = impossible ; 0,95 plus strict)"),
     ("Optim | Season", "Simulations", "league", "season.simulations", "int", "tirages pour les probabilités de classement"),
     ("Optim | Season", "Opponent model", "league", "season.opponent_model", "choice:usage,value",
      "usage = taux d'alignement calibré sur chaque adversaire ; value = tous les matchs attendus alignés"),

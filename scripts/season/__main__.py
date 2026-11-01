@@ -18,6 +18,7 @@ import os
 import sys
 from datetime import date
 
+from scripts import injuries
 from scripts.config import EXPORTS_DIR, load_league, load_settings, season_reco_tab
 from scripts.draft.pool import load_pool
 from scripts.season import opponents, report
@@ -83,6 +84,9 @@ def compute(settings, league, today=None, book=None, roster_source=None):
     today = today or date.today()
     if today.isoformat() < start:
         today = date.fromisoformat(start)
+    if "_injuries" not in league:
+        league = dict(league, _injuries=injuries.load(league, settings, book=book, today=today,
+                                                     write=book is not None, timeout=timeout))
 
     team_names = league.get("yahoo", {}).get("teams") or {}
     names = {v: k for k, v in team_names.items()}

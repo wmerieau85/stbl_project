@@ -151,6 +151,30 @@ poids des sources déjà configurées sont réduits en gardant leurs proportions
 modifié : `python -m scripts.config_sheet push` y écrit ces réglages, après vérification de la copie
 locale (cette commande réécrit tout l'onglet `settings` et `players`).
 
+### Blessures (ESPN, onglet `injuries`)
+
+La liste des blessés d'[ESPN](https://www.espn.com/nba/injuries) (API publique, statut et date de retour
+estimée) fait foi : elle est relue à chaque pondération lt et à chaque projection de saison / Moves, puis
+recopiée dans l'onglet `injuries` (`Player | NBA | Status | ESPN return | Override | Return used | Updated |
+Comment`).
+
+- Joueur « Out » avec date de retour : aucun match avant cette date. Au niveau GP de la pondération, une
+  source qui projette plus de matchs que son équipe n'en jouera après le retour (ratio matchs projetés /
+  matchs restants > `Optim | Season | Injury GP ratio`, 1 par défaut) n'a pas pris la blessure en compte :
+  elle est exclue du GP, les poids des autres sont renormalisés (niveaux MIN et STATS inchangés). Toutes
+  exclues : GP plafonné aux matchs restants. Le log liste les sources exclues. Même règle de calendrier dans
+  la projection de saison (ST et LT) ; la phase st reprend les matchs de lt.
+- Absent jusqu'à la fin de saison (statut « season » ou Override `season`) : le joueur reste listé dans les
+  phases lt et st, avec matchs, minutes, stats et pourcentages à 0.
+- Noms ESPN rapprochés de la base avec les alias de l'onglet `players` ; un blessé introuvable dans la base
+  est signalé dans le log (alias à ajouter).
+- « Day-To-Day », « Out » sans date, date passée : ignorés.
+- Colonne `Override` (conservée d'une mise à jour à l'autre) : une date (`2027-03-02` ou `02/03/2027`),
+  `season` / `saison` (fin de saison) ou `ok` (blessure ignorée). Une ligne ajoutée à la main avec un
+  Override est gardée même si ESPN ne liste pas le joueur.
+- ESPN indisponible : dernière version de l'onglet. Réglage `Optim | Season | Injuries` : `espn`
+  (défaut), `sheet` (onglet seul) ou `off`. Colonne « Blessé jusqu'au » dans `season_reco`.
+
 ## Menu du classeur (lancement sans le PC)
 
 Menu **STBL** du classeur (Apps Script, `apps_script/stbl_menu.gs`) -> traitement GitHub Actions
