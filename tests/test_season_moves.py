@@ -49,14 +49,13 @@ def _names(players):
     return [p.name for p in players]
 
 
-def test_trades_are_sorted_from_most_to_least_balanced():
+def test_trades_are_sorted_by_my_gain_then_balance():
     league = _league(["B"], {"type": "manager", "manager": "Rival"})
     out = moves.simulate(_result(league), league)
     assert out["tested"] == 2 and out["kept"] == 2
-    # B (valeur 0) contre D (0) : écart 0 % ; contre C (60) : 100 %
-    assert [_names(m.recv) for m in out["moves"]] == [["D"], ["C"]]
-    by_gain = max(out["moves"], key=lambda m: m.my_gain)
-    assert _names(by_gain.recv) == ["C"] and by_gain.partner_gain < 0
+    # B contre C (valeur 60, écart 100 %) me rapporte le plus : en tête, devant B contre D (écart 0 %)
+    assert [_names(m.recv) for m in out["moves"]] == [["C"], ["D"]]
+    assert out["moves"][0].my_gain > out["moves"][1].my_gain and out["moves"][0].partner_gain < 0
     assert all(not m.out_of_tolerance for m in out["moves"]) and out["moves"][0].p_first is not None
 
 
@@ -185,8 +184,8 @@ def test_auto_finds_win_win_trades_without_players():
     out = moves.simulate(_auto_result(league), league)
     assert out["mode"] == "auto" and out["partners"] == ["Rival", "Autre"] and out["moves"]
     assert all(m.my_gain > 0 and m.partner_gain >= 0 for m in out["moves"])
-    # du plus équitable au moins équitable
-    assert [abs(m.value_diff) for m in out["moves"]] == sorted(abs(m.value_diff) for m in out["moves"])
+    # du meilleur gain pour moi au moins bon, puis du plus équitable au moins équitable
+    assert [moves.display_order(m) for m in out["moves"]] == sorted(moves.display_order(m) for m in out["moves"])
     best = out["moves"][0]
     # j'ai trop de points et pas de rebonds : je cède un marqueur contre un rebondeur
     assert best.partner_name == "Rival" and _names(best.give)[0].startswith("P") and "R2" in _names(best.recv)
@@ -307,3 +306,12 @@ def test_auto_free_agents_never_drop_an_injured_reserve_player():
 def test_auto_free_agent_setting_is_read():
     cfg, _ = C.parse_rows(C.build_rows() + [["Moves | Compare", "Auto Free Agent", ""]])
     assert cfg["league"]["moves"]["compare"] == {"type": "auto free agent", "manager": ""}
+
+
+def test_display_order_gain_first_then_balance():
+    from types import SimpleNamespace as M
+
+    rows = [M(name="équitable", my_gain=2.004, value_diff=0.01), M(name="gros gain", my_gain=3.0, value_diff=-0.09),
+            M(name="déséquilibré", my_gain=2.0, value_diff=0.08)]
+    # gains égaux au centième (2,004 et 2,0) : départagés par l'écart de valeur
+    assert [m.name for m in sorted(rows, key=moves.display_order)] == ["gros gain", "équitable", "déséquilibré"]

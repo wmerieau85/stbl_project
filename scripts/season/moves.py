@@ -14,9 +14,9 @@ modifiées sans réoptimiser les lineups mais en respectant les plafonds de matc
 de moi et du partenaire). Les plus prometteurs, parmi ceux que le partenaire a intérêt à accepter, sont
 simulés exactement par lots (Auto shortlist répartis entre tailles d'échange, au plus 2 x Auto per manager
 par manager, jusqu'à 4 lots tant que Min results ne sont pas atteints) ; on garde ceux qui me font gagner et
-où son gain dépasse Auto min partner gain, un seul par effet sur mon équipe (le plus équitable), triés du
-plus équitable au moins équitable (au plus Auto per manager par manager), complétés jusqu'à Min results
-par ceux où l'autre manager perd des points.
+où son gain dépasse Auto min partner gain, un seul par effet sur mon équipe (le plus équitable), triés par
+gain roto pour moi puis du plus équitable au moins équitable (au plus Auto per manager par manager),
+complétés jusqu'à Min results par ceux où l'autre manager perd des points.
 
 Échange : autant de joueurs reçus que cédés ; toutes les combinaisons de l'effectif d'en face (ou du
 mien) sont testées, celles dont la valeur s'écarte de plus de la tolérance sont écartées, les autres
@@ -299,6 +299,12 @@ def simulate(result, league):
     return out
 
 
+def display_order(m):
+    """Ordre d'affichage des échanges : meilleur gain roto pour moi d'abord (arrondi au centième de point),
+    puis, à gain égal, le plus équitable (plus petit écart de valeur)."""
+    return (-round(m.my_gain, 2), abs(m.value_diff))
+
+
 def _trades(sim, me, p, conf):
     partner = sim.index(p["other"])
     side = me if p["mine"] else partner
@@ -333,7 +339,7 @@ def _trades(sim, me, p, conf):
         move = evaluate(give, recv)
         move.out_of_tolerance = True
         moves.append(move)
-    moves.sort(key=lambda m: (abs(m.value_diff), -m.my_gain))   # du plus équitable au moins équitable
+    moves.sort(key=display_order)
     log.info("[Moves] %d combinaisons, %d dans la tolérance de ±%.0f %%, %d affichées.", len(candidates),
              len(inside), 100 * tolerance, len(moves))
     return {"mode": "manager", "partner": partner, "partner_team": sim.teams[partner], "fixed": fixed,
@@ -595,7 +601,7 @@ def _auto(sim, me, p, conf):
             break
 
     def balanced(moves, cap):
-        moves = sorted(moves, key=lambda m: (abs(m.value_diff), -m.my_gain))   # du plus au moins équitable
+        moves = sorted(moves, key=display_order)
         shown, out = {}, []
         for m in moves:
             if shown.get(m.partner_name, 0) < per_manager:
@@ -774,8 +780,8 @@ def rows(out):
                   "de la ligue, st puis lt) x matchs attendus d'ici la fin de saison, jamais négative. "
                   "Matchs alignés (reçus) = matchs que mon lineup optimisé donnerait à chaque joueur reçu, sur ses "
                   "matchs attendus d'ici la fin de saison (un joueur peu utile reste sur le banc) ; effet sur mes "
-                  "autres joueurs = matchs alignés en plus ou en moins. Échanges triés du plus équitable au moins "
-                  "équitable ; « hors tolérance » = ajouté pour atteindre le nombre minimum de propositions. "
+                  "autres joueurs = matchs alignés en plus ou en moins. Échanges triés du meilleur gain roto pour "
+                  "moi au moins bon, puis du plus équitable au moins équitable ; « hors tolérance » = ajouté pour atteindre le nombre minimum de propositions. "
                   "Recherche auto : échanges où je gagne et où l'autre manager ne perd rien (« gagnant-gagnant »), "
                   "complétés si besoin par ceux où il perd des points ; un même effet sur mon équipe n'est montré "
                   "qu'une fois (version la plus équitable, le joueur en plus servant à équilibrer la valeur). "
