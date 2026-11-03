@@ -53,8 +53,9 @@ Réglages dans l'onglet settings :
 
 - Échange : autant de joueurs reçus que cédés. Toutes les combinaisons de l'autre effectif sont
   testées ; à valeur équivalente (tolérance), les 20 meilleurs gains pour moi sont gardés, complétés
-  jusqu'à 10 par les combinaisons les plus proches en valeur (« hors tolérance »). Affichage du plus
-  équitable au moins équitable, avec le gain de l'autre manager (un échange qui le fait
+  jusqu'à 10 par les combinaisons les plus proches en valeur (« hors tolérance »). Affichage du
+  meilleur gain roto pour moi au moins bon, puis, à gain égal (au centième de point), du plus équitable
+  au moins équitable, avec le gain de l'autre manager (un échange qui le fait
   perdre a peu de chances d'être accepté), le rang projeté, les chances de titre / podium et l'effet
   par catégorie.
 - Recherche auto (`Moves | Compare` = `auto`) : tous les échanges de 1 contre 1 à N contre N
@@ -69,8 +70,8 @@ Réglages dans l'onglet settings :
   ne sont pas trouvés. Restent ceux qui me font gagner et où son gain est au moins `Auto min partner gain`
   (0 = il ne perd rien) ; un même effet sur mon équipe (mêmes partants qui jouaient, mêmes arrivants
   alignés) n'est montré qu'une fois, dans sa version la plus équitable (le joueur en plus sert alors à
-  équilibrer la valeur). Affichage du plus équitable au moins équitable (écart de valeur), au plus
-  `Auto per manager` par manager ; complété jusqu'à `Min results` par des échanges où je gagne mais où
+  équilibrer la valeur). Affichage du meilleur gain pour moi au moins bon, puis du plus équitable
+  (écart de valeur), au plus `Auto per manager` par manager (ses meilleurs gains) ; complété jusqu'à `Min results` par des échanges où je gagne mais où
   l'autre manager perd des points (colonne Accord : « gagnant-gagnant » / « il perd des points »).
   Principe : à valeur brute équivalente, on échange un surplus dans une catégorie où je suis loin de mes
   voisins de classement contre une catégorie où chaque unité me rapporte des points, l'autre manager ayant
