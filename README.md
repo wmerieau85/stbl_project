@@ -227,8 +227,11 @@ sont acceptés (`python -m scripts.run --list` les affiche avec leurs commandes)
 | Maintenance > Photo des sources (et chaque matin) | `history_snapshot` | `scripts.history daily` |
 | Maintenance > Pertinence des sources | `sources_accuracy` | `scripts.accuracy` |
 
-Chaque lancement ajoute une ligne à l'onglet `runs` : demandé, en cours, puis OK / erreur, durée, lien
-vers le log GitHub, dernières lignes en cas d'erreur (aussi : STBL > Maintenance > Dernier lancement).
+Chaque lancement ajoute une ligne à l'onglet `runs` : demandé, en cours, puis OK / OK (avertissement) /
+erreur, durée, lien vers le log GitHub, dernières lignes en cas d'erreur ou d'avertissement (aussi : STBL >
+Maintenance > Dernier lancement). Une source dont l'import échoue (page vide ou en erreur, retentée une fois
+après 5 s) garde ses données précédentes : « OK (avertissement) », la base est renvoyée sur Drive. Les échanges
+avec Drive sont retentés deux fois (après 5 puis 15 s) sur une erreur passagère de Google (429, 5xx, coupure).
 Résultat en 1 à 3 minutes ; un lancement à la fois (la veille de draft tourne à part).
 
 La base `database.sqlite` et les CSV des sources sont dans le dossier Drive `stbl_data`

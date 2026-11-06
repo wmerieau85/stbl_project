@@ -161,8 +161,15 @@ def test_lt_phase_gp_from_sources_aware_of_injury(tmp_path, monkeypatch):
 
     monkeypatch.setattr(db, "DB_PATH", str(tmp_path / "t.sqlite"))
     monkeypatch.setattr(engine, "export_csv", lambda *a, **k: None)
-    monkeypatch.setattr(engine, "_games", lambda *a, **k: _games())
-    monkeypatch.setattr(engine, "load_availability", lambda *a, **k: {"jalen williams": date(2026, 12, 1)})
+    # calendrier relatif à aujourd'hui (le moteur compte les matchs restants à partir de la date du jour) :
+    # 1 match par jour pendant 91 jours, retour de Jalen Williams dans 30 jours (61 matchs restants après)
+    from datetime import timedelta
+
+    today = date.today()
+    games = [((today + timedelta(days=i)).isoformat(), "OKC", "LAL") for i in range(91)]
+    monkeypatch.setattr(engine, "_games", lambda *a, **k: games)
+    monkeypatch.setattr(engine, "load_availability",
+                        lambda *a, **k: {"jalen williams": today + timedelta(days=30)})
     db.init_db()
     with db.get_connection() as conn, conn:
         conn.execute("INSERT INTO players (player_id, canonical_name, name_key) VALUES (1, 'Jalen Williams', "
@@ -175,7 +182,7 @@ def test_lt_phase_gp_from_sources_aware_of_injury(tmp_path, monkeypatch):
     engine.compute_phase("lt", {"active_season": "2026-27", "active_stage": "ros"})
     with db.get_connection() as conn:
         gp = dict(conn.execute("SELECT player_id, gp FROM final_projections WHERE phase='lt'").fetchall())
-    assert gp[1] == 19                    # FantasyPros (69 > 31 matchs après le 1er décembre) exclue
+    assert gp[1] == 19                    # FantasyPros (69 > 61 matchs après le retour) exclue
     assert gp[2] == 59                    # joueur sain : moyenne habituelle
 
 

@@ -151,10 +151,18 @@ def run_pipeline(args):
             log.error("Envoi vers Google Sheets impossible : %s", exc)
             results["google sheets"] = False
 
+    from scripts.cloud import WARNING_RC
+
     failed = [name for name, ok in results.items() if not ok]
-    if failed:
+    errors = [name for name in failed if name not in SOURCES]
+    if errors:
         log.error("Pipeline terminé avec des erreurs : %s", ", ".join(failed))
         return 1
+    if failed:
+        # import d'une source en échec : ses données précédentes sont gardées, le reste est à jour
+        log.warning("Pipeline terminé avec des avertissements : import en échec pour %s (données précédentes "
+                    "conservées).", ", ".join(failed))
+        return WARNING_RC
     log.info("Pipeline terminé.")
     return 0
 

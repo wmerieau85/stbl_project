@@ -29,6 +29,9 @@ FOLDER = "application/vnd.google-apps.folder"
 DB_NAME = "database.sqlite"
 HISTORY_NAME = "history.sqlite"
 RUNNER_ENV = "STBL_CLOUD_RUNNER"      # positionné par scripts.run : les commandes ne resynchronisent pas
+WARNING_RC = 3                         # commande terminée avec des avertissements (ex. une source) : base renvoyée
+RETRY_STATUS = {429, 500, 502, 503, 504}
+RETRY_PAUSES = (5, 15)                 # secondes avant chaque nouvelle tentative Drive (erreur passagère de Google)
 
 
 class CloudError(RuntimeError):
@@ -85,6 +88,29 @@ def _check(response, what):
     return response
 
 
+def _with_retries(call, what):
+    """Appel Drive (requête HTTP) refait après RETRY_PAUSES en cas d'erreur passagère : 429 / 5xx ou coupure
+    réseau. Renvoie la dernière réponse (ou relance la dernière exception réseau)."""
+    import time
+
+    import requests
+
+    for attempt, pause in enumerate(RETRY_PAUSES + (None,), 1):
+        try:
+            response = call()
+        except (requests.ConnectionError, requests.Timeout) as exc:
+            if pause is None:
+                raise
+            log.warning("[Drive] %s : %s, nouvelle tentative dans %d s (%d/%d).", what, exc.__class__.__name__,
+                        pause, attempt, len(RETRY_PAUSES))
+        else:
+            if response.status_code not in RETRY_STATUS or pause is None:
+                return response
+            log.warning("[Drive] %s : erreur %d de Google, nouvelle tentative dans %d s (%d/%d).", what,
+                        response.status_code, pause, attempt, len(RETRY_PAUSES))
+        time.sleep(pause)
+
+
 class Drive:
     def __init__(self, folder, http=None, settings=None):
         if not folder:
@@ -102,7 +128,8 @@ class Drive:
                   "pageSize": 1000, "supportsAllDrives": "true", "includeItemsFromAllDrives": "true"}
         out = []
         while True:
-            data = _check(self.http.get(API, params=params, timeout=60), "lecture du dossier").json()
+            data = _check(_with_retries(lambda: self.http.get(API, params=params, timeout=60), "lecture du dossier"),
+                          "lecture du dossier").json()
             out += data.get("files", [])
             if not data.get("nextPageToken"):
                 return out
@@ -112,8 +139,10 @@ class Drive:
         return next((f for f in self.children(parent or self.folder, folders=False) if f["name"] == name), None)
 
     def download(self, file, path):
-        response = _check(self.http.get(f"{API}/{file['id']}", params={"alt": "media", "supportsAllDrives": "true"},
-                                        timeout=300), f"téléchargement de {file['name']}")
+        what = f"téléchargement de {file['name']}"
+        response = _check(_with_retries(lambda: self.http.get(f"{API}/{file['id']}", timeout=300,
+                                                               params={"alt": "media", "supportsAllDrives": "true"}),
+                                        what), what)
         os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
         tmp = path + ".download"
         with open(tmp, "wb") as fh:
@@ -126,9 +155,11 @@ class Drive:
     def upload(self, file, path):
         with open(path, "rb") as fh:
             data = fh.read()
-        _check(self.http.patch(f"{UPLOAD}/{file['id']}", params={"uploadType": "media", "supportsAllDrives": "true"},
-                               data=data, headers={"Content-Type": "application/octet-stream"}, timeout=300),
-               f"envoi de {file['name']}")
+        what = f"envoi de {file['name']}"
+        _check(_with_retries(lambda: self.http.patch(f"{UPLOAD}/{file['id']}", data=data, timeout=300,
+                                                     params={"uploadType": "media", "supportsAllDrives": "true"},
+                                                     headers={"Content-Type": "application/octet-stream"}),
+                             what), what)
 
 
 def _timestamp(text):
