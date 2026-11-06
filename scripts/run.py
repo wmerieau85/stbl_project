@@ -162,7 +162,7 @@ def execute(code, key=None, book=None, league=None, step_runner=run_step, drive_
     start = now()
     journal.update("en cours", start)
     env = dict(os.environ, **{cloud.RUNNER_ENV: "1", "PYTHONUNBUFFERED": "1", "PYTHONIOENCODING": "utf-8"})
-    detail, rc, drive, before, before_history = [], 0, None, None, None
+    detail, warnings, rc, drive, before, before_history = [], [], 0, None, None, None
     t0 = time.monotonic()
     try:
         if command.db:
@@ -175,6 +175,10 @@ def execute(code, key=None, book=None, league=None, step_runner=run_step, drive_
         for args in command.steps:
             log.info("=== %s", " ".join(args))
             rc, tail = step_runner(args, env)
+            if rc == cloud.WARNING_RC:     # terminé avec des avertissements (ex. une source) : on continue
+                warnings += [f"avertissement : python {' '.join(args)}"] + [t for t in tail if "WARNING" in t]
+                rc = 0
+                continue
             if rc != 0:
                 detail = [f"échec de : python {' '.join(args)} (code {rc})"] + tail
                 break
@@ -186,8 +190,9 @@ def execute(code, key=None, book=None, league=None, step_runner=run_step, drive_
         log.error("%s", exc)
         rc, detail = rc or 1, detail + [str(exc)]
     end = now()
-    journal.update("OK" if rc == 0 else "erreur", start, end, "\n".join(detail))
-    log.info("%s : %s en %.0f s.", command.label, "OK" if rc == 0 else "erreur", time.monotonic() - t0)
+    status = "erreur" if rc != 0 else ("OK (avertissement)" if warnings else "OK")
+    journal.update(status, start, end, "\n".join(detail + warnings))
+    log.info("%s : %s en %.0f s.", command.label, status, time.monotonic() - t0)
     return rc
 
 

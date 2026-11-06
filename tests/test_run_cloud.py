@@ -211,3 +211,66 @@ def test_history_snapshot_syncs_history_file(monkeypatch):
     assert run.execute("history_snapshot", "k", None, LEAGUE, step_runner=ok, drive_factory=FakeDrive) == 0
     assert calls == ["pull_db", "pull_imports", "pull_history", ("-m", "scripts.history", "daily"),
                      ("push_history", "h0")]
+
+
+class FlakyHttp(FakeHttp):
+    """Drive qui répond d'abord par des erreurs passagères (liste de statuts ou d'exceptions), puis normalement."""
+
+    def __init__(self, files, failures):
+        super().__init__(files)
+        self.failures, self.calls = list(failures), 0
+
+    def _maybe_fail(self):
+        self.calls += 1
+        if self.failures:
+            failure = self.failures.pop(0)
+            if isinstance(failure, Exception):
+                raise failure
+            return Response(status=failure, payload={"error": {"message": "Server Error"}})
+        return None
+
+    def get(self, url, params=None, timeout=None):
+        return self._maybe_fail() or super().get(url, params, timeout)
+
+    def patch(self, url, params=None, data=None, headers=None, timeout=None):
+        return self._maybe_fail() or super().patch(url, params, data, headers, timeout)
+
+
+def _flaky_drive(tmp_path, monkeypatch, failures):
+    monkeypatch.setattr(db, "DB_PATH", str(tmp_path / "database.sqlite"))
+    pauses = []
+    monkeypatch.setattr("time.sleep", pauses.append)
+    http = FlakyHttp({"db": {"name": "database.sqlite", "parent": "root", "content": b"base drive"}}, failures)
+    return cloud.Drive("root", http=http), http, pauses
+
+
+def test_drive_retries_transient_errors(tmp_path, monkeypatch):
+    import requests
+
+    d, http, pauses = _flaky_drive(tmp_path, monkeypatch, [502, requests.ConnectionError("coupure")])
+    before = cloud.pull_db(d)                     # lecture du dossier : 502 puis coupure, puis OK
+    assert before and pauses == [5, 15]
+    (tmp_path / "database.sqlite").write_bytes(b"nouvelle base")
+    http.failures = [503]
+    assert cloud.push_db(d, before) is True and http.files["db"]["content"] == b"nouvelle base"
+    assert pauses == [5, 15, 5]
+
+
+def test_drive_gives_up_after_retries_and_keeps_other_errors_immediate(tmp_path, monkeypatch):
+    d, http, pauses = _flaky_drive(tmp_path, monkeypatch, [502, 502, 502])
+    with pytest.raises(cloud.CloudError, match="502"):
+        cloud.pull_db(d)
+    assert http.calls == 3 and pauses == [5, 15]
+    d, http, pauses = _flaky_drive(tmp_path, monkeypatch, [403])
+    with pytest.raises(cloud.CloudError, match="403"):    # erreur non passagère : pas de nouvelle tentative
+        cloud.pull_db(d)
+    assert http.calls == 1 and pauses == []
+
+
+def test_execute_warning_step_still_pushes_db(monkeypatch):
+    calls = []
+    _patch_cloud(monkeypatch, calls)
+    tail = ["12:07 WARNING Pipeline terminé avec des avertissements : import en échec pour cbs"]
+    assert run.execute("projections_update", "k", None, LEAGUE, step_runner=lambda a, e: (cloud.WARNING_RC, tail),
+                       drive_factory=FakeDrive) == 0
+    assert ("push_db", "md5") in calls

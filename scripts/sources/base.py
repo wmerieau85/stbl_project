@@ -7,6 +7,7 @@ pourcentages, stats dérivées, enregistrement) est partagé.
 """
 
 import logging
+import time
 
 from scripts.config import load_settings, load_source_config
 from scripts.db import NUMERIC_COLUMNS, PERCENT_COLUMNS, replace_projections
@@ -107,6 +108,9 @@ def complete_stats(stats, per_game=False):
     return stats
 
 
+REFETCH_PAUSE = 5.0   # secondes avant de retenter une page vide
+
+
 class ProjectionSource:
     """Classe de base d'une source de projections."""
 
@@ -145,6 +149,16 @@ class ProjectionSource:
         """Retourne une liste de dicts {"player", "team", "positions": [...], "stats": {col: valeur brute}}."""
         raise NotImplementedError
 
+    def refetch(self, doc_label):
+        """Nouveau téléchargement d'une page vide ou en échec, après REFETCH_PAUSE secondes. Seulement pour les
+        pages web de page_requests (documents() par défaut) ; None sinon (fichiers CSV, API particulières)."""
+        if type(self).documents is not ProjectionSource.documents:
+            return None
+        log.warning("[%s] Page vide ou en échec, nouvelle tentative dans %.0f s : %s", self.label, REFETCH_PAUSE,
+                    doc_label)
+        time.sleep(REFETCH_PAUSE)
+        return self.http.get_text(doc_label)
+
     # --- logique commune ---------------------------------------------------
     def url_template(self):
         template = self.source_config.get("urls", {}).get(self.stage)
@@ -160,12 +174,14 @@ class ProjectionSource:
         if not docs:
             return None
         for doc_label, content, context in docs:
-            if content is None:
-                failures += 1
-                continue
-            rows = self.parse_page(content, context)
+            rows = self.parse_page(content, context) if content is not None else []
             if not rows:
-                log.error("[%s] Aucun joueur lu dans %s", self.label, doc_label)
+                # page vide ou en échec (souvent passager : page pas encore générée, site surchargé) : un essai de plus
+                content = self.refetch(doc_label)
+                rows = self.parse_page(content, context) if content is not None else []
+            if not rows:
+                if content is not None:
+                    log.error("[%s] Aucun joueur lu dans %s", self.label, doc_label)
                 failures += 1
                 continue
             for row in rows:
