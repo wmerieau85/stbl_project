@@ -30,6 +30,9 @@ from scripts.config import BASE_DIR, HISTORY_PATH, load_league, load_settings
 
 log = logging.getLogger("stbl.history")
 
+# liste des blessés (onglet injuries / ESPN) : kind « injuries », une ligne par clé de nom, date de retour
+# (AAAA-MM-JJ) ou « season » dans la colonne positions ; sert à écarter les blessés de la mesure du GP (accuracy)
+INJURIES_KIND, INJURIES_SOURCE, INJURIES_STAGE = "injuries", "ESPN", "list"
 FIELDS = ("gp", "min", "mpg", "pts", "reb", "ast", "stl", "blk", "tov", "fg3m", "fg3a",
           "fgm", "fga", "fgp", "ftm", "fta", "ftp")
 SCHEMA = f"""
@@ -75,7 +78,7 @@ def interval_days(kind, stage, conf):
     """Écart minimal entre deux photos : 0 pour draft (chaque changement compte)."""
     if stage == "draft":
         return 0
-    if kind == "raw" and stage == "sea":
+    if (kind == "raw" and stage == "sea") or kind == INJURIES_KIND:
         return int(conf.get("stats_days", 1))
     return int(conf.get("projections_days", 7))
 
@@ -176,6 +179,43 @@ def take(main_path, history=None, league=None, now=None):
     return report
 
 
+def take_injuries(hist, availability, season, league=None, now=None):
+    """Photographie la liste des blessés {clé du nom: date de retour | 'season'}. Renvoie un statut."""
+    now = now or datetime.now()
+    rows = sorted((key, "season" if value == "season" else str(value)) for key, value in (availability or {}).items())
+    if not rows:
+        return "liste vide, rien à photographier"
+    digest = hashlib.sha1(json.dumps(rows).encode()).hexdigest()
+    key = (INJURIES_KIND, INJURIES_SOURCE, season, INJURIES_STAGE)
+    last = hist.execute("SELECT as_of, content_hash FROM snapshots WHERE kind=? AND source=? AND season=? "
+                        "AND stage=? ORDER BY as_of DESC, snapshot_id DESC LIMIT 1", key).fetchone()
+    if last and last[1] == digest:
+        return "inchangée"
+    gap = interval_days(INJURIES_KIND, INJURIES_STAGE, _conf(league))
+    if last and gap and (now.date() - _day(last[0])).days < gap:
+        return f"moins de {gap} j depuis la précédente"
+    with hist:
+        sid = hist.execute("INSERT INTO snapshots (kind, source, season, stage, as_of, taken_at, content_hash, "
+                           "n_rows) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                           key + (now.isoformat(sep=" ", timespec="seconds"), now.isoformat(timespec="seconds"),
+                                  digest, len(rows))).lastrowid
+        hist.executemany("INSERT INTO snapshot_rows (snapshot_id, name_key, player, positions) VALUES (?, ?, ?, ?)",
+                         [(sid, k, k, v) for k, v in rows])
+    return "photographiée"
+
+
+def _injury_list(league, settings):
+    """Blessés en vigueur (ESPN + Override de l'onglet injuries, sans réécrire l'onglet) ; {} si indisponible."""
+    from scripts import injuries
+
+    try:
+        book = injuries._open_book(league, settings)
+        return injuries.load(league, settings, book=book, write=False)
+    except Exception as exc:   # ESPN / classeur indisponibles : pas de photo ce jour
+        log.warning("[History] Liste des blessés non lue (%s).", exc)
+        return {}
+
+
 def purge(hist, keep):
     """Efface les photos des saisons au-delà des `keep` plus récentes."""
     seasons = [s for (s,) in hist.execute("SELECT DISTINCT season FROM snapshots ORDER BY season DESC")]
@@ -252,6 +292,10 @@ def main(argv=None):
                 shutil.rmtree(os.path.dirname(tmp), ignore_errors=True)
         log.info("[History] Base principale :")
         _print(take(db.DB_PATH, hist, league))
+        if args.action == "daily":
+            settings = load_settings()
+            state = take_injuries(hist, _injury_list(league, settings), settings["active_season"], league)
+            log.info("[History] Liste des blessés : %s.", state)
     return 0
 
 

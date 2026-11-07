@@ -54,7 +54,8 @@ Maintenance > Photo des sources :
 Une photo n'est gardée que si son contenu a changé, et au plus une tous les N jours
 (`Optim | History`) : stats réelles de la saison à date (sea, résultat de référence) 1 jour ;
 projections ros, fenêtres l30 / l15 / l07 et projections finales lt / st 7 jours ; projections draft à
-chaque changement. Sa date est celle de l'import ou du calcul des données. Les stats sea d'une autre
+chaque changement ; liste des blessés (ESPN + Override de l'onglet injuries) 1 jour. Sa date est celle de
+l'import ou du calcul des données. Les stats sea d'une autre
 saison (plus de matchs joués que de jours écoulés depuis le 1er octobre) sont ignorées.
 `Retention (seasons)` : saisons gardées (3). `python -m scripts.history status` : photos disponibles.
 
@@ -68,7 +69,11 @@ niveaux de la pondération, et propose des poids. Rien n'est réécrit dans les 
 - Périodes : draft = projections de pré-saison contre la saison jouée ; lt = chaque photo ros (une par
   semaine) contre la suite de la saison ; st = chaque photo des fenêtres l30 / l15 / l07 / sea contre les
   N jours suivants (horizon court terme, 15 jours si le réglage vaut 0). Provisoire tant que la saison
-  n'est pas finie ; poids proposés indicatifs sous 25 % des matchs de la période joués.
+  n'est pas finie ; aucun poids proposé sous 25 % des matchs de la période joués.
+- GP : un joueur qu'une source a retiré de ses projections ros, alors qu'elle le projetait à la draft,
+  compte pour 0 match (blessure longue...) au lieu de sortir de la comparaison ; en phase lt, les joueurs
+  de la liste des blessés photographiée au point de départ (photo quotidienne, `injuries` dans
+  `history.sqlite`) ne sont pas mesurés, le moteur corrigeant déjà leurs matchs.
 - Mesures (comme le moteur) : GP = part des matchs de l'équipe jouée, écart en matchs ; MIN = minutes
   par match (3 matchs au moins) ; STATS = production par minute (60 minutes au moins) et FG% / FT%
   pondérés par les tentatives, chaque écart divisé par l'écart-type réel de la catégorie, moyenne des
@@ -77,5 +82,8 @@ niveaux de la pondération, et propose des poids. Rien n'est réécrit dans les 
   couverts par tous les codes qui en couvrent au moins 80 % ; un code moins couvert est mesuré seul
   (« couverture partielle ») et garde son poids.
 - Poids optimal : combinaison de codes (positifs, total 100 %) à la plus petite erreur quadratique ;
-  poids proposé = `Shrink to current weights` (50 %) x actuel + le reste x optimal. Lignes « Mélange
-  actuel », « Mélange proposé » et « Projection finale (photo) » : erreur de chaque mélange.
+  poids proposé = `Shrink to current weights` (50 %) x actuel + le reste x optimal. Retenu seulement si
+  le mélange proposé fait mieux que l'actuel, joueur par joueur, d'au moins 2 erreurs-types et d'au moins
+  2 % de l'erreur actuelle ; sinon ligne « Conclusion » = pas de conclusion / pas de changement, poids
+  actuels gardés, colonne optimal vide. Lignes « Mélange actuel », « Mélange proposé » (si retenu) et
+  « Projection finale (photo) » : erreur de chaque mélange.

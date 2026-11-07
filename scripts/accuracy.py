@@ -27,7 +27,15 @@ code moins couvert est mesuré sur ses seuls joueurs (« couverture partielle »
 
 Pondérations : optimal = combinaison de codes (poids positifs, total 100 %) qui fait la plus petite erreur
 quadratique sur l'échantillon ; proposé = rapprochement vers les poids actuels (Optim | History | Shrink to
-current weights : 50 % = à mi-chemin). Rien n'est réécrit dans les grilles.
+current weights : 50 % = à mi-chemin). Rien n'est réécrit dans les grilles. Garde-fous :
+- pas de poids proposés tant que l'échantillon est faible (moins de WEAK_PROGRESS des matchs de la période,
+  ou un seul point de départ en st) ;
+- le mélange proposé n'est retenu que s'il fait mieux que l'actuel, joueur par joueur, d'au moins SIGNIFICANCE
+  erreurs-types et d'au moins MIN_GAIN de l'erreur actuelle ; sinon « pas de conclusion », poids actuels gardés.
+GP : un joueur absent d'une projection ros mais projeté par la même source à la draft compte pour 0 match (la
+source l'a retiré, souvent pour une blessure longue) ; en phase lt, les joueurs de la liste des blessés
+photographiée au point de départ (scripts.history daily) ne sont pas mesurés : le moteur corrige déjà leurs
+matchs, une source se juge sur les autres.
 """
 
 import argparse
@@ -43,7 +51,7 @@ from datetime import timedelta
 import numpy as np
 
 from scripts.config import EXPORTS_DIR, HISTORY_PATH, load_league, load_settings
-from scripts.history import _day, other_season
+from scripts.history import INJURIES_KIND, INJURIES_SOURCE, INJURIES_STAGE, _day, other_season
 
 log = logging.getLogger("stbl.accuracy")
 
@@ -60,7 +68,9 @@ COVERAGE = 0.80        # part des joueurs qui comptent à couvrir pour entrer da
 SPACING_DAYS = 7       # écart minimal entre deux points de départ (lt, st)
 MATCH_DAYS = 7         # une photo de code sert pour un point de départ jusqu'à 7 jours après sa date
 SEA_TOLERANCE = 3      # photo des stats réelles acceptée jusqu'à 3 jours d'écart avec la date voulue
-WEAK_PROGRESS = 0.25   # en dessous : poids proposés indicatifs (trop peu de matchs joués sur la période)
+WEAK_PROGRESS = 0.25   # en dessous : pas de poids proposés (trop peu de matchs joués sur la période)
+SIGNIFICANCE = 2.0     # le mélange proposé doit faire mieux que l'actuel d'au moins 2 erreurs-types...
+MIN_GAIN = 0.02        # ... et d'au moins 2 % de l'erreur du mélange actuel (sinon : sans intérêt pratique)
 LEVELS = ("gp", "min", "stats")
 LEVEL_LABELS = {"gp": "GP", "min": "MIN", "stats": "STATS"}
 UNITS = {"gp": "écart moyen (matchs)", "min": "écart moyen (minutes par match)",
@@ -95,6 +105,25 @@ class History:
 
     def of(self, kind, source, stage):
         return [s for s in self.snaps if s["kind"] == kind and s["source"] == source and s["stage"] == stage]
+
+    def injured_at(self, day):
+        """Clés des joueurs indisponibles au jour `day` (photo de la liste des blessés de moins de MATCH_DAYS
+        jours) ; None sans photo."""
+        snaps = [s for s in self.of(INJURIES_KIND, INJURIES_SOURCE, INJURIES_STAGE) if s["day"] <= day
+                 and (day - s["day"]).days <= MATCH_DAYS]
+        if not snaps:
+            return None
+        out = set()
+        for key, row in self.rows(snaps[-1]["id"]).items():
+            back = str(row.get("positions") or "")
+            if back == "season" or (back and back > day.isoformat()):
+                out.add(key)
+        return out
+
+    def draft_keys(self, source, day):
+        """Joueurs projetés par la source à la draft (dernière photo draft au plus tard le jour `day`)."""
+        snaps = [s for s in self.of("raw", source, "draft") if s["day"] <= day]
+        return set(self.rows(snaps[-1]["id"])) if snaps else set()
 
     def truth_source(self):
         """Source des stats réelles de référence : la plus photographiée (FantasyPros à égalité)."""
@@ -251,10 +280,26 @@ def periods(hist, phase, codes, seas, horizon):
 
 # ------------------------------------------------------------------------------------------- échantillon
 
+def _dropped(snap_day):
+    """Prédiction d'un joueur retiré par une source en cours de saison : 0 match (niveau GP seulement)."""
+    out = {"share": 0.0, "mpg": None, "_snap": snap_day, "dropped": True}
+    out.update({cat: None for cat in CATS})
+    return out
+
+
 def build_samples(hist, phase, codes, seas, horizon, players):
-    """Lignes (période, joueur) : réel + prédiction de chaque code. Renvoie (lignes, périodes, avancement)."""
-    samples, used, progress = [], [], []
+    """Lignes (période, joueur) : réel + prédiction de chaque code. Renvoie (lignes, périodes, avancement,
+    blessés écartés par période : nombre, ou None sans photo de la liste des blessés).
+
+    - Un joueur absent d'une projection ros mais projeté par la même source à la draft compte pour 0 match
+      (GP) : la source l'a retiré (blessure longue...), au lieu de sortir de la comparaison.
+    - Phase lt : les joueurs de la liste des blessés au point de départ ne sont pas mesurés au niveau GP (le
+      moteur corrige déjà leurs matchs) ; la qualité d'une source se juge sur les autres."""
+    samples, used, progress, injured_info = [], [], [], []
+    draft_of = {}
     for day, begin, end, chosen in periods(hist, phase, codes, seas, horizon):
+        injured = hist.injured_at(day) if phase == "lt" else None
+        excluded = 0
         begin_rows = hist.rows(begin["id"]) if begin else None
         actual, team_window = actual_window(hist.rows(end["id"]), begin_rows)
         team_before = team_games(begin_rows or {})
@@ -282,6 +327,9 @@ def build_samples(hist, phase, codes, seas, horizon, players):
             a = actual.get(key) or {f: 0.0 for f in ("gp", "min")}
             a = dict(a, team=team)
             truth = truth_values(a, team_window)
+            if injured is not None and key in injured and truth["share"] is not None:
+                truth["share"] = None
+                excluded += 1
             preds = {}
             mpgs = [_f(rows[key].get("mpg")) for rows in code_rows.values() if key in rows and rows[key].get("mpg")]
             ref_mpg = float(np.mean(mpgs)) if mpgs else truth.get("mpg")
@@ -291,11 +339,18 @@ def build_samples(hist, phase, codes, seas, horizon, players):
                     snap = chosen[c["code"]]
                     preds[c["code"]] = predict(rows[key], c, rows, team_before, ref_mpg)
                     preds[c["code"]]["_snap"] = snap["day"]
+                elif rows and c["stage"] == "ros" and not c["final"]:
+                    if (c["source"], day) not in draft_of:
+                        draft_of[(c["source"], day)] = hist.draft_keys(c["source"], day)
+                    if key in draft_of[(c["source"], day)]:
+                        preds[c["code"]] = _dropped(chosen[c["code"]]["day"])
             if bench and key in bench:
                 preds["_final"] = predict(bench[key], {"stage": phase, "final": True}, bench, team_before, ref_mpg)
             samples.append({"day": day, "key": key, "truth": truth, "preds": preds})
         used.append((day, begin["day"] if begin else None, end["day"], final_code))
-    return samples, used, progress
+        if phase == "lt":
+            injured_info.append((day, excluded if injured is not None else None))
+    return samples, used, progress, injured_info
 
 
 def _benchmark(hist, phase, day):
@@ -422,7 +477,7 @@ def current_weight(code, level):
     return float(w)
 
 
-def evaluate_level(samples, codes, level, sigma, shrink, players):
+def evaluate_level(samples, codes, level, sigma, shrink, players, weak=False):
     """Tableau d'un niveau : une ligne par code + mélanges actuel / proposé + projection finale."""
     keys_of = {}
     for c in codes:
@@ -460,14 +515,40 @@ def evaluate_level(samples, codes, level, sigma, shrink, players):
     ranked = sorted((r for r in rows if r["code"] in full and r["error"] is not None), key=lambda r: r["error"])
     for i, r in enumerate(ranked, 1):
         r["rank"] = i
+    # conclusion : on ne propose de nouveaux poids que si le mélange proposé fait nettement mieux que l'actuel
+    current = [(r["code"], r["current"]) for r in optimized]
+    proposed = [(r["code"], r["proposed"]) for r in optimized]
+    if weak:
+        verdict = "pas de conclusion : échantillon encore trop faible, poids actuels gardés"
+    elif not common or not optimized:
+        verdict = "pas de conclusion : aucun joueur commun à comparer, poids actuels gardés"
+    else:
+        gain, se = significant_gain(common, level, current, proposed, sigma)
+        base = _blend_error(common, level, current, sigma)[0] or 0.0
+        if gain <= 0:
+            verdict = "pas de changement : le mélange proposé ne fait pas mieux que l'actuel, poids actuels gardés"
+        elif gain < MIN_GAIN * base:
+            verdict = (f"pas de changement : gain trop faible pour compter ({gain:.3f}, moins de "
+                       f"{100 * MIN_GAIN:.0f} % de l'erreur actuelle), poids actuels gardés")
+        elif gain < SIGNIFICANCE * se:
+            verdict = ("pas de conclusion : le mélange proposé ne fait pas nettement mieux que l'actuel "
+                       f"(gain {gain:.3f} ± {se:.3f}, dans le bruit), poids actuels gardés")
+        else:
+            verdict = f"proposition : le mélange proposé fait mieux que l'actuel (gain {gain:.3f} ± {se:.3f})"
+    concluded = verdict.startswith("proposition")
+    if not concluded:
+        for r in rows:
+            r["optimal"], r["proposed"] = None, r["current"]
     blends = {}
     if common:
-        for name, key in (("Mélange actuel", "current"), ("Mélange proposé", "proposed")):
-            blends[name] = _blend_error(common, level, [(r["code"], r[key]) for r in optimized], sigma)
+        blends["Mélange actuel"] = _blend_error(common, level, current, sigma)
+        if concluded:
+            blends["Mélange proposé"] = _blend_error(common, level, proposed, sigma)
         final_items = level_items(common, level, "_final")
         if final_items:
             blends["Projection finale (photo)"] = error(final_items, level, sigma)
-    return {"rows": rows, "blends": blends, "common": len(common_keys), "measurable": len(measurable)}
+    return {"rows": rows, "blends": blends, "common": len(common_keys), "measurable": len(measurable),
+            "verdict": verdict}
 
 
 def _truth_ok(t, level):
@@ -478,18 +559,51 @@ def _truth_ok(t, level):
     return t["minutes"] >= MIN_MINUTES
 
 
-def _blend_error(samples, level, weighted_codes, sigma):
+def _blend_items(samples, level, weighted_codes):
+    """{(échantillon, catégorie): (prédit, réel, poids, catégorie, échantillon)} du mélange pondéré."""
     total = sum(w for _, w in weighted_codes)
     if total <= 0:
-        return None, {}
-    items = []
+        return {}
     per_code = {c: {(id(i[4]), i[3]): i for i in level_items(samples, level, c)} for c, _ in weighted_codes}
     keys = set.intersection(*(set(d) for d in per_code.values())) if per_code else set()
+    out = {}
     for key in keys:
         first = per_code[weighted_codes[0][0]][key]
         value = sum(w * per_code[c][key][0] for c, w in weighted_codes) / total
-        items.append((value, first[1], first[2], first[3], first[4]))
-    return error(items, level, sigma)
+        out[key] = (value, first[1], first[2], first[3], first[4])
+    return out
+
+
+def _blend_error(samples, level, weighted_codes, sigma):
+    items = _blend_items(samples, level, weighted_codes)
+    return error(list(items.values()), level, sigma) if items else (None, {})
+
+
+def significant_gain(samples, level, current, proposed, sigma):
+    """(gain moyen, erreur-type) de l'erreur absolue du mélange proposé sur l'actuel, joueur par joueur
+    (STATS : écarts divisés par l'écart-type de la catégorie, poids ramenés à la catégorie)."""
+    cur, new = _blend_items(samples, level, current), _blend_items(samples, level, proposed)
+    keys = [k for k in cur if k in new]
+    if len(keys) < 5:
+        return 0.0, float("inf")
+    diffs, weights = [], []
+    for k in keys:
+        p0, t, w, cat, _ = cur[k]
+        p1 = new[k][0]
+        scale = 1.0 if level != "stats" else (sigma.get(cat) or 0.0)
+        if level == "stats":
+            if not scale:
+                continue
+            w = w / _cat_weight_total(samples, cat)
+        diffs.append((abs(p0 - t) - abs(p1 - t)) / scale)
+        weights.append(w)
+    d, w = np.array(diffs), np.array(weights)
+    if not len(d) or w.sum() <= 0:
+        return 0.0, float("inf")
+    mean = float(np.average(d, weights=w))
+    var = float(np.average((d - mean) ** 2, weights=w))
+    n_eff = w.sum() ** 2 / (w ** 2).sum()
+    return mean, (var / n_eff) ** 0.5 if n_eff > 1 else float("inf")
 
 
 # ------------------------------------------------------------------------------------------------ calcul
@@ -524,13 +638,14 @@ def compute(history_path=None, settings=None, league=None, grids=None):
                     continue
                 label = slot["source"] if not slot.get("final") else f"projection finale {slot['source']}"
                 codes.append(dict(slot, label=label))
-            samples, used, progress = build_samples(hist, phase, codes, seas, horizon, players)
+            samples, used, progress, injured = build_samples(hist, phase, codes, seas, horizon, players)
             sigma = spreads(samples)
-            result = {"periods": used, "progress": float(np.mean(progress)) if progress else None,
-                      "levels": {}}
+            mean_progress = float(np.mean(progress)) if progress else None
+            weak = (phase == "st" and len(used) < 2) or (mean_progress is not None and mean_progress < WEAK_PROGRESS)
+            result = {"periods": used, "progress": mean_progress, "levels": {}, "weak": weak, "injured": injured}
             if samples:
                 for level in LEVELS:
-                    result["levels"][level] = evaluate_level(samples, codes, level, sigma, shrink, players)
+                    result["levels"][level] = evaluate_level(samples, codes, level, sigma, shrink, players, weak)
             out["phases"][phase] = result
     return out
 
@@ -558,7 +673,9 @@ def rows(result):
                 f"{result['horizon']} jours. Joueurs qui comptent : {result['players']} premiers en minutes "
                 f"projetées ou réelles."])
     out.append(["Poids optimal = combinaison qui fait la plus petite erreur sur la période ; poids proposé = "
-                "entre poids actuel et optimal. Rien n'est réécrit dans les grilles."])
+                "entre poids actuel et optimal, affichés seulement si le mélange proposé fait nettement mieux que "
+                "l'actuel (au moins 2 erreurs-types) sur un échantillon suffisant. Un joueur retiré par une source "
+                "en cours de saison (projeté à la draft) compte pour 0 match. Rien n'est réécrit dans les grilles."])
     for phase, res in result["phases"].items():
         out.append([])
         periods_ = res["periods"]
@@ -580,9 +697,19 @@ def rows(result):
             state = "saison complète"
         else:
             state = f"provisoire, {round(100 * progress)} % des matchs de la période joués"
-        weak = phase == "st" and len(periods_) < 2 or progress is not None and progress < WEAK_PROGRESS
-        out.append([f"{head} : {scope} - {state}" + (" - échantillon encore faible : poids proposés indicatifs"
-                                                     if weak else "")])
+        out.append([f"{head} : {scope} - {state}" + (" - échantillon encore faible : pas de poids proposés"
+                                                     if res.get("weak") else "")])
+        if phase == "lt" and res.get("injured"):
+            known = [(d, n) for d, n in res["injured"] if n is not None]
+            missing = [d for d, n in res["injured"] if n is None]
+            parts = []
+            if known:
+                parts.append("blessés écartés de la mesure du GP (le moteur corrige déjà leurs matchs) : "
+                             + ", ".join(f"{n} au {d:%d/%m}" for d, n in known))
+            if missing:
+                parts.append("liste des blessés non photographiée au " + ", ".join(f"{d:%d/%m}" for d in missing)
+                             + " : blessés comptés")
+            out.append(["GP : " + " ; ".join(parts)])
         for level in LEVELS:
             lv = res["levels"].get(level)
             if not lv:
@@ -610,6 +737,8 @@ def rows(result):
                 if level == "stats":
                     line += [_num(by_cat.get(c), 3) for c in CATS]
                 out.append(line)
+            if lv.get("verdict"):
+                out.append([LEVEL_LABELS[level], "Conclusion", lv["verdict"]])
     return out
 
 
