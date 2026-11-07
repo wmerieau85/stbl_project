@@ -86,7 +86,8 @@ def _by_code(level):
     return {r["code"]: r for r in level["rows"]}
 
 
-def test_exact_source_ranks_first_and_takes_optimal_weight(hist_path):
+def test_exact_source_ranks_first_and_takes_optimal_weight(hist_path, monkeypatch):
+    monkeypatch.setattr(accuracy, "WEAK_PROGRESS", 0.1)     # jeu de test : 24 % de la saison joués
     res = _compute(hist_path)
     assert res["truth"] == "FantasyPros" and str(res["as_of"]) == "2026-12-01"
     draft = res["phases"]["draft"]
@@ -113,7 +114,8 @@ def test_ros_measured_from_start_date_and_shrink_setting(hist_path):
     assert rows["a.ros"]["proposed"] == pytest.approx(0.5)      # rapprochement 100 % : poids actuels
 
 
-def test_short_term_window_and_report_rows(hist_path):
+def test_short_term_window_and_report_rows(hist_path, monkeypatch):
+    monkeypatch.setattr(accuracy, "WEAK_PROGRESS", 0.1)
     res = _compute(hist_path)
     st = res["phases"]["st"]
     assert [(str(b), str(e)) for _, b, e, _ in st["periods"]] == [("2026-11-01", "2026-11-16")]
@@ -136,3 +138,69 @@ def test_no_history_and_empty_season(tmp_path):
 def test_simplex_projection():
     w = accuracy.project_simplex(accuracy.np.array([0.8, 0.6, -0.2]))
     assert w.sum() == pytest.approx(1) and (w >= 0).all()
+
+
+def test_weak_sample_keeps_current_weights(hist_path):
+    res = _compute(hist_path)                               # 24 % de la saison : sous WEAK_PROGRESS
+    for phase in ("draft", "lt"):
+        assert res["phases"][phase]["weak"]
+        for level in accuracy.LEVELS:
+            lv = res["phases"][phase]["levels"][level]
+            assert "échantillon encore trop faible" in lv["verdict"] and "Mélange proposé" not in lv["blends"]
+            assert all(r["optimal"] is None and r["proposed"] == r["current"] for r in lv["rows"])
+    assert "pas de poids proposés" in str(accuracy.rows(res))
+
+
+def test_noise_level_difference_is_not_a_conclusion(tmp_path, monkeypatch):
+    """Deux sources quasi identiques (écart de 0,1 match) : pas de nouveaux poids."""
+    monkeypatch.setattr(accuracy, "WEAK_PROGRESS", 0.1)
+    path = str(tmp_path / "h.sqlite")
+    conn = history.connect(path)
+    with conn:
+        for src, shift in (("A", 0.0), ("B", 0.1)):
+            _insert(conn, "raw", src, "draft", "2026-10-12 10:00:00",
+                    [_row(p, p["f"] * 82 + (shift if i % 2 else -shift), p["mpg"]) for i, p in enumerate(PLAYERS)])
+        for day, games in (("2026-11-01", 10), ("2026-12-01", 20)):
+            _insert(conn, "raw", "FantasyPros", "sea", f"{day} 09:00:00", _sea(games))
+    conn.close()
+    grids = dict(GRIDS, draft={"slots": [_slot("a", "A", "draft", 0.5, 0.5, 0.5),
+                                         _slot("b", "B", "draft", 0.5, 0.5, 0.5)]})
+    res = accuracy.compute(path, settings={"active_season": SEASON},
+                           league={"history": {"shrink": 0.5}, "season": {"st_days": 15}}, grids=grids)
+    lv = res["phases"]["draft"]["levels"]["gp"]
+    assert not lv["verdict"].startswith("proposition")
+    assert all(r["proposed"] == r["current"] for r in lv["rows"])
+
+
+def test_player_dropped_by_a_source_counts_as_zero_games(hist_path):
+    conn = history.connect(hist_path)
+    with conn:     # B retire p1 (projeté à sa draft) de ses projections ros
+        sid = conn.execute("SELECT snapshot_id FROM snapshots WHERE source='B' AND stage='ros'").fetchone()[0]
+        conn.execute("DELETE FROM snapshot_rows WHERE snapshot_id=? AND name_key='p1'", (sid,))
+    conn.close()
+    lt = _compute(hist_path)["phases"]["lt"]
+    with accuracy.closing(accuracy.sqlite3.connect(hist_path)) as c:
+        hist = accuracy.History(c, SEASON)
+        codes = [dict(s, label=s["source"]) for s in GRIDS["lt"]["slots"]]
+        seas = hist.of("raw", "FantasyPros", "sea")
+        samples, *_ = accuracy.build_samples(hist, "lt", codes, seas, 15, 200)
+    pred = next(s["preds"]["b.ros"] for s in samples if s["key"] == "p1")
+    assert pred["dropped"] and pred["share"] == 0.0 and pred["mpg"] is None
+    assert _by_code(lt["levels"]["gp"])["b.ros"]["coverage"] == pytest.approx(1.0)
+
+
+def test_injured_players_left_out_of_lt_gp(hist_path):
+    from datetime import date, datetime
+
+    conn = history.connect(hist_path)
+    state = history.take_injuries(conn, {"p0": "season", "p5": date(2026, 12, 15), "p6": date(2026, 10, 20)},
+                                  SEASON, now=datetime(2026, 11, 1, 6, 0))
+    assert state == "photographiée"
+    assert history.take_injuries(conn, {"p0": "season", "p5": date(2026, 12, 15), "p6": date(2026, 10, 20)},
+                                 SEASON, now=datetime(2026, 11, 2, 6, 0)) == "inchangée"
+    conn.close()
+    lt = _compute(hist_path)["phases"]["lt"]
+    assert lt["injured"] == [(date(2026, 11, 1), 2)]        # p0 (saison) et p5 (retour après le 1/11) ; pas p6
+    gp_players = _by_code(lt["levels"]["gp"])["a.ros"]["players"]
+    assert gp_players == len(PLAYERS) - 2
+    assert "blessés écartés de la mesure du GP" in str(accuracy.rows(_compute(hist_path)))
