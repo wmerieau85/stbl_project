@@ -275,3 +275,51 @@ def test_optimizer_fills_caps_at_start_of_season():
 
     assert sum(p.games_used for p in players) == sum(caps.values())
     assert sum(p.games_left_voluntarily for p in players) == 0
+
+
+def _swap_case():
+    """Cas réel (Kris Dunn / Cameron Johnson) en petit : le meilleur arrière (G seul) ne peut jouer qu'en
+    libérant une place, en laissant un ailier ; les tours de l'optimisation ne voient pas cet échange."""
+    pts, stl = STATS.index("pts"), STATS.index("stl")
+    specs = [("P0", "F", 1.04, 8.6, 1.33), ("P1", "G,F", 1.70, 10.5, 2.50), ("P2", "G", 2.13, 22.9, 1.31),
+             ("P3", "F", 1.37, 9.5, 2.03), ("P4", "G,F", -0.97, 24.6, 0.45)]
+    players = []
+    for name, positions, value, p, s in specs:
+        player = PlayerProjection(name, "DEN", positions, "BN", True, value=value)
+        player.games_lt_expected = player.games_expected = 10
+        player.per_game_lt[pts], player.per_game_lt[stl] = p, s
+        players.append(player)
+    actual = np.zeros(len(STATS))
+    actual[pts], actual[stl] = 543.0, 49.5
+    team = TeamProjection("Moi", "Equipe", players, {"G": 10, "F": 10, "C": 0, "UTIL": 10},
+                          {}, actual, 0.0, np.zeros(len(STATS)), {}, None)
+    rivals = []
+    for i, (p, s) in enumerate(((1072, 71.0), (985, 85.0), (993, 79.0), (1014, 73.8), (914, 79.7), (1066, 92.0))):
+        values = np.zeros(len(STATS))
+        values[pts], values[stl] = p, s
+        rivals.append(TeamProjection(f"Rival {i}", "R", [], {}, {}, values, 0.0, np.zeros(len(STATS)), {}, None))
+    return team, rivals
+
+
+def _my_points(team, rivals):
+    from scripts.draft.engine import category_values, roto_points
+    values = np.array([category_values(t.final, ["pts", "stl"]) for t in rivals + [team]])
+    return roto_points(values, ["pts", "stl"], [1.0, 1.0])[-1].sum()
+
+
+def test_optimizer_local_search_finds_position_swap(monkeypatch):
+    from scripts.season import engine
+
+    team, rivals = _swap_case()
+    monkeypatch.setattr(engine, "LOCAL_SEARCH_ROUNDS", 0)          # ancien comportement : échange manqué
+    optimize_team(team, rivals, ["pts", "stl"], [1.0, 1.0])
+    before = _my_points(team, rivals)
+    assert {p.name: p.games_used for p in team.players}["P2"] == 0
+
+    team, rivals = _swap_case()
+    monkeypatch.undo()
+    optimize_team(team, rivals, ["pts", "stl"], [1.0, 1.0])
+    used = {p.name: p.games_used for p in team.players}
+    assert used["P2"] == 10 and used["P3"] == 0                   # l'arrière joue, l'ailier F seul sort
+    assert sum(used.values()) == 30 and team.used["UTIL"] == 10
+    assert _my_points(team, rivals) > before + 3

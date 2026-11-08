@@ -14,6 +14,7 @@ pages publiques Yahoo, sont estimées avec les tentatives par match projetées d
 
 Mon équipe (optimize_team) : les matchs sont ensuite réaffectés selon le gain de points roto attendu
 face aux 14 autres, mesuré autour du total final projeté ; un match au gain négatif est laissé.
+Une recherche locale teste ensuite les échanges un à un (postes compris) et garde ceux qui font gagner.
 
 Classement : points roto espérés (même modèle que la draft) et chances de finir 1er ou
 dans les 3 premiers (tirages aléatoires avec la même incertitude).
@@ -317,8 +318,9 @@ def optimize_team(team, opponents, categories, weights, step=0.5, iterations=10)
         return p.value_st if period == 0 and p.value_st is not None else p.value
 
     # point de départ : l'affectation par valeur par match (celle de project_team, postes inclus)
-    start, start_used = _assign(team, sorted(units, key=lambda u: value_of(*u), reverse=True))
-    best_games, best_used, best_score = start, start_used, score(totals_of(start))
+    start_order = sorted(units, key=lambda u: value_of(*u), reverse=True)
+    start, start_used = _assign(team, start_order)
+    best_games, best_used, best_score, best_order = start, start_used, score(totals_of(start)), start_order
     games, previous = start, None
     for _ in range(iterations):
         current = totals_of(games)
@@ -335,11 +337,14 @@ def optimize_team(team, opponents, categories, weights, step=0.5, iterations=10)
         games, used = _assign(team, playable)
         candidate = score(totals_of(games))
         if candidate > best_score + GAIN_TOLERANCE:
-            best_games, best_used, best_score = games, used, candidate
+            best_games, best_used, best_score, best_order = games, used, candidate, playable
         signature = tuple(round(games.get((id(p), period), 0.0), 6) for p, period in units)
         if signature == previous:
             break
         previous = signature
+
+    best_games, best_used = _local_search(team, units, best_order, best_games, best_used, best_score,
+                                          lambda games: score(totals_of(games)))
 
     team.used = best_used
     for p in team.players:
@@ -349,6 +354,58 @@ def optimize_team(team, opponents, categories, weights, step=0.5, iterations=10)
         p.totals = p.per_game_st * p.games_st_used + p.per_game_lt * p.games_lt_used
     team.remaining = totals_of(best_games) - team.actual
     _classify_unallocated_games(team)
+
+
+LOCAL_SEARCH_ROUNDS = 50   # améliorations acceptées au plus par la recherche locale
+
+
+def _local_search(team, units, order, games, used, best, score):
+    """Améliore une affectation en testant les échanges un à un (score exact, postes inclus).
+
+    Les tours de optimize_team réaffectent tous les matchs d'un coup à partir de gains estimés autour du
+    total courant : un échange qui demande de libérer un poste (un arrière laissé pour faire jouer en Util
+    un ailier sans place F) peut leur échapper. Ici, chaque joueur pas ou peu aligné est essayé devant
+    chacun des joueurs alignés (l'ordre de priorité de _assign, qui redistribue les postes), et chaque
+    joueur aligné est essayé hors de l'ordre (laissé volontairement) ; un changement n'est gardé que s'il
+    fait gagner des points. On recommence jusqu'à ne plus rien gagner : jamais moins bon qu'au départ.
+    """
+    def key(u):
+        return (id(u[0]), u[1])
+
+    def expected(u):
+        return getattr(u[0], _PERIODS[u[1]][0])
+
+    order = list(order)
+    for _ in range(LOCAL_SEARCH_ROUNDS):
+        found = None
+        positions = [i for i, u in enumerate(order) if games.get(key(u), 0.0) > 1e-9]
+        for b in units:
+            if games.get(key(b), 0.0) >= expected(b) - 1e-6:
+                continue
+            at = order.index(b) if b in order else len(order)
+            for i in positions:
+                if i >= at:
+                    break
+                candidate = order[:i] + [b] + [u for u in order[i:] if u is not b]
+                g, u_ = _assign(team, candidate)
+                value = score(g)
+                if value > best + GAIN_TOLERANCE:
+                    found = (candidate, g, u_, value)
+                    break
+            if found:
+                break
+        if not found:
+            for i in positions:
+                candidate = order[:i] + order[i + 1:]
+                g, u_ = _assign(team, candidate)
+                value = score(g)
+                if value > best + GAIN_TOLERANCE:
+                    found = (candidate, g, u_, value)
+                    break
+        if not found:
+            break
+        order, games, used, best = found
+    return games, used
 
 
 def _classify_unallocated_games(team):

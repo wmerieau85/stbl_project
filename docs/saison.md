@@ -20,7 +20,10 @@ d'abord, sous les plafonds), chaque match attendu n'étant aligné qu'avec le ta
 manager (`scripts/season/opponents.py` : GP réels / GP possibles à date, mélangé au taux médian de la
 ligue tant que la saison est jeune ; réglages `Optim | Season | Opponent model / Opponent default
 rate / Opponent ramp (days)`). Seule l'affectation ST/LT de mon équipe maximise ensuite le gain
-marginal de points roto attendu face à elles, sous les plafonds G / F / C / Util. L'onglet
+marginal de points roto attendu face à elles, sous les plafonds G / F / C / Util ; une recherche
+locale teste ensuite les échanges un à un (un joueur peu aligné placé devant chaque joueur aligné, postes
+redistribués, ou un joueur aligné laissé) et garde ceux qui font gagner des points : par exemple laisser
+un arrière pour faire jouer en Util un ailier sans place F. L'onglet
 s'appelle désormais `season_reco` (`Sheets | Tab | Season Reco` ; l'ancien libellé `Season` et
 l'ancien onglet `season` sont repris et renommés) ; il contient aussi le bloc Adversaires et les
 effectifs des 15 équipes. Les matchs écartés
