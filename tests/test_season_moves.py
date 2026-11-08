@@ -106,7 +106,8 @@ def test_free_agents_best_replacement_first():
     assert [_names(m.recv) for m in out["moves"]] == [["G"], ["H"]]
     assert out["moves"][0].my_gain > 0 > out["moves"][1].my_gain
     rows = moves.rows(out)
-    assert any(r and r[0] == "#" for r in rows) and "J'ajoute" in next(r for r in rows if r and r[0] == "#")
+    assert rows[moves.HEADER_ROW - 1][:3] == ["#", "Je cède", "Je reçois"]
+    assert rows[moves.HEADER_ROW][8:10] == ["joueurs libres", ""]
 
 
 def test_identity_move_has_no_gain():
@@ -191,8 +192,8 @@ def test_auto_finds_win_win_trades_without_players():
     assert best.partner_name == "Rival" and _names(best.give)[0].startswith("P") and "R2" in _names(best.recv)
     rows = moves.rows(out)
     header = next(r for r in rows if r and r[0] == "#")
-    assert header[1] == "Manager" and "Gain roto (partenaire)" in header
-    assert next(r for r in rows if r and r[0] == 1)[1] == "Rival"
+    assert header[8] == "Manager" and header[7] == "Gain roto (partenaire)"
+    assert next(r for r in rows if r and r[0] == 1)[8] == "Rival"
     assert "Rival" in moves.console(out)
 
 
@@ -254,7 +255,7 @@ def test_auto_completes_with_trades_where_partner_loses():
     rows = moves.rows(out)
     header = next(r for r in rows if r and r[0] == "#")
     first = next(r for r in rows if r and r[0] == 1)
-    assert first[header.index("Accord")] == "il perd des points"
+    assert first[header.index("Statut")] == "il perd des points"
     assert "[il perd des points]" in moves.console(out)
 
 
@@ -358,3 +359,25 @@ def test_auto_free_agents_tie_drops_the_lowest_value_and_lists_the_other():
     assert [_names(a) for a in best.alternatives] == [["B"]]
     assert "lâcher H (ou B, même gain), prendre G" in moves.console(out)
     assert any(r and r[0] == 1 and r[1] == "H (ou B, même gain)" for r in moves.rows(out))
+
+
+def test_moves_reco_layout_is_the_same_for_every_mode():
+    """Même en-tête, même ligne, mêmes colonnes quel que soit le type (formules d'un autre onglet)."""
+    layouts = []
+    for compare, players in (({"type": "manager", "manager": "Rival"}, ["B"]), ({"type": "free agent", "manager": ""}, ["B"]),
+                             ({"type": "auto free agent", "manager": ""}, [])):
+        league = _league(players, compare)
+        out = moves.simulate(_result(league), league)
+        rows = moves.rows(out)
+        header = rows[moves.HEADER_ROW - 1]
+        layouts.append(header)
+        first = rows[moves.HEADER_ROW]
+        assert first[0] == 1 and len(first) == len(header)
+        assert first[header.index("Gain roto (moi)")] == round(out["moves"][0].my_gain, 2)
+    league = _auto_league()
+    out = moves.simulate(_auto_result(league), league)
+    rows = moves.rows(out)
+    layouts.append(rows[moves.HEADER_ROW - 1])
+    assert rows[moves.HEADER_ROW][8] == out["moves"][0].partner_name
+    assert all(h[:len(moves.FIXED_COLUMNS)] == list(moves.FIXED_COLUMNS) for h in layouts)
+    assert layouts[0] == layouts[1] == layouts[2]
