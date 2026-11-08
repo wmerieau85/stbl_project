@@ -335,3 +335,26 @@ def test_min_gain_setting():
     assert moves.min_move_gain({"min_gain": "abc"}) == 0.25
     cfg, _ = C.parse_rows(C.build_rows() + [["Optim | Moves", "Min gain", "0,1"]])
     assert cfg["league"]["moves"]["min_gain"] == 0.1
+
+
+def test_auto_free_agents_tie_drops_the_lowest_value_and_lists_the_other():
+    """Moi : A (8), B (5) alignés, H (4,5) remplaçant ; libre : G (6). Lâcher B ou H pour G donne le même
+    lineup (A et G jouent) : on lâche le moins utile (H, sous le niveau de remplacement), B est cité."""
+    league = _league([], {"type": "auto free agent", "manager": ""})
+    values = {"A": 8, "B": 5, "H": 4.5, "C": 9, "D": 4.6, "G": 6}
+    pool = Pool([_player(i, n, v) for i, (n, v) in enumerate(values.items())])
+    teams = []
+    for manager, names in {"Moi": ["A", "B", "H"], "Rival": ["C", "D"]}.items():
+        roster = {"players": [{"player": n, "nba_team": "DEN", "positions": "C", "slot": "C"} for n in names],
+                  "games": {"C": {"remaining": 20}}}
+        teams.append(project_team(manager, manager, roster, None, pool, None, GAMES, TODAY, 15, league))
+    result = {"teams": teams, "categories": ["pts"], "weights": [1.0],
+              "projection": standings_projection(teams, ["pts"], [1.0], sims=50),
+              "context": {"lt_pool": pool, "st_pool": None, "games": GAMES, "today": TODAY, "horizon": 15,
+                          "league": league}}
+    out = moves.simulate(result, league)
+    best = out["moves"][0]
+    assert _names(best.recv) == ["G"] and _names(best.give) == ["H"]
+    assert [_names(a) for a in best.alternatives] == [["B"]]
+    assert "lâcher H (ou B, même gain), prendre G" in moves.console(out)
+    assert any(r and r[0] == 1 and r[1] == "H (ou B, même gain)" for r in moves.rows(out))
