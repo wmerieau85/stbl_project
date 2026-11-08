@@ -88,7 +88,10 @@ Réglages dans l'onglet settings :
   même crible rapide que la recherche auto d'échanges. Les plus prometteurs (`Free agent shortlist`, au plus
   2 joueurs à lâcher par joueur libre) sont simulés exactement ; seuls ceux qui me font gagner au moins
   `Min gain` sont affichés, un par joueur libre avec le meilleur joueur à lâcher, du plus grand au plus petit gain
-  (au plus `Free agent results`). Moins d'une seconde pour 15 équipes.
+  (au plus `Free agent results`). Pour chaque joueur libre affiché, les autres joueurs à lâcher presque aussi
+  bons au crible (à 0,5 pt, 3 au plus) sont simulés aussi : à gain presque égal (0,1 pt, par exemple deux
+  remplaçants qui ne jouent pas), on propose de lâcher celui de plus faible valeur (le moins utile en
+  remplaçant) et les autres sont cités, « Grayson Allen (ou Cam Spencer, même gain) ». Moins d'une seconde pour 15 équipes.
 - Valeur d'un joueur : valeur par match au-dessus du niveau de remplacement (dernier joueur d'effectif
   de la ligue, 180e pour 15 x 12 ; phase st sur l'horizon court, lt ensuite) x matchs attendus d'ici la
   fin de saison. Les stats réelles restent à l'équipe qui les a faites ; mon lineup est réoptimisé,

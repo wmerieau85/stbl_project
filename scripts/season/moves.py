@@ -28,7 +28,9 @@ Joueurs libres, recherche auto : chacun de mes joueurs (hors postes IL : lâcher
 place) contre chacun des meilleurs joueurs libres, au crible rapide (comme la recherche auto d'échanges) ;
 les plus prometteurs (2 joueurs lâchés au plus par joueur libre, Free agent shortlist en tout) sont simulés
 exactement ; seuls ceux qui me font gagner au moins Min gain sont gardés, un par joueur libre (le meilleur joueur à
-lâcher), du plus grand au plus petit gain.
+lâcher), du plus grand au plus petit gain. Pour chaque joueur libre affiché, les autres joueurs à lâcher
+presque aussi bons au crible (à 0,5 pt, 3 au plus) sont simulés aussi ; à gain presque égal (0,1 pt), on lâche
+celui de plus faible valeur (le moins utile en remplaçant) et les autres sont cités (« ou X, même gain »).
 Min gain (recherches auto) : un gain plus petit n'est pas affiché ; deux lineups presque équivalents peuvent
 en effet donner quelques centièmes de point à un mouvement qui ne fait que changer ma rotation (joueur lâché
 qui ne jouait pas, joueur reçu qui ne jouera pas).
@@ -86,6 +88,7 @@ class Move:
     partner_name: str = ""
     screen_gain: float | None = None     # recherche auto : gain estimé par le crible rapide
     partner_loses: bool = False          # recherche auto : ajouté pour le minimum, l'autre manager perd
+    alternatives: list = field(default_factory=list)   # joueurs libres auto : autres [joueurs lâchés], même gain
 
     @property
     def value_diff(self):
@@ -643,6 +646,23 @@ def _auto(sim, me, p, conf):
             "partners": [sim.teams[i].manager for i in partners], "moves": moves}
 
 
+TIE_GAIN = 0.10           # recherche auto de joueurs libres : gains plus proches = même gain (pts roto)
+TIE_SCREEN_MARGIN = 0.5   # autres joueurs à lâcher simulés : à moins de 0,5 pt du meilleur au crible
+TIE_EXTRA_DROPS = 3       # ... au plus 3 par joueur libre affiché
+
+
+def _tie_break(found, min_gain=0.0):
+    """Parmi les mouvements d'un même joueur libre (joueurs lâchés différents), le meilleur gain ; à gain
+    presque égal (TIE_GAIN), on lâche le joueur de plus faible valeur (celui qui sert le moins en remplaçant).
+    Les autres joueurs à lâcher pour le même gain sont notés dans `alternatives`."""
+    top = max(m.my_gain for m in found)
+    ties = sorted((m for m in found if m.my_gain >= max(top - TIE_GAIN - 1e-9, min_gain)),
+                  key=lambda m: (m.value_give, -m.my_gain))
+    chosen = ties[0]
+    chosen.alternatives = [m.give for m in ties[1:]]
+    return chosen
+
+
 def _auto_free_agents(sim, me, conf):
     """Recherche auto de joueurs libres : (mon joueur lâché, joueur libre) au crible, puis simulation exacte."""
     my_team, ctx = sim.teams[me], sim.ctx
@@ -674,20 +694,41 @@ def _auto_free_agents(sim, me, conf):
             per_add[r[i]].append(i)
     candidates = sorted((i for picks in per_add.values() for i in picks), key=lambda i: -gains[i])[:shortlist]
 
-    best = {}
+    simulated = {}                          # indice du crible -> mouvement simulé exactement
+
+    def run(i):
+        if i not in simulated:
+            drop, add = drops[g[i]], adds[r[i]]
+            teams, points = sim.evaluate(me, [_entry(x) for x in my_team.players if x is not drop] + [_entry(add)])
+            move = sim.move(me, [drop], [x for x in teams[me].players if x.name == add.name], teams, points)
+            move.screen_gain = float(gains[i])
+            simulated[i] = move
+        return simulated[i]
+
+    def best_of(add_index):
+        found = [m for i, m in simulated.items() if r[i] == add_index]
+        return max(found, key=lambda m: m.my_gain) if found else None
+
     for i in candidates:
-        drop, add = drops[g[i]], adds[r[i]]
-        teams, points = sim.evaluate(me, [_entry(x) for x in my_team.players if x is not drop] + [_entry(add)])
-        move = sim.move(me, [drop], [x for x in teams[me].players if x.name == add.name], teams, points)
-        move.screen_gain = float(gains[i])
-        if move.my_gain >= min_gain and (add.name not in best or move.my_gain > best[add.name].my_gain):
-            best[add.name] = move
-    moves = sorted(best.values(), key=lambda m: (-round(m.my_gain, 3), -m.value_recv))[:limit]
+        run(i)
+    adds_kept = [a for a in dict.fromkeys(r[i] for i in candidates) if best_of(a).my_gain >= min_gain]
+    adds_kept.sort(key=lambda a: (-round(best_of(a).my_gain, 3), -best_of(a).value_recv))
+    moves = []
+    for a in adds_kept[:limit]:
+        # autres joueurs à lâcher presque aussi bons au crible : simulés aussi, pour départager les égalités
+        top = max(gains[i] for i in simulated if r[i] == a)
+        others = [i for i in np.argsort(-gains) if r[i] == a and i not in simulated
+                  and gains[i] >= top - TIE_SCREEN_MARGIN][:TIE_EXTRA_DROPS]
+        for i in others:
+            run(i)
+        moves.append(_tie_break([m for i, m in simulated.items() if r[i] == a], min_gain))
+    moves.sort(key=lambda m: (-round(m.my_gain, 3), -m.value_recv))
+    best = adds_kept
     log.info("[Moves auto joueurs libres] %d de mes joueurs x %d joueurs libres = %d combinaisons au crible, "
              "%d simulées, %d qui me font gagner au moins %.2f pt, %d affichées.", len(drops), len(adds), len(g),
-             len(candidates), len(best), min_gain, len(moves))
+             len(simulated), len(best), min_gain, len(moves))
     return {"mode": AUTO_FREE_AGENT, "partner": None, "partner_team": None, "fixed": [], "tested": len(g),
-            "kept": len(best), "min_gain": min_gain, "simulated": len(candidates), "drops": len(drops), "free_count": len(adds),
+            "kept": len(best), "min_gain": min_gain, "simulated": len(simulated), "drops": len(drops), "free_count": len(adds),
             "tolerance": None, "moves": moves}
 
 
@@ -714,6 +755,14 @@ def _stat(cat, value):
 
 def _changes(changes):
     return ", ".join(f"{name} {delta:+.0f}" for name, delta in changes) or "aucun"
+
+
+def _given(m):
+    """Joueurs lâchés, avec les autres choix possibles pour le même gain (recherche auto de joueurs libres)."""
+    text = _names(m.give)
+    if m.alternatives:
+        text += f" (ou {' / '.join(_names(a) for a in m.alternatives)}, même gain)"
+    return text
 
 
 def _pct(value):
@@ -783,7 +832,7 @@ def rows(out):
         lines.append(["", "aucune combinaison à valeur équivalente : élargissez la tolérance "
                           "(Optim | Moves | Value tolerance)" if trade else "aucun joueur libre"])
     for i, m in enumerate(out["moves"], 1):
-        row = [i] + ([m.partner_name] if auto else []) + [_names(m.give), _names(m.recv), round(m.value_give, 1),
+        row = [i] + ([m.partner_name] if auto else []) + [_given(m), _names(m.recv), round(m.value_give, 1),
                                                           round(m.value_recv, 1), _pct(m.value_diff)]
         if auto:
             row.append("il perd des points" if m.partner_loses else "gagnant-gagnant")
@@ -831,7 +880,7 @@ def console(out):
                 f"libres, {out['simulated']} simulées, {out['kept']} qui me font gagner)",
                 f"Sans mouvement : {out['base_points']:.1f} pts, rang {out['base_rank']}"]
         for i, m in enumerate(out["moves"], 1):
-            text.append(f"{i:>2}. lâcher {_names(m.give)}, prendre {_names(m.recv)} : {m.my_gain:+.2f} pts, "
+            text.append(f"{i:>2}. lâcher {_given(m)}, prendre {_names(m.recv)} : {m.my_gain:+.2f} pts, "
                         f"rang {m.rank} ; matchs alignés : {_games(m.recv_detail)}")
         if not out["moves"]:
             text.append("Aucun joueur libre ne me fait gagner de points.")
