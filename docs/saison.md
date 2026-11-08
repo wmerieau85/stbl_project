@@ -41,6 +41,14 @@ par le module rotation.
 ### Simulation de mouvements (moves_reco)
 
 `python -m scripts.season moves` (option `--no-sheet` : console + `exports/moves_reco_<saison>.csv`).
+
+Disposition de l'onglet identique pour tous les types (`manager`, `free agent`, `auto`, `auto free agent`),
+pour qu'un autre onglet puisse le lire par formules : lignes 1 à 8 = informations sur la recherche (hauteur
+fixe), en-tête en ligne 9, propositions à partir de la ligne 10, toujours dans ces colonnes :
+
+| A | B | C | D | E | F | G | H | I | J | K | L | M | N | O | P | Q... |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| # | Je cède (ou lâche) | Je reçois (ou ajoute) | Valeur cédée | Valeur reçue | Écart valeur (%) | Gain roto (moi) | Gain roto (partenaire, vide pour les joueurs libres) | Manager (« joueurs libres ») | Statut (gagnant-gagnant, il perd des points, dans / hors tolérance ; vide pour les joueurs libres) | Matchs alignés (reçus) | Effet sur mes autres joueurs | Points projetés | Rang projeté | Titre (%) | Podium (%) | points puis stats par catégorie |
 Réglages dans l'onglet settings :
 
 | Ligne | Colonne 2 | Colonne 3 |

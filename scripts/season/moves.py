@@ -769,6 +769,12 @@ def _pct(value):
     return "" if value is None else round(100 * value, 1)
 
 
+HEADER_ROW = 9    # moves_reco : en-tête du tableau toujours en ligne 9, propositions à partir de la ligne 10
+FIXED_COLUMNS = ("#", "Je cède", "Je reçois", "Valeur cédée", "Valeur reçue", "Écart valeur (%)",
+                 "Gain roto (moi)", "Gain roto (partenaire)", "Manager", "Statut", "Matchs alignés (reçus)",
+                 "Effet sur mes autres joueurs", "Points projetés", "Rang projeté", "Titre (%)", "Podium (%)")
+
+
 def rows(out):
     """Lignes de l'onglet moves_reco."""
     from scripts.draft.pool import CATEGORY_LABELS
@@ -807,21 +813,9 @@ def rows(out):
     if out.get("base_first") is not None:
         base += f", titre {100 * out['base_first']:.1f} %, podium {100 * out['base_podium']:.1f} %"
     lines.append(["Sans mouvement", base])
-    lines.append([])
-    header = ["#"] + (["Manager"] if auto else []) + ["Je cède" if trade else "Je lâche", "Je reçois" if trade else "J'ajoute",
-              "Valeur cédée", "Valeur reçue", "Écart valeur (%)"]
-    if auto:
-        header.append("Accord")
-    elif trade:
-        header.append("Tolérance")
-    header += ["Matchs alignés (reçus)", "Effet sur mes autres joueurs", "Gain roto (moi)"]
-    if auto:
-        header.append("Gain roto (partenaire)")
-    elif trade:
-        header.append(f"Gain roto ({partner.manager})")
-    header += ["Points projetés", "Rang projeté", "Titre (%)", "Podium (%)"] + [f"{l} (pts)" for l in labels]
-    header += [f"{l} (stats)" for l in labels]
-    lines.append(header)
+    # bloc d'informations de hauteur fixe : l'en-tête du tableau est toujours sur la même ligne
+    lines += [[] for _ in range(HEADER_ROW - 1 - len(lines))]
+    lines.append(list(FIXED_COLUMNS) + [f"{l} (pts)" for l in labels] + [f"{l} (stats)" for l in labels])
     if not out["moves"] and auto:
         lines.append(["", "aucun échange gagnant-gagnant : élargissez la tolérance (Optim | Moves | Value "
                           "tolerance), Auto max players ou Auto shortlist, ou baissez Auto min partner gain"])
@@ -832,16 +826,16 @@ def rows(out):
         lines.append(["", "aucune combinaison à valeur équivalente : élargissez la tolérance "
                           "(Optim | Moves | Value tolerance)" if trade else "aucun joueur libre"])
     for i, m in enumerate(out["moves"], 1):
-        row = [i] + ([m.partner_name] if auto else []) + [_given(m), _names(m.recv), round(m.value_give, 1),
-                                                          round(m.value_recv, 1), _pct(m.value_diff)]
         if auto:
-            row.append("il perd des points" if m.partner_loses else "gagnant-gagnant")
+            manager, status = m.partner_name, "il perd des points" if m.partner_loses else "gagnant-gagnant"
         elif trade:
-            row.append("hors tolérance" if m.out_of_tolerance else "oui")
-        row += [_games(m.recv_detail), _changes(m.lineup_changes), round(m.my_gain, 2)]
-        if trade:
-            row.append(round(m.partner_gain, 2))
-        row += [round(m.my_points, 1), m.rank, _pct(m.p_first), _pct(m.p_podium)]
+            manager, status = partner.manager, "hors tolérance" if m.out_of_tolerance else "dans la tolérance"
+        else:
+            manager, status = "joueurs libres", ""
+        row = [i, _given(m), _names(m.recv), round(m.value_give, 1), round(m.value_recv, 1), _pct(m.value_diff),
+               round(m.my_gain, 2), round(m.partner_gain, 2) if m.partner_gain is not None else "",
+               manager, status, _games(m.recv_detail), _changes(m.lineup_changes),
+               round(m.my_points, 1), m.rank, _pct(m.p_first), _pct(m.p_podium)]
         row += [round(float(d), 2) for d in m.cat_delta]
         row += [_stat(c, d) for c, d in zip(cats, m.stat_delta)] if m.stat_delta is not None else []
         lines.append(row)
