@@ -53,6 +53,7 @@ Réglages dans l'onglet settings :
 | `Optim | Moves` | `Value tolerance` | écart de valeur accepté, 10 % par défaut |
 | `Optim | Moves` | `Max results` / `Min results` / `Free agent results` / `Free agent shortlist` | 20 / 10 / 6 / 15 |
 | `Optim | Moves` | `Auto max players` / `Auto shortlist` / `Auto per manager` / `Auto min partner gain` | 2 / 40 / 5 / 0 |
+| `Optim | Moves` | `Min gain` | 0,25 pt roto : gain minimum d'un mouvement affiché par les recherches auto (`auto`, `auto free agent`) ; en dessous, deux lineups presque équivalents (un joueur lâché qui ne jouait pas) donnent un gain sans intérêt |
 
 - Échange : autant de joueurs reçus que cédés. Toutes les combinaisons de l'autre effectif sont
   testées ; à valeur équivalente (tolérance), les 20 meilleurs gains pour moi sont gardés, complétés
@@ -70,7 +71,7 @@ Réglages dans l'onglet settings :
   qu'il a intérêt à accepter, sont simulés exactement comme un échange classique, par lots de
   `Auto shortlist` répartis entre les tailles d'échange (1 contre 1, 2 contre 2...) et au plus
   2 x `Auto per manager` par manager ; jusqu'à 4 lots tant que `Min results` échanges gagnant-gagnant
-  ne sont pas trouvés. Restent ceux qui me font gagner et où son gain est au moins `Auto min partner gain`
+  ne sont pas trouvés. Restent ceux qui me font gagner au moins `Min gain` et où son gain est au moins `Auto min partner gain`
   (0 = il ne perd rien) ; un même effet sur mon équipe (mêmes partants qui jouaient, mêmes arrivants
   alignés) n'est montré qu'une fois, dans sa version la plus équitable (le joueur en plus sert alors à
   équilibrer la valeur). Affichage du meilleur gain pour moi au moins bon, puis du plus équitable
@@ -85,8 +86,8 @@ Réglages dans l'onglet settings :
 - Joueurs libres, recherche auto (`Moves | Compare` = `auto free agent`) : chacun de mes joueurs (hors
   postes IL : lâcher un blessé ne libère pas de place) contre chacun des 150 meilleurs joueurs libres, au
   même crible rapide que la recherche auto d'échanges. Les plus prometteurs (`Free agent shortlist`, au plus
-  2 joueurs à lâcher par joueur libre) sont simulés exactement ; seuls ceux qui me font gagner des points
-  sont affichés, un par joueur libre avec le meilleur joueur à lâcher, du plus grand au plus petit gain
+  2 joueurs à lâcher par joueur libre) sont simulés exactement ; seuls ceux qui me font gagner au moins
+  `Min gain` sont affichés, un par joueur libre avec le meilleur joueur à lâcher, du plus grand au plus petit gain
   (au plus `Free agent results`). Moins d'une seconde pour 15 équipes.
 - Valeur d'un joueur : valeur par match au-dessus du niveau de remplacement (dernier joueur d'effectif
   de la ligue, 180e pour 15 x 12 ; phase st sur l'horizon court, lt ensuite) x matchs attendus d'ici la

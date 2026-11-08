@@ -27,7 +27,7 @@ def _player(idx, name, value):
 def _league(players, compare, tolerance=1.0, side="Moi", minimum=0):
     return {"games": {"per_slot": 82}, "roster": {"C": 2}, "draft": {"my_team": "Moi"},
             "season": {"simulations": 50},
-            "moves": {"value_tolerance": tolerance, "max_results": 20, "min_results": minimum, "fa_results": 6, "fa_shortlist": 15,
+            "moves": {"value_tolerance": tolerance, "max_results": 20, "min_results": minimum, "fa_results": 6, "fa_shortlist": 15, "min_gain": 0,
                       "players": [{"manager": side, "player": p} for p in players], "compare": compare}}
 
 
@@ -315,3 +315,23 @@ def test_display_order_gain_first_then_balance():
             M(name="déséquilibré", my_gain=2.0, value_diff=0.08)]
     # gains égaux au centième (2,004 et 2,0) : départagés par l'écart de valeur
     assert [m.name for m in sorted(rows, key=moves.display_order)] == ["gros gain", "équitable", "déséquilibré"]
+
+
+def test_auto_free_agents_min_gain():
+    """Un mouvement qui gagne moins que Min gain n'est pas affiché (égalités de lineup, ex. Cam Spencer)."""
+    league = _league([], {"type": "auto free agent", "manager": ""})
+    gain = moves.simulate(_result(league), league)["moves"][0].my_gain
+    league["moves"]["min_gain"] = gain + 0.01
+    out = moves.simulate(_result(league), league)
+    assert out["moves"] == [] and out["min_gain"] == pytest.approx(gain + 0.01)
+    league["moves"]["min_gain"] = gain - 0.01
+    assert len(moves.simulate(_result(league), league)["moves"]) == 1
+
+
+def test_min_gain_setting():
+    assert moves.min_move_gain({}) == moves.MIN_GAIN == 0.25
+    assert moves.min_move_gain({"min_gain": "0,5"}) == 0.5
+    assert moves.min_move_gain({"min_gain": 0}) == 1e-6          # 0 : tout gain positif est gardé
+    assert moves.min_move_gain({"min_gain": "abc"}) == 0.25
+    cfg, _ = C.parse_rows(C.build_rows() + [["Optim | Moves", "Min gain", "0,1"]])
+    assert cfg["league"]["moves"]["min_gain"] == 0.1

@@ -366,7 +366,7 @@ DEFAULT_LEAGUE = {
     "minutes": {"enabled": True, "target": 240, "protected": 7, "rotation": 10, "deep_floor": 15,
                 "min_real_games": 3, "max_cut": 0.30},
     "moves": {"value_tolerance": 0.10, "max_results": 20, "min_results": 10, "fa_results": 6, "fa_shortlist": 15,
-              "players": [], "compare": {}},
+              "min_gain": 0.25, "players": [], "compare": {}},
     "history": {"projections_days": 7, "stats_days": 1, "retention_seasons": 3, "shrink": 0.5, "players": 200},
     "games": {"per_slot": 82, "lineup": "daily"},
     "draft": {

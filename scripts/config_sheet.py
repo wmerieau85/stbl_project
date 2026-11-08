@@ -175,6 +175,8 @@ PARAMS = [
      "recherche auto : échanges affichés au plus par manager (variété des propositions)"),
     ("Optim | Moves", "Auto min partner gain", "league", "moves.auto_min_partner_gain", "float",
      "recherche auto : gain roto minimum de l'autre manager (0 = il ne perd rien, il a intérêt à accepter)"),
+    ("Optim | Moves", "Min gain", "league", "moves.min_gain", "float",
+     "recherches auto (échanges, joueurs libres) : gain roto minimum pour afficher un mouvement (0,25 pt)"),
     ("Optim | Moves", "Free agent results", "league", "moves.fa_results", "int",
      "joueurs libres : options affichées"),
     ("Optim | Moves", "Free agent shortlist", "league", "moves.fa_shortlist", "int",
