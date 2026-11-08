@@ -13,7 +13,8 @@ indiqué) sont filtrés sur la tolérance de valeur, puis passés à un crible r
 modifiées sans réoptimiser les lineups mais en respectant les plafonds de matchs, voir _Side ; points roto
 de moi et du partenaire). Les plus prometteurs, parmi ceux que le partenaire a intérêt à accepter, sont
 simulés exactement par lots (Auto shortlist répartis entre tailles d'échange, au plus 2 x Auto per manager
-par manager, jusqu'à 4 lots tant que Min results ne sont pas atteints) ; on garde ceux qui me font gagner et
+par manager, jusqu'à 4 lots tant que Min results ne sont pas atteints) ; on garde ceux qui me font gagner
+au moins Min gain et
 où son gain dépasse Auto min partner gain, un seul par effet sur mon équipe (le plus équitable), triés par
 gain roto pour moi puis du plus équitable au moins équitable (au plus Auto per manager par manager),
 complétés jusqu'à Min results par ceux où l'autre manager perd des points.
@@ -26,8 +27,11 @@ joueurs lâchés) les meilleurs sont combinés.
 Joueurs libres, recherche auto : chacun de mes joueurs (hors postes IL : lâcher un blessé ne libère pas de
 place) contre chacun des meilleurs joueurs libres, au crible rapide (comme la recherche auto d'échanges) ;
 les plus prometteurs (2 joueurs lâchés au plus par joueur libre, Free agent shortlist en tout) sont simulés
-exactement ; seuls ceux qui me font gagner des points sont gardés, un par joueur libre (le meilleur joueur à
+exactement ; seuls ceux qui me font gagner au moins Min gain sont gardés, un par joueur libre (le meilleur joueur à
 lâcher), du plus grand au plus petit gain.
+Min gain (recherches auto) : un gain plus petit n'est pas affiché ; deux lineups presque équivalents peuvent
+en effet donner quelques centièmes de point à un mouvement qui ne fait que changer ma rotation (joueur lâché
+qui ne jouait pas, joueur reçu qui ne jouera pas).
 
 Valeur d'un joueur : valeur par match au-dessus du niveau de remplacement (joueur classé au rang
 « nombre de joueurs dans les effectifs », 180 pour 15 x 12 ; st sur l'horizon court, lt ensuite) x matchs
@@ -299,6 +303,20 @@ def simulate(result, league):
     return out
 
 
+MIN_GAIN = 0.25    # Optim | Moves | Min gain : gain roto minimum d'un mouvement des recherches auto
+
+
+def min_move_gain(conf):
+    """Gain minimum (pts roto) pour garder un mouvement des recherches auto ; jamais sous 0 (un mouvement
+    affiché doit me faire gagner)."""
+    value = conf.get("min_gain")
+    try:
+        value = MIN_GAIN if value in (None, "") else float(str(value).replace(",", "."))
+    except ValueError:
+        value = MIN_GAIN
+    return max(value, 1e-6)
+
+
 def display_order(m):
     """Ordre d'affichage des échanges : meilleur gain roto pour moi d'abord (arrondi au centième de point),
     puis, à gain égal, le plus équitable (plus petit écart de valeur)."""
@@ -558,6 +576,7 @@ def _auto(sim, me, p, conf):
     limit = int(conf.get("max_results", 20))
     minimum = min(int(conf.get("min_results", 10)), limit)
     per_manager = max(1, int(conf.get("auto_per_manager", 5)))
+    min_gain = min_move_gain(conf)
     screened, tested = [], 0
     for partner in partners:
         found, n = _screen(sim, me, partner, max_players, tolerance)
@@ -589,7 +608,7 @@ def _auto(sim, me, p, conf):
             move = sim.move(me, give, recv, teams, points, partner)
             move.partner_name, move.screen_gain = sim.teams[partner].manager, gain
             simulated += 1
-            if move.my_gain <= 1e-6:
+            if move.my_gain < min_gain:
                 continue
             target = best if move.partner_gain >= min_partner - 1e-9 else losing
             key = _core(sim, me, move)
@@ -648,6 +667,7 @@ def _auto_free_agents(sim, me, conf):
 
     limit = int(conf.get("fa_results", 6))
     shortlist = max(int(conf.get("fa_shortlist", 15)), limit)
+    min_gain = min_move_gain(conf)
     per_add = {}
     for i in np.argsort(-gains):            # 2 joueurs à lâcher au plus par joueur libre (variété)
         if len(per_add.setdefault(r[i], [])) < 2:
@@ -660,14 +680,14 @@ def _auto_free_agents(sim, me, conf):
         teams, points = sim.evaluate(me, [_entry(x) for x in my_team.players if x is not drop] + [_entry(add)])
         move = sim.move(me, [drop], [x for x in teams[me].players if x.name == add.name], teams, points)
         move.screen_gain = float(gains[i])
-        if move.my_gain > 1e-6 and (add.name not in best or move.my_gain > best[add.name].my_gain):
+        if move.my_gain >= min_gain and (add.name not in best or move.my_gain > best[add.name].my_gain):
             best[add.name] = move
     moves = sorted(best.values(), key=lambda m: (-round(m.my_gain, 3), -m.value_recv))[:limit]
     log.info("[Moves auto joueurs libres] %d de mes joueurs x %d joueurs libres = %d combinaisons au crible, "
-             "%d simulées, %d qui me font gagner, %d affichées.", len(drops), len(adds), len(g), len(candidates),
-             len(best), len(moves))
+             "%d simulées, %d qui me font gagner au moins %.2f pt, %d affichées.", len(drops), len(adds), len(g),
+             len(candidates), len(best), min_gain, len(moves))
     return {"mode": AUTO_FREE_AGENT, "partner": None, "partner_team": None, "fixed": [], "tested": len(g),
-            "kept": len(best), "simulated": len(candidates), "drops": len(drops), "free_count": len(adds),
+            "kept": len(best), "min_gain": min_gain, "simulated": len(candidates), "drops": len(drops), "free_count": len(adds),
             "tolerance": None, "moves": moves}
 
 
@@ -728,7 +748,8 @@ def rows(out):
         lines.append(["Mouvement", "recherche auto de joueurs libres (statut waivers non vérifié)"])
         lines.append(["Combinaisons", f"{out['drops']} de mes joueurs (hors IL) x {out['free_count']} joueurs "
                                       f"libres = {out['tested']} testées au crible, {out['simulated']} simulées, "
-                                      f"{out['kept']} qui me font gagner, {len(out['moves'])} affichées"])
+                                      f"{out['kept']} qui me font gagner au moins {out['min_gain']:.2f} pt, "
+                                      f"{len(out['moves'])} affichées"])
     else:
         lines.append(["Mouvement", "joueurs libres (statut waivers non vérifié)"])
         lines.append(["Joueurs lâchés", _names(out["fixed"])])
@@ -756,8 +777,8 @@ def rows(out):
         lines.append(["", "aucun échange gagnant-gagnant : élargissez la tolérance (Optim | Moves | Value "
                           "tolerance), Auto max players ou Auto shortlist, ou baissez Auto min partner gain"])
     elif not out["moves"] and out["mode"] == AUTO_FREE_AGENT:
-        lines.append(["", "aucun joueur libre ne me fait gagner de points : effectif meilleur que les joueurs "
-                          "libres testés (ou élargissez Optim | Moves | Free agent shortlist)"])
+        lines.append(["", "aucun joueur libre ne me fait gagner au moins Optim | Moves | Min gain : effectif "
+                          "meilleur que les joueurs libres testés (ou élargissez Free agent shortlist)"])
     elif not out["moves"]:
         lines.append(["", "aucune combinaison à valeur équivalente : élargissez la tolérance "
                           "(Optim | Moves | Value tolerance)" if trade else "aucun joueur libre"])
