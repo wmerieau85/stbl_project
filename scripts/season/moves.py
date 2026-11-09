@@ -31,6 +31,8 @@ exactement ; seuls ceux qui me font gagner au moins Min gain sont gardés, un pa
 lâcher), du plus grand au plus petit gain. Pour chaque joueur libre affiché, les autres joueurs à lâcher
 presque aussi bons au crible (à 0,5 pt, 3 au plus) sont simulés aussi ; à gain presque égal (0,1 pt), on lâche
 celui de plus faible valeur (le moins utile en remplaçant) et les autres sont cités (« ou X, même gain »).
+Un joueur libre que mon lineup n'alignerait jamais n'est pas proposé : son gain ne viendrait que d'un autre
+lineup pour mes joueurs.
 Min gain (recherches auto) : un gain plus petit n'est pas affiché ; deux lineups presque équivalents peuvent
 en effet donner quelques centièmes de point à un mouvement qui ne fait que changer ma rotation (joueur lâché
 qui ne jouait pas, joueur reçu qui ne jouera pas).
@@ -646,6 +648,7 @@ def _auto(sim, me, p, conf):
             "partners": [sim.teams[i].manager for i in partners], "moves": moves}
 
 
+MIN_RECV_GAMES = 0.5      # recherche auto de joueurs libres : matchs alignés minimum du joueur ajouté
 TIE_GAIN = 0.10           # recherche auto de joueurs libres : gains plus proches = même gain (pts roto)
 TIE_SCREEN_MARGIN = 0.5   # autres joueurs à lâcher simulés : à moins de 0,5 pt du meilleur au crible
 TIE_EXTRA_DROPS = 3       # ... au plus 3 par joueur libre affiché
@@ -705,13 +708,19 @@ def _auto_free_agents(sim, me, conf):
             simulated[i] = move
         return simulated[i]
 
+    def kept(add_index):
+        # un joueur libre que mon lineup n'alignerait jamais ne peut pas me faire gagner : un gain affiché
+        # viendrait seulement d'un autre lineup pour mes joueurs (voir optimize_team), pas de lui
+        return [m for i, m in simulated.items() if r[i] == add_index and m.recv_games >= MIN_RECV_GAMES]
+
     def best_of(add_index):
-        found = [m for i, m in simulated.items() if r[i] == add_index]
+        found = kept(add_index)
         return max(found, key=lambda m: m.my_gain) if found else None
 
     for i in candidates:
         run(i)
-    adds_kept = [a for a in dict.fromkeys(r[i] for i in candidates) if best_of(a).my_gain >= min_gain]
+    adds_kept = [a for a in dict.fromkeys(r[i] for i in candidates)
+                 if best_of(a) is not None and best_of(a).my_gain >= min_gain]
     adds_kept.sort(key=lambda a: (-round(best_of(a).my_gain, 3), -best_of(a).value_recv))
     moves = []
     for a in adds_kept[:limit]:
@@ -721,7 +730,7 @@ def _auto_free_agents(sim, me, conf):
                   and gains[i] >= top - TIE_SCREEN_MARGIN][:TIE_EXTRA_DROPS]
         for i in others:
             run(i)
-        moves.append(_tie_break([m for i, m in simulated.items() if r[i] == a], min_gain))
+        moves.append(_tie_break(kept(a), min_gain))
     moves.sort(key=lambda m: (-round(m.my_gain, 3), -m.value_recv))
     best = adds_kept
     log.info("[Moves auto joueurs libres] %d de mes joueurs x %d joueurs libres = %d combinaisons au crible, "
