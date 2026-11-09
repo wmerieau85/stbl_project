@@ -21,8 +21,9 @@ manager (`scripts/season/opponents.py` : GP réels / GP possibles à date, méla
 ligue tant que la saison est jeune ; réglages `Optim | Season | Opponent model / Opponent default
 rate / Opponent ramp (days)`). Seule l'affectation ST/LT de mon équipe maximise ensuite le gain
 marginal de points roto attendu face à elles, sous les plafonds G / F / C / Util ; une recherche
-locale teste ensuite les échanges un à un (un joueur peu aligné placé devant chaque joueur aligné, postes
-redistribués, ou un joueur aligné laissé) et garde ceux qui font gagner des points : par exemple laisser
+locale teste ensuite les échanges un à un (un joueur peu aligné placé devant chaque joueur aligné, ou à sa
+place, le joueur remplacé passant en dernier pour que ses matchs restants aillent d'abord aux suivants ; postes
+redistribués ; ou un joueur aligné laissé) et garde ceux qui font gagner des points : par exemple laisser
 un arrière pour faire jouer en Util un ailier sans place F. L'onglet
 s'appelle désormais `season_reco` (`Sheets | Tab | Season Reco` ; l'ancien libellé `Season` et
 l'ancien onglet `season` sont repris et renommés) ; il contient aussi le bloc Adversaires et les
@@ -99,7 +100,8 @@ Réglages dans l'onglet settings :
   (au plus `Free agent results`). Pour chaque joueur libre affiché, les autres joueurs à lâcher presque aussi
   bons au crible (à 0,5 pt, 3 au plus) sont simulés aussi : à gain presque égal (0,1 pt, par exemple deux
   remplaçants qui ne jouent pas), on propose de lâcher celui de plus faible valeur (le moins utile en
-  remplaçant) et les autres sont cités, « Grayson Allen (ou Cam Spencer, même gain) ». Moins d'une seconde pour 15 équipes.
+  remplaçant) et les autres sont cités, « Grayson Allen (ou Cam Spencer, même gain) ». Un joueur libre que mon
+  lineup n'alignerait jamais n'est pas proposé (son gain ne viendrait que d'un autre lineup pour mes joueurs). Moins d'une seconde pour 15 équipes.
 - Valeur d'un joueur : valeur par match au-dessus du niveau de remplacement (dernier joueur d'effectif
   de la ligue, 180e pour 15 x 12 ; phase st sur l'horizon court, lt ensuite) x matchs attendus d'ici la
   fin de saison. Les stats réelles restent à l'équipe qui les a faites ; mon lineup est réoptimisé,

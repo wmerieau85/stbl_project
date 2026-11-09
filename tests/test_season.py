@@ -323,3 +323,44 @@ def test_optimizer_local_search_finds_position_swap(monkeypatch):
     assert used["P2"] == 10 and used["P3"] == 0                   # l'arrière joue, l'ailier F seul sort
     assert sum(used.values()) == 30 and team.used["UTIL"] == 10
     assert _my_points(team, rivals) > before + 3
+
+
+def _replace_case():
+    """Remplacement complet : P4 (C, 10 matchs) doit prendre les matchs de P1 (G,C) ; le faire passer devant
+    P1 ne suffit pas (P1 garde les matchs restants), comme Suggs à la place d'Allen, Embiid prenant le reste."""
+    pts, stl = STATS.index("pts"), STATS.index("stl")
+    specs = [("P0", "C", 7, -0.97, 14.2, 0.39), ("P1", "G,C", 10, 1.17, 5.6, 2.30), ("P2", "C", 8, 2.92, 8.6, 0.39),
+             ("P3", "G", 8, 0.01, 19.2, 1.82), ("P4", "C", 10, 0.57, 12.3, 0.99)]
+    players = []
+    for name, positions, games, value, p, s in specs:
+        player = PlayerProjection(name, "DEN", positions, "BN", True, value=value)
+        player.games_lt_expected = player.games_expected = games
+        player.per_game_lt[pts], player.per_game_lt[stl] = p, s
+        players.append(player)
+    actual = np.zeros(len(STATS))
+    actual[pts], actual[stl] = 547.0, 62.0
+    team = TeamProjection("Moi", "Equipe", players, {"G": 10, "F": 0, "C": 10, "UTIL": 10},
+                          {}, actual, 0.0, np.zeros(len(STATS)), {}, None)
+    rivals = []
+    for i, (p, s) in enumerate(((1066, 92.8), (923, 84.5), (921, 60.4), (962, 87.8), (1045, 68.1), (909, 73.6))):
+        values = np.zeros(len(STATS))
+        values[pts], values[stl] = p, s
+        rivals.append(TeamProjection(f"Rival {i}", "R", [], {}, {}, values, 0.0, np.zeros(len(STATS)), {}, None))
+    return team, rivals
+
+
+def test_optimizer_local_search_full_replacement(monkeypatch):
+    from scripts.season import engine
+
+    team, rivals = _replace_case()
+    monkeypatch.setattr(engine, "LOCAL_SEARCH_REPLACE", False)
+    optimize_team(team, rivals, ["pts", "stl"], [1.0, 1.0])
+    before = _my_points(team, rivals)
+    assert {p.name: p.games_used for p in team.players}["P4"] == 5
+
+    team, rivals = _replace_case()
+    monkeypatch.undo()
+    optimize_team(team, rivals, ["pts", "stl"], [1.0, 1.0])
+    used = {p.name: p.games_used for p in team.players}
+    assert used["P4"] == 10 and used["P1"] == 5
+    assert _my_points(team, rivals) > before + 1

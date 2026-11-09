@@ -381,3 +381,11 @@ def test_moves_reco_layout_is_the_same_for_every_mode():
     assert rows[moves.HEADER_ROW][8] == out["moves"][0].partner_name
     assert all(h[:len(moves.FIXED_COLUMNS)] == list(moves.FIXED_COLUMNS) for h in layouts)
     assert layouts[0] == layouts[1] == layouts[2]
+
+
+def test_auto_free_agents_skip_players_never_aligned(monkeypatch):
+    """Un joueur libre jamais aligné (ici : seuil de matchs relevé) n'est pas proposé."""
+    league = _league([], {"type": "auto free agent", "manager": ""})
+    assert moves.simulate(_result(league), league)["moves"]
+    monkeypatch.setattr(moves, "MIN_RECV_GAMES", 11)          # G n'a que 10 matchs alignés
+    assert moves.simulate(_result(league), league)["moves"] == []

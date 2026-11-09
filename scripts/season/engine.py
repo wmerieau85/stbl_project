@@ -357,6 +357,7 @@ def optimize_team(team, opponents, categories, weights, step=0.5, iterations=10)
 
 
 LOCAL_SEARCH_ROUNDS = 50   # améliorations acceptées au plus par la recherche locale
+LOCAL_SEARCH_REPLACE = True   # essai « b remplace a » en plus de « b passe devant a »
 
 
 def _local_search(team, units, order, games, used, best, score):
@@ -365,8 +366,10 @@ def _local_search(team, units, order, games, used, best, score):
     Les tours de optimize_team réaffectent tous les matchs d'un coup à partir de gains estimés autour du
     total courant : un échange qui demande de libérer un poste (un arrière laissé pour faire jouer en Util
     un ailier sans place F) peut leur échapper. Ici, chaque joueur pas ou peu aligné est essayé devant
-    chacun des joueurs alignés (l'ordre de priorité de _assign, qui redistribue les postes), et chaque
-    joueur aligné est essayé hors de l'ordre (laissé volontairement) ; un changement n'est gardé que s'il
+    chacun des joueurs alignés (l'ordre de priorité de _assign, qui redistribue les postes), puis à sa
+    place (le joueur remplacé passe en dernier : les matchs que le nouveau ne joue pas vont d'abord aux
+    suivants, ex. Suggs à la place d'Allen et les 6 matchs libérés à Embiid), et chaque joueur aligné est
+    essayé hors de l'ordre (laissé volontairement) ; un changement n'est gardé que s'il
     fait gagner des points. On recommence jusqu'à ne plus rien gagner : jamais moins bon qu'au départ.
     """
     def key(u):
@@ -386,11 +389,17 @@ def _local_search(team, units, order, games, used, best, score):
             for i in positions:
                 if i >= at:
                     break
-                candidate = order[:i] + [b] + [u for u in order[i:] if u is not b]
-                g, u_ = _assign(team, candidate)
-                value = score(g)
-                if value > best + GAIN_TOLERANCE:
-                    found = (candidate, g, u_, value)
+                rest = [u for u in order[i:] if u is not b]
+                tries = [order[:i] + [b] + rest]                         # b passe devant a
+                if LOCAL_SEARCH_REPLACE:                                 # b prend la place de a, qui passe en
+                    tries.append(order[:i] + [b] + rest[1:] + [rest[0]])  # dernier : ses matchs vont aux suivants
+                for candidate in tries:
+                    g, u_ = _assign(team, candidate)
+                    value = score(g)
+                    if value > best + GAIN_TOLERANCE:
+                        found = (candidate, g, u_, value)
+                        break
+                if found:
                     break
             if found:
                 break
