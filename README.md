@@ -106,6 +106,12 @@ python -m scripts.config_sheet push      # remise à plat des onglets depuis la 
 python -m scripts.config_sheet complete  # ajoute à l'onglet les paramètres absents (valeur en vigueur + aide)
 ```
 
+Paramètres avancés (réglages fins rarement modifiés, liste `ADVANCED` de `scripts/config_sheet.py` : détails
+de l'assistant de draft, réglages fins des minutes, présélections des mouvements, historique, import / export) :
+absents de l'onglet tant qu'ils gardent leur valeur par défaut ; « Compléter settings » ne les ajoute pas et liste
+dans son journal ceux qui sont présents à leur valeur par défaut (lignes supprimables sans effet). Une ligne
+présente dans l'onglet reste lue : pour changer un réglage avancé, ajoutez sa ligne (section, paramètre, valeur).
+
 Codes de la ligne « site » des grilles, sans année = saison active (`Settings | League | Actual Season`) :
 `fs` (FanScout, pré-saison dans la grille draft, rest of season dans les grilles lt / st), `fp.ros`
 (FantasyPros, rest of season), `fp.sea` / `fp.l30` / `fp.l15` / `fp.l07` (stats réelles), `draft` / `lt`
@@ -224,7 +230,7 @@ sont acceptés (`python -m scripts.run --list` les affiche avec leurs commandes)
 | Yahoo > MàJ rosters / Standings + Team Log | `yahoo_rosters` / `yahoo_stats` | `scripts.yahoo rosters` / `stats` |
 | Saison > Projections / Moves / Tout mettre à jour | `season_update` / `season_moves` / `season_all` | `scripts.season update` / `moves` / rosters + stats + update + moves |
 | Maintenance > Contrôle settings | `settings_check` | `scripts.config_sheet check` (liste aussi les paramètres absents) |
-| Maintenance > Compléter settings | `settings_complete` | `scripts.config_sheet complete` : ajoute les paramètres absents de l'onglet (valeur en vigueur + aide) à la fin de leur section |
+| Maintenance > Compléter settings | `settings_complete` | `scripts.config_sheet complete` : ajoute les paramètres absents de l'onglet (valeur en vigueur + aide) à la fin de leur section, hors paramètres avancés ; liste les paramètres avancés à leur valeur par défaut (lignes supprimables) |
 | Maintenance > Photo des sources (et chaque matin) | `history_snapshot` | `scripts.history daily` |
 | Maintenance > Pertinence des sources | `sources_accuracy` | `scripts.accuracy` |
 
