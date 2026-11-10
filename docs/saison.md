@@ -19,12 +19,13 @@ joueur dans chacun des 15 rosters. Les 14 autres équipes servent de référence
 d'abord, sous les plafonds), chaque match attendu n'étant aligné qu'avec le taux d'alignement du
 manager (`scripts/season/opponents.py` : GP réels / GP possibles à date, mélangé au taux médian de la
 ligue tant que la saison est jeune ; réglages `Optim | Season | Opponent model / Opponent default
-rate / Opponent ramp (days)`). Seule l'affectation ST/LT de mon équipe maximise ensuite le gain
-marginal de points roto attendu face à elles, sous les plafonds G / F / C / Util ; une recherche
-locale teste ensuite les échanges un à un (un joueur peu aligné placé devant chaque joueur aligné, ou à sa
-place, le joueur remplacé passant en dernier pour que ses matchs restants aillent d'abord aux suivants ; postes
+rate / Opponent ramp (days)`). Seule l'affectation ST/LT de mon équipe est ensuite optimisée face à
+elles, sous les plafonds G / F / C / Util : partant du lineup par valeur, une recherche locale teste les
+changements un à un (un joueur peu aligné placé devant chaque joueur aligné, ou à sa place, le joueur
+remplacé passant en dernier pour que ses matchs restants aillent d'abord aux suivants ; postes
 redistribués ; ou un joueur aligné laissé) et garde ceux qui font gagner des points : par exemple laisser
-un arrière pour faire jouer en Util un ailier sans place F. L'onglet
+un arrière pour faire jouer en Util un ailier sans place F. Les points sont mesurés exactement comme dans
+le classement projeté et les mouvements (points roto espérés, incertitude recalculée avec mon total). L'onglet
 s'appelle désormais `season_reco` (`Sheets | Tab | Season Reco` ; l'ancien libellé `Season` et
 l'ancien onglet `season` sont repris et renommés) ; il contient aussi le bloc Adversaires et les
 effectifs des 15 équipes. Les matchs écartés

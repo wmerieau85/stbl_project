@@ -311,10 +311,10 @@ def test_optimizer_local_search_finds_position_swap(monkeypatch):
     from scripts.season import engine
 
     team, rivals = _swap_case()
-    monkeypatch.setattr(engine, "LOCAL_SEARCH_ROUNDS", 0)          # ancien comportement : échange manqué
+    monkeypatch.setattr(engine, "LOCAL_SEARCH_ROUNDS", 0)          # départ seul : lineup par valeur
     optimize_team(team, rivals, ["pts", "stl"], [1.0, 1.0])
     before = _my_points(team, rivals)
-    assert {p.name: p.games_used for p in team.players}["P2"] == 0
+    assert {p.name: p.games_used for p in team.players}["P3"] == 10
 
     team, rivals = _swap_case()
     monkeypatch.undo()
@@ -326,11 +326,12 @@ def test_optimizer_local_search_finds_position_swap(monkeypatch):
 
 
 def _replace_case():
-    """Remplacement complet : P4 (C, 10 matchs) doit prendre les matchs de P1 (G,C) ; le faire passer devant
-    P1 ne suffit pas (P1 garde les matchs restants), comme Suggs à la place d'Allen, Embiid prenant le reste."""
+    """Remplacement complet : P2 (C) doit prendre la place de P4 (G), les matchs libérés allant à P0 (C) et
+    P3 (G,C) changeant de poste ; passer P2 devant P4 ne suffit pas (P4 garde les matchs restants), comme
+    Suggs à la place d'Allen, Embiid prenant le reste."""
     pts, stl = STATS.index("pts"), STATS.index("stl")
-    specs = [("P0", "C", 7, -0.97, 14.2, 0.39), ("P1", "G,C", 10, 1.17, 5.6, 2.30), ("P2", "C", 8, 2.92, 8.6, 0.39),
-             ("P3", "G", 8, 0.01, 19.2, 1.82), ("P4", "C", 10, 0.57, 12.3, 0.99)]
+    specs = [("P0", "C", 9, -0.85, 16.3, 2.37), ("P1", "G", 7, -0.65, 23.2, 1.78), ("P2", "C", 7, 2.03, 16.2, 2.08),
+             ("P3", "G,C", 10, 1.07, 10.1, 1.70), ("P4", "G", 6, -0.20, 7.1, 1.69)]
     players = []
     for name, positions, games, value, p, s in specs:
         player = PlayerProjection(name, "DEN", positions, "BN", True, value=value)
@@ -338,11 +339,11 @@ def _replace_case():
         player.per_game_lt[pts], player.per_game_lt[stl] = p, s
         players.append(player)
     actual = np.zeros(len(STATS))
-    actual[pts], actual[stl] = 547.0, 62.0
+    actual[pts], actual[stl] = 559.0, 42.6
     team = TeamProjection("Moi", "Equipe", players, {"G": 10, "F": 0, "C": 10, "UTIL": 10},
                           {}, actual, 0.0, np.zeros(len(STATS)), {}, None)
     rivals = []
-    for i, (p, s) in enumerate(((1066, 92.8), (923, 84.5), (921, 60.4), (962, 87.8), (1045, 68.1), (909, 73.6))):
+    for i, (p, s) in enumerate(((1032, 60.5), (1038, 87.2), (1039, 93.9), (1089, 71.3), (962, 73.1), (912, 61.9))):
         values = np.zeros(len(STATS))
         values[pts], values[stl] = p, s
         rivals.append(TeamProjection(f"Rival {i}", "R", [], {}, {}, values, 0.0, np.zeros(len(STATS)), {}, None))
@@ -356,11 +357,47 @@ def test_optimizer_local_search_full_replacement(monkeypatch):
     monkeypatch.setattr(engine, "LOCAL_SEARCH_REPLACE", False)
     optimize_team(team, rivals, ["pts", "stl"], [1.0, 1.0])
     before = _my_points(team, rivals)
-    assert {p.name: p.games_used for p in team.players}["P4"] == 5
+    assert {p.name: p.games_used for p in team.players}["P2"] == 0
 
     team, rivals = _replace_case()
     monkeypatch.undo()
     optimize_team(team, rivals, ["pts", "stl"], [1.0, 1.0])
     used = {p.name: p.games_used for p in team.players}
-    assert used["P4"] == 10 and used["P1"] == 5
-    assert _my_points(team, rivals) > before + 1
+    assert used == {"P0": 9, "P1": 7, "P2": 7, "P3": 7, "P4": 0}
+    assert _my_points(team, rivals) > before + 2
+
+
+def test_optimizer_never_below_value_lineup(monkeypatch):
+    """Équipes au hasard : la rotation optimisée vaut toujours au moins le lineup par valeur (points du
+    classement projeté, la mesure de l'optimisation)."""
+    from scripts.season import engine
+
+    pts, stl = STATS.index("pts"), STATS.index("stl")
+    for seed in range(15):
+        def case():
+            rng = np.random.default_rng(seed)
+            rivals = []
+            for i in range(6):
+                values = np.zeros(len(STATS))
+                values[pts], values[stl] = rng.uniform(900, 1100), rng.uniform(60, 100)
+                rivals.append(TeamProjection(f"R{i}", "R", [], {}, {}, values, 0.0, np.zeros(len(STATS)), {}, None))
+            players = []
+            for k in range(6):
+                p = PlayerProjection(f"P{k}", "DEN", str(rng.choice(["G", "C", "G,C"])), "BN", True,
+                                     value=float(rng.uniform(-1, 3)))
+                p.games_lt_expected = p.games_expected = float(rng.integers(6, 11))
+                p.per_game_lt[pts], p.per_game_lt[stl] = rng.uniform(5, 25), rng.uniform(0.3, 2.5)
+                players.append(p)
+            actual = np.zeros(len(STATS))
+            actual[pts], actual[stl] = rng.uniform(500, 800), rng.uniform(30, 70)
+            return TeamProjection("Moi", "E", players, {"G": 10, "F": 0, "C": 10, "UTIL": 10}, {}, actual, 0.0,
+                                  np.zeros(len(STATS)), {}, None), rivals
+
+        team, rivals = case()
+        monkeypatch.setattr(engine, "LOCAL_SEARCH_ROUNDS", 0)
+        optimize_team(team, rivals, ["pts", "stl"], [1.0, 1.0])
+        start = _my_points(team, rivals)
+        monkeypatch.undo()
+        team, rivals = case()
+        optimize_team(team, rivals, ["pts", "stl"], [1.0, 1.0])
+        assert _my_points(team, rivals) >= start - 1e-9
