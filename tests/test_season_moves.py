@@ -119,7 +119,8 @@ def test_identity_move_has_no_gain():
 
 
 @pytest.mark.parametrize("players,compare,side,message", [
-    ([], {"type": "free agent"}, "Moi", "Aucun joueur"),
+    ([], {"type": "manager", "manager": "Rival"}, "Moi", "Aucun joueur"),
+    (["B"], {"type": "trade", "manager": ""}, "Moi", "indiquez le manager visé"),
     (["C"], {"type": "free agent"}, "Rival", "doivent être les miens"),
     (["E"], {"type": "manager", "manager": "Rival"}, "Autre", "attendu Moi ou Rival"),
     (["B"], {}, "Moi", "Moves | Compare"),
@@ -389,3 +390,29 @@ def test_auto_free_agents_skip_players_never_aligned(monkeypatch):
     assert moves.simulate(_result(league), league)["moves"]
     monkeypatch.setattr(moves, "MIN_RECV_GAMES", 11)          # G n'a que 10 matchs alignés
     assert moves.simulate(_result(league), league)["moves"] == []
+
+
+@pytest.mark.parametrize("players,side,compare,expected", [
+    (["B"], "Moi", {"type": "trade", "manager": "Rival"}, {"type": "manager", "manager": "Rival"}),
+    (["C"], "Rival", {"type": "trade", "manager": ""}, {"type": "manager", "manager": "Rival"}),   # ses joueurs
+    ([], "Moi", {"type": "trade", "manager": "Rival"}, {"type": "auto", "manager": "Rival"}),
+    ([], "Moi", {"type": "trade", "manager": ""}, {"type": "auto", "manager": ""}),
+    (["B"], "Moi", {"type": "free agent", "manager": ""}, {"type": "free agent", "manager": ""}),
+    ([], "Moi", {"type": "free agent", "manager": ""}, {"type": "auto free agent", "manager": ""}),
+    (["B"], "Moi", {"type": "auto", "manager": ""}, {"type": "auto", "manager": ""}),            # ancien type
+])
+def test_simplified_compare_types(players, side, compare, expected):
+    league = _league(players, compare, side=side)
+    assert moves.resolve_compare(league)["moves"]["compare"] == expected
+
+
+def test_trade_without_players_runs_the_auto_search():
+    league = _auto_league("Rival")
+    league["moves"]["compare"] = {"type": "trade", "manager": "Rival"}
+    out = moves.simulate(_auto_result(league), league)
+    assert out["mode"] == "auto" and out["partners"] == ["Rival"]
+
+
+def test_compare_trade_setting_is_read():
+    cfg, _ = C.parse_rows(C.build_rows() + [["Moves | Compare", "Trade", "Pierre"]])
+    assert cfg["league"]["moves"]["compare"] == {"type": "trade", "manager": "Pierre"}

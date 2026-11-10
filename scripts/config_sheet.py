@@ -223,7 +223,7 @@ ORDER_SECTION = "Draft | Order"
 KEEPERS_SECTION = "Draft | Keepers"
 MANAGERS_SECTION = "Transco | Managers"
 MOVES_PLAYER_SECTION = "Moves | Player"      # Moves | Player 1..4 : manager | joueur
-MOVES_COMPARE_SECTION = "Moves | Compare"    # manager | nom du manager, free agent, auto, auto free agent
+MOVES_COMPARE_SECTION = "Moves | Compare"    # trade | manager (vide = tous), free agent (anciens : manager, auto...)
 MOVES_PLAYERS = 4
 ROSTER_HELP = {"G": "postes titulaires Guard", "F": "postes titulaires Forward", "C": "postes titulaires Center",
                "UTIL": "postes titulaires Util", "BN": "banc", "IL": "blessés"}
@@ -397,8 +397,9 @@ def build_rows(cfg=None, bootstrap=None):
             "joueurs à échanger : les miens, ou ceux du manager de Moves | Compare" if i == 1 else "")
     compare = moves.get("compare") or {}
     add(MOVES_COMPARE_SECTION, compare.get("type", ""), compare.get("manager", ""),
-        "manager + nom du manager (échange), free agent (joueurs libres), auto + manager facultatif "
-        "(recherche d'échanges sans joueur saisi) ou auto free agent (recherche de joueurs libres sans joueur saisi)")
+        "trade + manager (vide = tous) : échange autour des joueurs de Moves | Player, ou recherche auto s'il n'y "
+        "en a pas ; free agent : je lâche les joueurs de Moves | Player, ou recherche auto (qui lâcher, qui prendre) "
+        "s'il n'y en a pas")
 
     codes = [(conf.get("code"), name, conf) for name, conf in sources.items() if conf.get("code")]
     for code, _, conf in codes:
@@ -530,11 +531,12 @@ def parse_rows(rows, cfg=None, bootstrap=None):
                 kind = _norm(param)
                 if not kind:
                     moves_compare = {}
-                elif kind not in ("manager", "free agent", "auto", "auto free agent"):
-                    raise ValueError(f"Onglet config, {section} : « {param} », attendu manager, free agent, auto "
-                                     "ou auto free agent.")
+                elif kind not in ("trade", "free agent", "manager", "auto", "auto free agent"):
+                    raise ValueError(f"Onglet config, {section} : « {param} », attendu trade (échange) ou free agent "
+                                     "(joueurs libres).")
                 else:
-                    moves_compare = {"type": kind, "manager": value if kind in ("manager", "auto") else ""}
+                    moves_compare = {"type": kind,
+                                     "manager": value if kind in ("trade", "manager", "auto") else ""}
             elif domain == "sources" and sub in ("draft", "ros"):
                 if value:
                     stages.setdefault(code_of(param, section), {})[sub] = value
