@@ -342,6 +342,46 @@ def _window_label(stage):
 
 # --------------------------------------------------------------------------- écriture de l'onglet
 
+# Paramètres avancés : absents de l'onglet tant qu'ils gardent leur valeur par défaut (« Compléter settings »
+# ne les ajoute pas, une remise à plat ne les écrit pas) ; une ligne présente dans l'onglet reste lue.
+ADVANCED = {
+    ("Optim | Draft", p) for p in ("Iterations", "Standby interval (seconds)", "Evaluated Candidates",
+                                   "Simulations min", "Finalists", "Prune z", "Time budget", "ADP Noise",
+                                   "Need candidates")
+} | {
+    ("Optim | Season", p) for p in ("Injury GP ratio", "Opponent default rate", "Opponent ramp (days)")
+} | {
+    ("Optim | Minutes", p) for p in ("Team target", "Protected players", "Rotation size", "Deep bench floor",
+                                     "Min real games", "Max cut per player")
+} | {
+    ("Optim | Moves", p) for p in ("Min results", "Auto shortlist", "Auto min partner gain", "Free agent shortlist")
+} | {
+    ("Optim | History", p) for p in ("Projections interval (days)", "Stats interval (days)", "Retention (seasons)",
+                                     "Shrink to current weights")
+} | {
+    ("Pipeline | Import", p) for p in ("Maximum time per page (s)", "Attempts", "Pause between pages (s)")
+} | {
+    ("Pipeline | Export", p) for p in ("CSV Delimiter", "Decimal separator")
+}
+
+
+def _default_values(boot):
+    """Valeurs par défaut complètes : code (DEFAULT_*) complété par config/defaults.json."""
+    from scripts.config import DEFAULT_LEAGUE, DEFAULT_SETTINGS, _deep_merge, load_default_config
+
+    cfg = load_default_config()
+    return {"league": _deep_merge(DEFAULT_LEAGUE, cfg["league"]),
+            "settings": _deep_merge(DEFAULT_SETTINGS, cfg["settings"]), "bootstrap": boot}
+
+
+def _is_default(section, param, targets, defaults):
+    """Paramètre avancé à sa valeur par défaut (comparée telle qu'affichée dans l'onglet)."""
+    for s, p, t, path, kind, _ in PARAMS:
+        if (s, p) == (section, param):
+            return str(_display(_get(targets[t], path), kind)) == str(_display(_get(defaults[t], path), kind))
+    return False
+
+
 def build_rows(cfg=None, bootstrap=None):
     cfg = cfg or load_config()
     boot = bootstrap or load_bootstrap()
@@ -354,6 +394,7 @@ def build_rows(cfg=None, bootstrap=None):
     settings = _deep_merge(DEFAULT_SETTINGS, cfg["settings"])
     sources = cfg["sources"]
     targets = {"league": league, "settings": settings, "bootstrap": boot}
+    defaults = _default_values(boot)
     rows = [HEADER]
 
     def add(section, param, value, help_text=""):
@@ -377,7 +418,7 @@ def build_rows(cfg=None, bootstrap=None):
                 add(section, CATEGORY_LABELS_SHEET.get(cat, cat), w, "poids (0 = catégorie ignorée)" if i == 0 else "")
             continue
         for (s, p), (t, path, kind, h) in params.items():
-            if s == section:
+            if s == section and not ((s, p) in ADVANCED and _is_default(s, p, targets, defaults)):
                 add(s, p, _display(_get(targets[t], path), kind), h)
 
     draft = league["draft"]
@@ -882,6 +923,30 @@ def missing_rows(rows, cfg=None, bootstrap=None):
     return out
 
 
+def _same_value(sheet_value, default):
+    """Valeur de l'onglet égale à la valeur par défaut affichée (nombres à virgule ou point, casse ignorée)."""
+    def number(v):
+        text = str(v).strip().replace(",", ".")
+        return float(text[:-1]) / 100 if text.endswith("%") else float(text)
+
+    try:
+        return abs(number(sheet_value) - number(default)) < 1e-9
+    except ValueError:
+        return _norm(str(sheet_value)) == _norm(str(default))
+
+
+def removable_rows(rows, bootstrap=None):
+    """Paramètres avancés présents dans l'onglet à leur valeur par défaut : lignes supprimables sans effet."""
+    defaults = _default_values(bootstrap or load_bootstrap())
+    kinds = {(_norm(s), _norm(p)): (s, p, t, path, kind) for s, p, t, path, kind, _ in PARAMS if (s, p) in ADVANCED}
+    out = []
+    for sec, par, value, _ in _clean_rows(rows):
+        hit = kinds.get((_norm(sec), _norm(par)))
+        if hit and _same_value(value, _display(_get(defaults[hit[2]], hit[3]), hit[4])):
+            out.append((hit[0], hit[1]))
+    return out
+
+
 def complete(spreadsheet, tab=None):
     """Insère les paramètres absents à la fin de leur section (ou en fin d'onglet). Renvoie les lignes ajoutées."""
     from scripts.sheets import _cell
@@ -891,6 +956,11 @@ def complete(spreadsheet, tab=None):
     ws = spreadsheet.worksheet(tab)
     rows = ws.get("A1:D3000")
     add = missing_rows(rows)
+    removable = removable_rows(rows, boot)
+    if removable:
+        log.info("[Config] %d paramètre(s) avancé(s) à leur valeur par défaut, lignes supprimables sans effet "
+                 "(la valeur par défaut s'applique sans elles) : %s", len(removable),
+                 ", ".join(f"{s} | {p}" for s, p in removable))
     if not add:
         log.info("[Config] Onglet '%s' complet : aucun paramètre absent.", tab)
         return []

@@ -42,24 +42,33 @@ def test_full_tab_has_nothing_missing():
 
 
 def test_every_param_section_is_written():
-    """Chaque réglage de PARAMS figure dans l'onglet reconstruit (sinon Compléter settings ne le propose jamais)."""
-    built = {(C._norm(r[0]), C._norm(r[1])) for r in C.build_rows()[1:]}
+    """Chaque réglage non avancé de PARAMS figure dans l'onglet reconstruit (sinon Compléter settings ne le
+    propose jamais) ; un réglage avancé seulement s'il s'écarte de sa valeur par défaut."""
+    built = {(C._norm(r[0]), C._norm(r[1])) for r in C.build_rows(C.load_default_config())[1:]}
     absent = [(sec, par) for sec, par, *_ in C.PARAMS if (C._norm(sec), C._norm(par)) not in built]
-    assert absent == []
+    assert set(absent) == C.ADVANCED
+
+
+def test_advanced_param_written_when_changed_and_read_when_present():
+    cfg = C.load_default_config()
+    cfg["league"].setdefault("minutes", {})["max_cut"] = 0.4
+    rows = C.build_rows(cfg)
+    assert ["Optim | Minutes", "Max cut per player"] == [r[:2] for r in rows if r[1] == "Max cut per player"][0]
+    parsed, _ = C.parse_rows(C.build_rows(C.load_default_config()) + [["Optim | Minutes", "Max cut per player", "0,35"]])
+    assert parsed["league"]["minutes"]["max_cut"] == 0.35
 
 
 def test_minutes_params_proposed_when_absent():
     rows = [r for r in C.build_rows() if C._norm(r[0]) != C._norm("Optim | Minutes")]
     missing = [(r[0], r[1]) for r in C.missing_rows(rows)]
-    assert ("Optim | Minutes", "Team target") in missing and len(missing) == 7
+    assert missing == [("Optim | Minutes", "Normalize")]              # réglages fins : avancés
 
 
 def test_missing_params_are_listed_with_current_value():
-    rows = _without(C.build_rows(), ("Optim | Season", "Opponent default rate"), ("Optim | Moves", "Auto shortlist"))
+    rows = _without(C.build_rows(), ("Optim | Season", "Opponent model"), ("Optim | Moves", "Min gain"))
     missing = C.missing_rows(rows)
-    assert [(r[0], r[1]) for r in missing] == [("Optim | Season", "Opponent default rate"),
-                                                ("Optim | Moves", "Auto shortlist")]
-    assert missing[0][2] == 0.95 and missing[0][3]
+    assert [(r[0], r[1]) for r in missing] == [("Optim | Season", "Opponent model"), ("Optim | Moves", "Min gain")]
+    assert missing[1][2] == 0.25 and missing[1][3]
 
 
 def test_alias_counts_as_present():
@@ -69,20 +78,19 @@ def test_alias_counts_as_present():
 
 def test_complete_inserts_at_end_of_section_without_touching_other_rows(monkeypatch):
     full = C.build_rows()
-    rows = _without(full, ("Optim | Season", "Opponent default rate"), ("Optim | Moves", "Auto shortlist"))
+    rows = _without(full, ("Optim | Season", "Opponent model"), ("Optim | Moves", "Min gain"))
     rows = [r for r in rows if not r[0].startswith("Optim | History")]       # section entière absente
     before = [list(r) for r in rows]
     ws = FakeWS(rows)
     added = C.complete(FakeBook(ws), "settings")
-    assert {(r[0], r[1]) for r in added} >= {("Optim | Season", "Opponent default rate"),
-                                              ("Optim | Moves", "Auto shortlist")}
+    assert {(r[0], r[1]) for r in added} >= {("Optim | Season", "Opponent model"), ("Optim | Moves", "Min gain")}
     # lignes d'origine conservées, dans le même ordre
     kept = [r for r in ws.rows if r in before]
     assert kept == before
     sections = [r[0] for r in ws.rows]
     i = sections.index("Optim | Season")
     j = max(k for k, s in enumerate(sections) if s == "Optim | Season")
-    assert ws.rows[j][1] == "Opponent default rate" and all(s == "Optim | Season" for s in sections[i:j + 1])
+    assert ws.rows[j][1] == "Opponent model" and all(s == "Optim | Season" for s in sections[i:j + 1])
     assert ws.rows[-1][0].startswith("Optim | History")                     # section absente : en fin d'onglet
     assert C.missing_rows(ws.rows) == []
     assert C.complete(FakeBook(ws), "settings") == []
@@ -97,3 +105,12 @@ def test_complete_when_section_is_last_row_of_sheet():
     added = C.complete(FakeBook(ws), "settings")
     assert [(r[0], r[1]) for r in added] == [(minutes[-1][0], minutes[-1][1])]
     assert ws.rows[-1][1] == minutes[-1][1]
+
+
+def test_removable_rows_lists_advanced_params_at_default():
+    rows = C.build_rows(C.load_default_config()) + [["Optim | Minutes", "Team target", "240", ""],
+                                                    ["Optim | Minutes", "Max cut per player", "0,4", ""],
+                                                    ["Optim | Season", "Opponent default rate", "0,95", ""],
+                                                    ["Optim | History", "Shrink to current weights", "50%", ""]]
+    assert C.removable_rows(rows) == [("Optim | Minutes", "Team target"), ("Optim | Season", "Opponent default rate"),
+                                      ("Optim | History", "Shrink to current weights")]
