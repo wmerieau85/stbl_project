@@ -45,7 +45,7 @@ lancement (saison, étape `Actual Phase`, sources, grilles).
 | En saison | `python -m scripts.yahoo rosters` | effectifs actuels des 15 équipes (+ `exports/yahoo_rosters_<saison>.csv`, bloc rosters de l'onglet `yahoo`) |
 | En saison | `python main.py --push-sheet` avec `Actual Phase = ros` | projections ROS + stats par période, phases lt / st |
 | En saison | `python -m scripts.season update` | classement projeté et effectifs, onglet `season_reco` |
-| En saison | `python -m scripts.season moves` | échanges ou joueurs libres simulés (lignes `Moves | ...`, `auto` / `auto free agent` : recherche automatique), onglet `moves_reco` |
+| En saison | `python -m scripts.season moves` | échanges (`trade`) ou joueurs libres (`free agent`) simulés autour des joueurs de `Moves | Player`, ou recherche automatique s'il n'y en a pas, onglet `moves_reco` |
 | Maintenance | `python -m scripts.player_linker` | relance le rapprochement des joueurs |
 | Maintenance | `python -m scripts.config_sheet push` | réécrit les onglets settings / players depuis la configuration locale (remise à plat) |
 | Maintenance | `python -m pytest -q` | tests (voir [Tests](#tests-et-contrôle-du-code)) |

@@ -281,8 +281,42 @@ def _auto_free_agent_plan(league):
     return {"me": me, "side": me, "mine": True, "players": [], "kind": AUTO_FREE_AGENT, "other": ""}
 
 
+TRADE = "trade"
+
+
+def resolve_compare(league):
+    """Types simplifiés de Moves | Compare, ramenés aux modes internes (ligue copiée si besoin) :
+    trade : avec joueurs saisis -> manager (échange autour d'eux ; manager visé = Valeur, ou celui des
+    joueurs listés s'ils ne sont pas à moi), sans joueur -> auto (Valeur = un manager ou vide = tous) ;
+    free agent : avec joueurs -> free agent (je les lâche), sans joueur -> auto free agent.
+    Les anciens types (manager, auto, auto free agent) gardent leur sens."""
+    moves = league.get("moves") or {}
+    compare = moves.get("compare") or {}
+    kind = str(compare.get("type") or "").strip().lower()
+    listed = [e for e in (moves.get("players") or []) if str(e.get("player") or "").strip()]
+    other = str(compare.get("manager") or "").strip()
+    if kind == TRADE:
+        if not listed:
+            compare = {"type": "auto", "manager": other}
+        else:
+            me = str(league.get("draft", {}).get("my_team") or "")
+            side = str(listed[0].get("manager") or me).strip()
+            if not other and side.casefold() != me.casefold():
+                other = side
+            if not other:
+                raise MovesError("Moves | Compare = trade avec mes joueurs : indiquez le manager visé en Valeur "
+                                 "(ou videz les lignes Moves | Player pour chercher chez tous les managers).")
+            compare = {"type": "manager", "manager": other}
+    elif kind == "free agent" and not listed:
+        compare = {"type": AUTO_FREE_AGENT, "manager": ""}
+    else:
+        return league
+    return dict(league, moves=dict(moves, compare=compare))
+
+
 def simulate(result, league):
     """Mouvements classés : {mode, plan, moves, tested, kept, base...}."""
+    league = resolve_compare(league)
     p = _auto_plan(league) or _auto_free_agent_plan(league) or plan(league)
     sim = Simulator(result, league)
     conf = league.get("moves") or {}

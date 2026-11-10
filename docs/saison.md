@@ -44,7 +44,7 @@ par le module rotation.
 
 `python -m scripts.season moves` (option `--no-sheet` : console + `exports/moves_reco_<saison>.csv`).
 
-Disposition de l'onglet identique pour tous les types (`manager`, `free agent`, `auto`, `auto free agent`),
+Disposition de l'onglet identique pour tous les types (échanges ou joueurs libres, avec ou sans joueur saisi),
 pour qu'un autre onglet puisse le lire par formules : lignes 1 à 8 = informations sur la recherche (hauteur
 fixe), en-tête en ligne 9, propositions à partir de la ligne 10, toujours dans ces colonnes :
 
@@ -56,10 +56,11 @@ Réglages dans l'onglet settings :
 | Ligne | Colonne 2 | Colonne 3 |
 |---|---|---|
 | `Moves | Player 1` à `4` | manager : le mien (je cède ces joueurs) ou celui de `Moves | Compare` (je les reçois) | joueur (vide = ignoré) |
-| `Moves | Compare` | `manager` | nom du manager |
-| `Moves | Compare` | `free agent` | (vide) : je lâche les joueurs listés, qui doivent être les miens |
-| `Moves | Compare` | `auto` | (vide = tous les managers, ou un nom de manager) : recherche d'échanges sans joueur saisi, lignes `Moves | Player` ignorées |
-| `Moves | Compare` | `auto free agent` | (vide) : recherche de joueurs libres sans joueur saisi (qui lâcher, qui prendre), lignes `Moves | Player` ignorées |
+| `Moves | Compare` | `trade` | nom du manager, ou vide = tous : avec des joueurs dans `Moves | Player`, échange autour d'eux (mes joueurs : manager obligatoire ; ses joueurs : vide = le sien) ; sans joueur, recherche auto d'échanges |
+| `Moves | Compare` | `free agent` | (vide) : avec des joueurs (les miens), je les lâche et les meilleurs joueurs libres sont testés à leur place ; sans joueur, recherche auto (qui lâcher, qui prendre) |
+
+Anciens types toujours acceptés : `manager` (= `trade` avec joueurs), `auto` (recherche d'échanges, lignes
+`Moves | Player` ignorées), `auto free agent` (recherche de joueurs libres, lignes ignorées).
 | `Optim | Moves` | `Value tolerance` | écart de valeur accepté, 10 % par défaut |
 | `Optim | Moves` | `Max results` / `Min results` / `Free agent results` / `Free agent shortlist` | 20 / 10 / 6 / 15 |
 | `Optim | Moves` | `Auto max players` / `Auto shortlist` / `Auto per manager` / `Auto min partner gain` | 2 / 40 / 5 / 0 |
