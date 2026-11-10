@@ -12,9 +12,9 @@ par match passent en premier, sur leur poste puis en Util.
 Les pourcentages sont recalculés à partir des tirs : les tentatives réelles, absentes des
 pages publiques Yahoo, sont estimées avec les tentatives par match projetées de l'effectif.
 
-Mon équipe (optimize_team) : les matchs sont ensuite réaffectés selon le gain de points roto attendu
-face aux 14 autres, mesuré autour du total final projeté ; un match au gain négatif est laissé.
-Une recherche locale teste ensuite les échanges un à un (postes compris) et garde ceux qui font gagner.
+Mon équipe (optimize_team) : partant de cette affectation, une recherche locale teste les changements un
+à un (postes compris) et garde ceux qui font gagner des points roto espérés face aux 14 autres, mesurés
+comme dans le classement ; un match qui fait perdre des points est laissé.
 
 Classement : points roto espérés (même modèle que la draft) et chances de finir 1er ou
 dans les 3 premiers (tirages aléatoires avec la même incertitude).
@@ -28,7 +28,7 @@ from datetime import timedelta
 
 import numpy as np
 
-from scripts.draft.engine import LOWER_IS_BETTER, UNCERTAINTY, S, category_values, roto_points
+from scripts.draft.engine import LOWER_IS_BETTER, UNCERTAINTY, S, _erf, category_values, roto_points
 from scripts.draft.pool import STATS
 from scripts.injuries import available_from
 from scripts.names import strip_accents
@@ -272,37 +272,32 @@ def _assign(team, units):
     return games, used
 
 
-def optimize_team(team, opponents, categories, weights, step=0.5, iterations=10):
-    """Affecte les matchs ST / LT de mon équipe selon le gain de points roto attendu face aux adversaires.
+def optimize_team(team, opponents, categories, weights):
+    """Affecte les matchs ST / LT de mon équipe pour maximiser mes points roto espérés face aux adversaires.
 
-    Le gain d'un match est mesuré autour du total final projeté (pas à partir des seules stats réelles,
-    où l'équipe paraît loin derrière partout et où seul le coût en TO compterait). Les matchs sont
-    ensuite affectés par gain décroissant (à égalité : valeur par match), au mieux des plafonds ; un
-    match au gain négatif est laissé volontairement. On recommence autour du nouveau total, et l'on
-    garde la meilleure affectation, jamais moins bonne que l'affectation par valeur de départ.
+    Départ : l'affectation par valeur par match (celle de project_team, postes inclus). Puis recherche locale
+    (_local_search) : chaque changement (un joueur devant ou à la place d'un autre, ou laissé) n'est gardé que
+    s'il fait gagner des points. Les points sont mesurés exactement comme dans le classement projeté et les
+    mouvements (roto_points : incertitude recalculée avec mon total), pour que rotation, classement et gains
+    affichés restent cohérents. Un match qui fait perdre des points est laissé volontairement.
     """
     if not categories or not opponents:
         return
 
-    reference_totals = [other.final for other in opponents] + [team.final]
-    reference_values = np.array([category_values(totals, categories) for totals in reference_totals])
-    sigmas = UNCERTAINTY * reference_values.std(axis=0)
     opponent_values = np.array([category_values(other.final, categories) for other in opponents])
     signs = np.array([-1.0 if cat in LOWER_IS_BETTER else 1.0 for cat in categories])
     weights = np.asarray(weights, dtype=float)
 
     def score(totals):
-        values = category_values(totals, categories)
-        differences = (values - opponent_values) * signs
-        beats = np.empty_like(differences)
-        for j, sigma in enumerate(sigmas):
-            if sigma <= 1e-12:
-                beats[:, j] = np.where(differences[:, j] > 0, 1.0,
-                                       np.where(differences[:, j] < 0, 0.0, 0.5))
-            else:
-                scale = sigma * math.sqrt(2.0)
-                beats[:, j] = [0.5 * (1.0 + math.erf(float(diff) / scale))
-                               for diff in differences[:, j]]
+        """Mes points roto espérés (même calcul que roto_points, pour ma seule ligne)."""
+        mine = category_values(totals, categories)
+        sigmas = UNCERTAINTY * np.vstack([opponent_values, mine]).std(axis=0)
+        differences = (mine - opponent_values) * signs
+        beats = np.where(differences > 0, 1.0, np.where(differences < 0, 0.0, 0.5))
+        spread = sigmas > 1e-12
+        if spread.any():
+            scaled = differences[:, spread] / (sigmas[spread] * math.sqrt(2.0))
+            beats[:, spread] = 0.5 * (1.0 + _erf(scaled))
         return float(np.sum(weights * (1.0 + beats.sum(axis=0))))
 
     units = [(p, period) for p in team.players for period, (expected_attr, _, _) in enumerate(_PERIODS)
@@ -317,55 +312,30 @@ def optimize_team(team, opponents, categories, weights, step=0.5, iterations=10)
     def value_of(p, period):
         return p.value_st if period == 0 and p.value_st is not None else p.value
 
-    # point de départ : l'affectation par valeur par match (celle de project_team, postes inclus)
-    start_order = sorted(units, key=lambda u: value_of(*u), reverse=True)
-    start, start_used = _assign(team, start_order)
-    best_games, best_used, best_score, best_order = start, start_used, score(totals_of(start)), start_order
-    games, previous = start, None
-    for _ in range(iterations):
-        current = totals_of(games)
-        gains = {}
-        base = score(current)
-        for p, period in units:
-            rate, played = getattr(p, _PERIODS[period][2]), games.get((id(p), period), 0.0)
-            if played > 1e-9:   # apport réel de ses matchs actuels, ramené à un match
-                gains[(id(p), period)] = (base - score(current - rate * played)) / played
-            else:               # ce que rapporterait un demi-match de plus, ramené à un match
-                gains[(id(p), period)] = (score(current + rate * step) - base) / step
-        playable = [u for u in units if gains[(id(u[0]), u[1])] >= -GAIN_TOLERANCE]
-        playable.sort(key=lambda u: (round(gains[(id(u[0]), u[1])] / GAIN_TOLERANCE), value_of(*u)), reverse=True)
-        games, used = _assign(team, playable)
-        candidate = score(totals_of(games))
-        if candidate > best_score + GAIN_TOLERANCE:
-            best_games, best_used, best_score, best_order = games, used, candidate, playable
-        signature = tuple(round(games.get((id(p), period), 0.0), 6) for p, period in units)
-        if signature == previous:
-            break
-        previous = signature
+    order = sorted(units, key=lambda u: value_of(*u), reverse=True)
+    games, used = _assign(team, order)
+    games, used = _local_search(team, units, order, games, used, score(totals_of(games)),
+                                lambda g: score(totals_of(g)))
 
-    best_games, best_used = _local_search(team, units, best_order, best_games, best_used, best_score,
-                                          lambda games: score(totals_of(games)))
-
-    team.used = best_used
+    team.used = used
     for p in team.players:
-        p.games_st_used = best_games.get((id(p), 0), 0.0)
-        p.games_lt_used = best_games.get((id(p), 1), 0.0)
+        p.games_st_used = games.get((id(p), 0), 0.0)
+        p.games_lt_used = games.get((id(p), 1), 0.0)
         p.games_used = p.games_st_used + p.games_lt_used
         p.totals = p.per_game_st * p.games_st_used + p.per_game_lt * p.games_lt_used
-    team.remaining = totals_of(best_games) - team.actual
+    team.remaining = totals_of(games) - team.actual
     _classify_unallocated_games(team)
 
 
-LOCAL_SEARCH_ROUNDS = 50   # améliorations acceptées au plus par la recherche locale
+LOCAL_SEARCH_ROUNDS = 200  # améliorations acceptées au plus par la recherche locale
 LOCAL_SEARCH_REPLACE = True   # essai « b remplace a » en plus de « b passe devant a »
 
 
 def _local_search(team, units, order, games, used, best, score):
     """Améliore une affectation en testant les échanges un à un (score exact, postes inclus).
 
-    Les tours de optimize_team réaffectent tous les matchs d'un coup à partir de gains estimés autour du
-    total courant : un échange qui demande de libérer un poste (un arrière laissé pour faire jouer en Util
-    un ailier sans place F) peut leur échapper. Ici, chaque joueur pas ou peu aligné est essayé devant
+    Un échange peut demander de libérer un poste (un arrière laissé pour faire jouer en Util un ailier sans
+    place F) : chaque joueur pas ou peu aligné est donc essayé devant
     chacun des joueurs alignés (l'ordre de priorité de _assign, qui redistribue les postes), puis à sa
     place (le joueur remplacé passe en dernier : les matchs que le nouveau ne joue pas vont d'abord aux
     suivants, ex. Suggs à la place d'Allen et les 6 matchs libérés à Embiid), et chaque joueur aligné est
@@ -385,11 +355,12 @@ def _local_search(team, units, order, games, used, best, score):
         for b in units:
             if games.get(key(b), 0.0) >= expected(b) - 1e-6:
                 continue
-            at = order.index(b) if b in order else len(order)
+            keys = [key(u) for u in order]
+            at = keys.index(key(b)) if key(b) in keys else len(order)
             for i in positions:
                 if i >= at:
                     break
-                rest = [u for u in order[i:] if u is not b]
+                rest = [u for u in order[i:] if key(u) != key(b)]
                 tries = [order[:i] + [b] + rest]                         # b passe devant a
                 if LOCAL_SEARCH_REPLACE:                                 # b prend la place de a, qui passe en
                     tries.append(order[:i] + [b] + rest[1:] + [rest[0]])  # dernier : ses matchs vont aux suivants
