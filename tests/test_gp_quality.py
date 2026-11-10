@@ -83,3 +83,20 @@ def test_drop_unreliable_keeps_injured_players():
 
     removed = drop_unreliable(_loaded(), "lt", played=set(), min_sources=2, keep={"isole": "season"})
     assert "Isolé" not in removed and "Libre" in removed
+
+
+def test_drop_unreliable_counts_only_sources_with_an_nba_team():
+    """Kadary Richmond : 9cat (CLE, 3 matchs) + RotoWire sans équipe = une seule source qui compte."""
+    from scripts.weighting.engine import drop_unreliable
+
+    def loaded():
+        slot = {"code": "x", "weights": {"gp": 0.5, "min": 0.5, "stats": {"pts": 0.5}}}
+        nc = {7: {"player": "Kadary Richmond", "team": "CLE", "gp": 3}}
+        rw = {7: {"player": "Kadary Richmond", "team": ""}}
+        return [(dict(slot, code="nc.ros"), nc), (dict(slot, code="rw.ros"), rw)]
+
+    data = loaded()
+    assert drop_unreliable(data, "lt", played=set(), min_sources=2) == ["Kadary Richmond"]
+    assert all(7 not in d for _, d in data)
+    assert drop_unreliable(loaded(), "lt", played={7}, min_sources=2) == []          # premier match : revient
+    assert drop_unreliable(loaded(), "lt", played=set(), min_sources=1) == []        # 1 source suffit

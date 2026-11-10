@@ -176,7 +176,8 @@ match chez 9cat). Avant la pondération lt, chaque source qui donne des minutes 
   réduits dans la même proportion ; la phase st, qui reprend le GP de lt, en profite directement.
 - Phase lt : sont retirés, avant la normalisation des minutes, les joueurs sans équipe NBA (FA) et ceux
   projetés par moins de `Optim | Season | Min sources if no game played` sources (2) sans avoir joué un
-  match cette saison (joueur non signé, recrue projetée par une seule source...) ; un joueur de la liste
+  match cette saison (joueur non signé, recrue projetée par une seule source...) ; seule compte une source
+  qui donne au joueur une équipe NBA (une ligne RotoWire sans équipe ne suffit pas) ; un joueur de la liste
   des blessés est toujours gardé ; dès son premier match, le joueur revient. 0 = désactivé.
 - 9cat (étapes draft / ros) : les projections « modèles » (exactement 30 matchs et un MPG partagé par au
   moins 3 joueurs, valeurs par défaut données surtout aux recrues) sont écartées à l'import ; le joueur garde
