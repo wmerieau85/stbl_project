@@ -347,24 +347,25 @@ def played_ids(conn, season):
 def drop_unreliable(loaded, phase, played, min_sources=2, keep=None):
     """Phase lt, avant la normalisation des minutes : retire les joueurs sans équipe NBA (FA) et ceux
     projetés par moins de `min_sources` sources sans avoir joué un match cette saison (projections
-    isolées : joueur non signé, recrue projetée par une seule source...). Dès son premier match, le
+    isolées : joueur non signé, recrue projetée par une seule source...). Seule compte une source qui
+    donne au joueur une équipe NBA (une ligne sans équipe, ex. RotoWire, ne confirme pas qu'il joue en
+    NBA : Kadary Richmond, 9cat CLE 3 matchs + RotoWire sans équipe = 1 source). Dès son premier match, le
     joueur revient. Un joueur de la liste des blessés (`keep` : clés de nom) n'est jamais retiré : c'est un
     joueur NBA, gardé même absent jusqu'à la fin de saison. Modifie `loaded` en place ; retourne les noms
     retirés."""
     from scripts.names import name_key
     from scripts.season.schedule import team_code
 
-    count, teams, names = {}, {}, {}
+    count, names = {}, {}           # count : sources qui donnent au joueur une équipe NBA
     for _, data in loaded:
         for pid, row in data.items():
-            count[pid] = count.get(pid, 0) + 1
             names.setdefault(pid, row.get("player") or "")
-            team = team_code(row.get("team") or "")
-            if team not in ("", "FA"):
-                teams[pid] = team
+            count.setdefault(pid, 0)
+            if team_code(row.get("team") or "") not in ("", "FA"):
+                count[pid] += 1
     keep = keep or {}
     drop = {pid for pid in count if name_key(names[pid]) not in keep
-            and (pid not in teams or (count[pid] < min_sources and pid not in played))}
+            and (not count[pid] or (count[pid] < min_sources and pid not in played))}
     for _, data in loaded:
         for pid in drop & set(data):
             del data[pid]
