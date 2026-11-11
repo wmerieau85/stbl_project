@@ -114,3 +114,22 @@ def test_removable_rows_lists_advanced_params_at_default():
                                                     ["Optim | History", "Shrink to current weights", "50%", ""]]
     assert C.removable_rows(rows) == [("Optim | Minutes", "Team target"), ("Optim | Season", "Opponent default rate"),
                                       ("Optim | History", "Shrink to current weights")]
+
+
+class FormulaWS(FakeWS):
+    def get(self, rng, value_render_option=None):
+        return [list(r) for r in self.rows]
+
+
+def test_push_refuses_to_erase_formulas(monkeypatch):
+    import pytest
+    from scripts import sheets
+
+    written = []
+    monkeypatch.setattr(sheets, "write_tab", lambda book, tab, rows: written.append(tab))
+    ws = FormulaWS([C.HEADER, ["Moves | Compare", '=IF(board!B200="";"";"trade")', "=board!B200", ""]])
+    with pytest.raises(ValueError, match="2 formule"):
+        C.push(FakeBook(ws), "settings")
+    assert written == []
+    C.push(FakeBook(FormulaWS([C.HEADER, ["Moves | Compare", "trade", "Pierre", ""]])), "settings")
+    assert written[0] == "settings"
