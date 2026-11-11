@@ -24,6 +24,7 @@ import logging
 import math
 from collections import deque
 from dataclasses import dataclass, field
+from types import SimpleNamespace
 from datetime import timedelta
 
 import numpy as np
@@ -159,13 +160,18 @@ def project_team(manager, team_name, roster, standing, lt_pool, st_pool, games, 
 
 
 def _allocate_by_value(players, caps):
-    """Lineup « standard » : les meilleurs joueurs par match d'abord, ST puis LT, sous les plafonds."""
-    used = {b: 0.0 for b in BUCKETS}
-    left = dict(caps)
-    _allocate_period(players, "games_st_expected", "games_st_used",
-                     lambda p: p.value_st if p.value_st is not None else p.value, left, used)
-    _allocate_period(players, "games_lt_expected", "games_lt_used", lambda p: p.value, left, used)
+    """Lineup « standard » : les meilleurs joueurs par match d'abord, ST puis LT, sous les plafonds ; même
+    répartition entre postes que mon lineup (_assign : un joueur multi-postes peut changer de poste pour
+    libérer de la place)."""
+    def value_st(p):
+        return p.value_st if p.value_st is not None else p.value
+
+    st = sorted(((p, 0) for p in players if p.games_st_expected > 1e-9), key=lambda u: value_st(u[0]), reverse=True)
+    lt = sorted(((p, 1) for p in players if p.games_lt_expected > 1e-9), key=lambda u: u[0].value, reverse=True)
+    games, used = _assign(SimpleNamespace(caps=caps), st + lt)
     for pp in players:
+        pp.games_st_used = games.get((id(pp), 0), 0.0)
+        pp.games_lt_used = games.get((id(pp), 1), 0.0)
         pp.games_used = pp.games_st_used + pp.games_lt_used
         pp.totals = pp.per_game_st * pp.games_st_used + pp.per_game_lt * pp.games_lt_used
         pp.games_lost_caps = max(0.0, pp.games_expected - pp.games_used)
@@ -184,25 +190,6 @@ def apply_lineup_rate(team, rate):
         p.games_expected = p.games_st_expected + p.games_lt_expected
     team.used = _allocate_by_value(team.players, team.caps)
     team.remaining = sum((p.totals for p in team.players), np.zeros(len(STATS)))
-
-
-def _allocate_period(players, expected_attr, used_attr, value, left, used):
-    """Affecte d'abord les matchs d'une période aux meilleurs joueurs admissibles."""
-    for player in sorted(players, key=value, reverse=True):
-        need = getattr(player, expected_attr)
-        if need <= 0:
-            continue
-        got = 0.0
-        own = sorted(buckets_of(player.positions), key=lambda b: -left.get(b, 0))
-        for bucket in own + ["UTIL"]:
-            take = min(need - got, left.get(bucket, 0))
-            if take > 0:
-                left[bucket] -= take
-                used[bucket] += take
-                got += take
-            if got >= need - 1e-9:
-                break
-        setattr(player, used_attr, got)
 
 
 GAIN_TOLERANCE = 1e-9   # deux gains plus proches sont égaux ; un gain au-dessus de -tolérance est joué
