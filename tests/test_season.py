@@ -401,3 +401,18 @@ def test_optimizer_never_below_value_lineup(monkeypatch):
         team, rivals = case()
         optimize_team(team, rivals, ["pts", "stl"], [1.0, 1.0])
         assert _my_points(team, rivals) >= start - 1e-9
+
+
+def test_standard_lineup_moves_multi_position_player_to_free_a_slot():
+    """Adversaires (lineup par valeur) : le joueur G,F, servi en premier, passe en F pour laisser le poste G
+    à l'arrière pur ; aucun match perdu."""
+    from scripts.season.engine import _allocate_by_value
+
+    flexible = PlayerProjection("Flexible", "DEN", "G,F", "G", True, value=3.0)
+    guard = PlayerProjection("Guard", "DEN", "G", "G", True, value=2.0)
+    for p in (flexible, guard):
+        p.games_lt_expected = p.games_expected = 10
+    used = _allocate_by_value([flexible, guard], {"G": 10, "F": 10, "C": 0, "UTIL": 0})
+    assert flexible.games_used == guard.games_used == 10
+    assert used == {"G": 10, "F": 10, "C": 0.0, "UTIL": 0.0}
+    assert flexible.games_lost_caps == guard.games_lost_caps == 0
