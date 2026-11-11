@@ -102,7 +102,7 @@ l'éviter) : une erreur de saisie arrête le calcul avec un message, une ligne i
 ```bash
 python -m scripts.config_sheet pull      # onglets settings + players -> config/config.json
 python -m scripts.config_sheet check     # contrôle l'onglet sans rien écrire
-python -m scripts.config_sheet push      # remise à plat des onglets depuis la configuration locale
+python -m scripts.config_sheet push      # remise à plat des onglets depuis la configuration locale (refusée si settings contient des formules, sauf --force)
 python -m scripts.config_sheet complete  # ajoute à l'onglet les paramètres absents (valeur en vigueur + aide)
 ```
 

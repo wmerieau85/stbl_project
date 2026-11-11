@@ -25,7 +25,8 @@ locale ; un paramètre absent garde sa valeur. La configuration locale (config/c
 ignorée par git) n'est qu'une copie, réécrite à chaque relecture de l'onglet :
 
     python -m scripts.config_sheet pull      # onglets settings + players -> config/config.json
-    python -m scripts.config_sheet push      # config/config.json -> onglets (remise à plat)
+    python -m scripts.config_sheet push      # config/config.json -> onglets (remise à plat ; refusée si
+                                             # l'onglet contient des formules, sauf --force)
     python -m scripts.config_sheet check     # onglet lisible ? + liste des paramètres absents
     python -m scripts.config_sheet complete  # ajoute les paramètres absents (valeur en vigueur + aide)
 
@@ -884,12 +885,38 @@ def _check_tabs(spreadsheet, gs):
         log.warning("[Config] Onglets introuvables dans le classeur (Sheets | Tab) : %s", ", ".join(missing))
 
 
-def push(spreadsheet, tab=None, league=None):
-    """Configuration locale -> onglets config et alias (remise à plat). league : ignoré (compatibilité)."""
+def formula_cells(ws):
+    """Cellules de l'onglet qui contiennent une formule : [(A1, formule)]."""
+    from gspread.utils import rowcol_to_a1
+
+    out = []
+    for i, row in enumerate(ws.get("A1:D3000", value_render_option="FORMULA"), 1):
+        for j, value in enumerate(row, 1):
+            if isinstance(value, str) and value.startswith("="):
+                out.append((rowcol_to_a1(i, j), value))
+    return out
+
+
+def push(spreadsheet, tab=None, league=None, force=False):
+    """Configuration locale -> onglets config et alias (remise à plat). league : ignoré (compatibilité).
+
+    La remise à plat écrit des valeurs : elle effacerait les formules de l'onglet (ex. Moves | Compare
+    calculé depuis un autre onglet). Elle est donc refusée s'il en contient, sauf force=True."""
     from scripts.sheets import write_tab
 
     cfg, boot = load_config(), load_bootstrap()
     tab = tab or boot.get("config_tab") or "settings"
+    if not force:
+        try:
+            formulas = formula_cells(spreadsheet.worksheet(tab))
+        except Exception as exc:  # onglet absent : rien à protéger
+            log.debug("Formules de l'onglet %s non lues : %s", tab, exc)
+            formulas = []
+        if formulas:
+            raise ValueError(f"Onglet '{tab}' : {len(formulas)} formule(s) seraient effacées par la remise à plat "
+                             f"({', '.join(f'{c} {f}' for c, f in formulas[:5])}{' ...' if len(formulas) > 5 else ''}). "
+                             "Utilisez Maintenance > Compléter settings, ou relancez avec --force pour réécrire "
+                             "l'onglet quand même.")
     rows = build_rows(cfg, boot)
     write_tab(spreadsheet, tab, rows)
     alias_tab = cfg["league"].get("google_sheets", {}).get("alias_tab") or "players"
@@ -990,6 +1017,7 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description="Onglet config du classeur <-> configuration locale")
     parser.add_argument("command", choices=["pull", "push", "check", "complete"])
     parser.add_argument("-v", "--verbose", action="store_true")
+    parser.add_argument("--force", action="store_true", help="push : réécrire l'onglet même s'il contient des formules")
     args = parser.parse_args(argv)
     logging.basicConfig(level=logging.DEBUG if args.verbose else logging.INFO,
                         format="%(asctime)s %(levelname)s %(message)s", datefmt="%H:%M:%S")
@@ -1018,7 +1046,7 @@ def main(argv=None):
             added = complete(book)
             print(f"{len(added)} paramètre(s) ajouté(s) à l'onglet." if added else "Aucun paramètre absent.")
         else:
-            rows = push(book)
+            rows = push(book, force=args.force)
             print(f"Onglet '{boot.get('config_tab')}' réécrit ({len(rows) - 1} lignes).")
     except ValueError as exc:
         log.error("%s", exc)
