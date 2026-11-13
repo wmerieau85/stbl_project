@@ -180,7 +180,13 @@
       "roster_source": "yahoo",
       "opponent_model": "usage",
       "opponent_default_rate": 0.95,
-      "opponent_ramp_days": 42
+      "opponent_ramp_days": 42,
+      "midterm": {
+        "enabled": true,
+        "start_days": 15,
+        "end_days": 45,
+        "st_weight": 0.5
+      }
     },
     "minutes": {
       "enabled": true,
