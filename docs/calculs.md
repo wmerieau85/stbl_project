@@ -27,15 +27,6 @@ Détail du fonctionnement. Commandes : voir le [README](../README.md).
   tentatives par match de chaque source ; une source sans match ou à 0 réussite sans tentatives connues
   (« .000 » des pages de stats réelles FantasyPros, souvent 0/0) est ignorée. FGM = FG% × FGA, FTM = FT% × FTA.
 
-- Phase `mt` (moyen terme, **vue seulement**, `scripts/weighting/midterm.py`) : calculée après lt et st,
-  envoyée dans l'onglet `bdd` avec les autres phases, mais utilisée par aucun calcul (projection de saison,
-  lineup, mouvements). Pour chaque joueur, stats par match = `Mid-term st weight` (50 %) × st +
-  le reste × lt ; matchs = matchs de son équipe NBA du jour `Mid-term start` (15) au jour `Mid-term end` (45)
-  inclus, après son retour s'il est blessé (absent jusqu'à la fin de saison : pas de ligne), × la part des
-  matchs restants qu'il joue selon lt ; totaux = par match × matchs, pourcentages recalculés, z-scores et
-  rangs comme les autres phases. Réglages `Optim | Season | Mid-term view / start (days) / end (days) / st
-  weight`. Pas de photo dans history.sqlite (dérivée de lt et st).
-
 ## Z-scores
 
 - Groupe de référence = `teams` × taille du roster (15 × 14 = 210 joueurs) : moyenne et

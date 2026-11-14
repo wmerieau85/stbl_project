@@ -525,21 +525,11 @@ def compute_phase(phase, settings=None, grid_path=None):
         apply_injuries(results, phase, season, settings, league, availability=availability, games=games or [])
         _log_gp_filter(phase, gp_notes, results)
     _finalize_shooting(results)
-    store_phase(phase, season, results, league, grid_hash, settings)
-    full = sum(1 for r in results if (r.get("stats_coverage") or 0) > 0.999)
-    estimated = sum(r["fga_estimated"] for r in results)
-    log.info("[Pondération %s] %d joueurs calculés (%d couverts par toutes les sources, "
-             "%d avec tentatives estimées).", phase, len(results), full, estimated)
-    return len(results)
-
-
-def store_phase(phase, season, results, league, weights_hash, settings=None):
-    """Z-scores, arrondis, enregistrement dans final_projections (la phase remplace la précédente) et export."""
     add_zscores(results, league)
     computed_at = datetime.now().isoformat(timespec="seconds")
     rows = []
     for r in results:
-        r["weights_hash"] = weights_hash
+        r["weights_hash"] = grid_hash
         r["computed_at"] = computed_at
         for col in FINAL_COLUMNS:
             if col in ("fgp", "ftp", "fg3p", "gp_coverage", "min_coverage", "stats_coverage"):
@@ -557,7 +547,13 @@ def store_phase(phase, season, results, league, weights_hash, settings=None):
             f"INSERT INTO final_projections ({', '.join(FINAL_COLUMNS)}) "
             f"VALUES ({', '.join('?' for _ in FINAL_COLUMNS)})", rows,
         )
+
+    full = sum(1 for r in results if (r.get("stats_coverage") or 0) > 0.999)
+    estimated = sum(r["fga_estimated"] for r in results)
+    log.info("[Pondération %s] %d joueurs calculés (%d couverts par toutes les sources, "
+             "%d avec tentatives estimées).", phase, len(results), full, estimated)
     export_csv(phase, season, settings)
+    return len(results)
 
 
 def export_csv(phase, season, settings=None):
@@ -580,6 +576,9 @@ def run_phases(settings=None, phases=None):
     settings = settings or load_settings()
     phases = phases or settings.get("phases", {}).get(settings["active_stage"], [])
     ok = True
+    with get_connection() as conn, conn:     # phases supprimées du programme (mt : vue moyen terme retirée)
+        ensure_table(conn)
+        conn.execute("DELETE FROM final_projections WHERE phase IN ('mt')")
     for phase in phases:
         try:
             compute_phase(phase, settings)
@@ -588,12 +587,4 @@ def run_phases(settings=None, phases=None):
         except ValueError as exc:
             log.error("[Pondération %s] %s", phase, exc)
             ok = False
-    season_conf = load_league().get("season") or {}
-    if ok and (season_conf.get("lt_phase") or "lt") in phases and (season_conf.get("st_phase") or "st") in phases:
-        from scripts.weighting import midterm
-
-        try:     # vue seulement : un échec ne bloque pas la mise à jour
-            midterm.compute(settings)
-        except Exception as exc:
-            log.warning("[Pondération %s] Moyen terme non calculé : %s", midterm.PHASE, exc)
     return ok

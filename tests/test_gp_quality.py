@@ -100,3 +100,23 @@ def test_drop_unreliable_counts_only_sources_with_an_nba_team():
     assert all(7 not in d for _, d in data)
     assert drop_unreliable(loaded(), "lt", played={7}, min_sources=2) == []          # premier match : revient
     assert drop_unreliable(loaded(), "lt", played=set(), min_sources=1) == []        # 1 source suffit
+
+
+def test_run_phases_removes_retired_mt_phase(tmp_path, monkeypatch):
+    """La vue moyen terme (phase mt) a été retirée : ses lignes sont effacées de la base au calcul suivant,
+    et l'envoi vers bdd peut la retirer de l'onglet sans --drop-phases."""
+    from scripts import db
+    from scripts.draft.__main__ import RETIRED_PHASES
+    from scripts.weighting import engine
+
+    monkeypatch.setattr(db, "DB_PATH", str(tmp_path / "t.sqlite"))
+    monkeypatch.setattr(engine, "compute_phase", lambda *a, **k: 0)
+    db.init_db()
+    with db.get_connection() as conn, conn:
+        engine.ensure_table(conn)
+        conn.execute("INSERT INTO final_projections (phase, season, player_id, player) VALUES ('mt', '2026-27', 1, 'x')")
+        conn.execute("INSERT INTO final_projections (phase, season, player_id, player) VALUES ('lt', '2026-27', 1, 'x')")
+    engine.run_phases({"active_season": "2026-27", "active_stage": "ros", "phases": {"ros": ["lt", "st"]}})
+    with db.get_connection() as conn:
+        assert [r[0] for r in conn.execute("SELECT DISTINCT phase FROM final_projections")] == ["lt"]
+    assert "mt" in RETIRED_PHASES
