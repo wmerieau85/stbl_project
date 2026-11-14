@@ -576,6 +576,9 @@ def run_phases(settings=None, phases=None):
     settings = settings or load_settings()
     phases = phases or settings.get("phases", {}).get(settings["active_stage"], [])
     ok = True
+    with get_connection() as conn, conn:     # phases supprimées du programme (mt : vue moyen terme retirée)
+        ensure_table(conn)
+        conn.execute("DELETE FROM final_projections WHERE phase IN ('mt')")
     for phase in phases:
         try:
             compute_phase(phase, settings)

@@ -319,6 +319,9 @@ def watch(session):
         time.sleep(poll)
 
 
+RETIRED_PHASES = ("mt",)
+
+
 def push_projections(session=None, season=None, phase=None, drop_phases=False):
     """Écrit les projections finales de toutes les phases (draft, lt, st) dans l'onglet cible
     (bdd : C = phase, A / B = Team Draft / Team Season reportés sur les nouvelles lignes), sans toucher
@@ -340,7 +343,8 @@ def push_projections(session=None, season=None, phase=None, drop_phases=False):
     book = open_spreadsheet(gs.get("projections_spreadsheet_id") or gs.get("draft_spreadsheet_id"), settings)
     tab = gs.get("projections_tab") or "bdd"
     current = bdd.read_rows(book, gs)
-    dropped = [p for p in bdd.phases_in(current, gs) if p not in phases]
+    # phases supprimées du programme (ex. mt, vue moyen terme retirée) : retirées de l'onglet sans --drop-phases
+    dropped = [p for p in bdd.phases_in(current, gs) if p not in phases and p not in RETIRED_PHASES]
     if dropped and not drop_phases:
         raise ValueError(
             f"Onglet {tab} : phase(s) {', '.join(dropped)} présente(s) dans l'onglet mais absente(s) de la base "
