@@ -105,8 +105,6 @@ def _groups(main):
         finals = main.execute("SELECT phase, season, MAX(computed_at) FROM final_projections "
                               "GROUP BY phase, season").fetchall()
         for phase, season, as_of in finals:
-            if phase == "mt":      # vue moyen terme : dérivée de lt et st, déjà photographiées
-                continue
             rows = main.execute(
                 f"SELECT r.player_id, p.name_key, r.player, r.team, r.positions, {cols} "
                 "FROM final_projections r LEFT JOIN players p ON p.player_id = r.player_id "
