@@ -818,6 +818,17 @@ FIXED_COLUMNS = ("#", "Je cède", "Je reçois", "Valeur cédée", "Valeur reçue
                  "Effet sur mes autres joueurs", "Points projetés", "Rang projeté", "Titre (%)", "Podium (%)")
 
 
+def _move_row(i, m, manager, status, cats):
+    """Une ligne de mouvement, dans les colonnes FIXED_COLUMNS puis points et stats par catégorie."""
+    row = [i, _given(m), _names(m.recv), round(m.value_give, 1), round(m.value_recv, 1), _pct(m.value_diff),
+           round(m.my_gain, 2), round(m.partner_gain, 2) if m.partner_gain is not None else "",
+           manager, status, _games(m.recv_detail), _changes(m.lineup_changes),
+           round(m.my_points, 1), m.rank, _pct(m.p_first), _pct(m.p_podium)]
+    row += [round(float(d), 2) for d in m.cat_delta]
+    row += [_stat(c, d) for c, d in zip(cats, m.stat_delta)] if m.stat_delta is not None else []
+    return row
+
+
 def rows(out):
     """Lignes de l'onglet moves_reco."""
     from scripts.draft.pool import CATEGORY_LABELS
@@ -875,13 +886,7 @@ def rows(out):
             manager, status = partner.manager, "hors tolérance" if m.out_of_tolerance else "dans la tolérance"
         else:
             manager, status = "joueurs libres", ""
-        row = [i, _given(m), _names(m.recv), round(m.value_give, 1), round(m.value_recv, 1), _pct(m.value_diff),
-               round(m.my_gain, 2), round(m.partner_gain, 2) if m.partner_gain is not None else "",
-               manager, status, _games(m.recv_detail), _changes(m.lineup_changes),
-               round(m.my_points, 1), m.rank, _pct(m.p_first), _pct(m.p_podium)]
-        row += [round(float(d), 2) for d in m.cat_delta]
-        row += [_stat(c, d) for c, d in zip(cats, m.stat_delta)] if m.stat_delta is not None else []
-        lines.append(row)
+        lines.append(_move_row(i, m, manager, status, cats))
     lines.append([])
     lines.append(["Valeur = valeur par match au-dessus du niveau de remplacement (dernier joueur d'effectif "
                   "de la ligue, st puis lt) x matchs attendus d'ici la fin de saison, jamais négative. "
@@ -933,4 +938,144 @@ def console(out):
         text.append(f"{i:>2}. {_names(m.give)} -> {_names(m.recv)} : {m.my_gain:+.2f} pts{partner} "
                     f"(valeur {m.value_give:.1f} -> {m.value_recv:.1f}), rang {m.rank}{flag}\n"
                     f"    matchs alignés : {_games(m.recv_detail)} ; mes autres joueurs : {_changes(m.lineup_changes)}")
+    return "\n".join(text)
+
+
+# --- Simuler un mouvement (Moves | Team 1 / Team 2) ---------------------------------------------
+
+SIM_ROW = 40     # moves_reco : bloc de la simulation à partir de cette ligne (les recherches s'arrêtent avant)
+
+
+def _locate(sim, name):
+    """(indice de l'équipe, joueur) ; joueur libre : (None, joueur des projections)."""
+    key = name_key(name)
+    target = sim.ctx["lt_pool"].find(name)
+    target_key = name_key(target.name) if target is not None else None
+    for i, team in enumerate(sim.teams):
+        for p in team.players:
+            keys = _keys(p)
+            if key in keys or (target_key and target_key in keys):
+                return i, p
+    if target is None:
+        raise MovesError(f"« {name} » introuvable : ni dans un effectif, ni dans les projections.")
+    return None, target
+
+
+def _side(sim, names, label):
+    found = [_locate(sim, n) for n in names]
+    owners = {i for i, _ in found}
+    if len(owners) > 1:
+        who = ", ".join(f"{n} ({sim.teams[i].manager if i is not None else 'joueur libre'})"
+                        for n, (i, _) in zip(names, found))
+        raise MovesError(f"Moves | {label} : les joueurs doivent appartenir au même manager (ou être tous libres) : "
+                         f"{who}.")
+    players = [p for _, p in found]
+    if len({id(p) for p in players}) < len(players):
+        raise MovesError(f"Moves | {label} : le même joueur est listé deux fois.")
+    return owners.pop(), players
+
+
+def simulate_trade(result, league):
+    """Échange (ou mouvement avec des joueurs libres) saisi dans Moves | Team 1 / Team 2, entre deux
+    managers quelconques. Mon lineup est réoptimisé si mon équipe est concernée ; une autre équipe garde son
+    lineup standard (taux d'alignement). Gains et rang du point de vue de Team 1, gain de Team 2 à côté."""
+    sim = Simulator(result, league)
+    conf = (league.get("moves") or {}).get("simulate") or {}
+    names1 = [str(n).strip() for n in conf.get("team1") or [] if str(n).strip()]
+    names2 = [str(n).strip() for n in conf.get("team2") or [] if str(n).strip()]
+    if not names1 or not names2:
+        raise MovesError("Simuler un mouvement : renseignez au moins un joueur dans Moves | Team 1 et dans "
+                         "Moves | Team 2 (onglet settings).")
+    i1, give = _side(sim, names1, "Team 1")
+    i2, recv = _side(sim, names2, "Team 2")
+    if i1 is None:
+        raise MovesError("Moves | Team 1 : joueurs libres ; mettez les joueurs libres en Team 2 et les joueurs "
+                         "lâchés en Team 1.")
+    if i1 == i2:
+        raise MovesError(f"Moves | Team 1 et Team 2 : tous les joueurs sont chez {sim.teams[i1].manager}.")
+    me = sim.index(league.get("draft", {}).get("my_team"))
+    team1 = sim.teams[i1]
+    gone1 = {id(p) for p in give}
+    entries1 = [_entry(x) for x in team1.players if id(x) not in gone1]
+    entries1 += [_entry(x) for x in recv] if i2 is not None else [_fa_entry(x) for x in recv]
+    changed = {i1: entries1}
+    if i2 is not None:
+        gone2 = {id(p) for p in recv}
+        changed[i2] = [_entry(x) for x in sim.teams[i2].players if id(x) not in gone2] + [_entry(x) for x in give]
+    teams = list(sim.teams)
+    for i, entries in changed.items():
+        teams[i] = sim.rebuild(sim.teams[i], entries)
+        if i != me:
+            apply_lineup_rate(teams[i], sim.teams[i].lineup_rate)
+    if me in changed:
+        optimize_team(teams[me], [t for k, t in enumerate(teams) if k != me], sim.cats, sim.weights)
+    values = np.array([category_values(t.final, sim.cats) for t in teams])
+    points = roto_points(values, sim.cats, sim.weights)
+    received = {p.name for p in recv}
+    move = sim.move(i1, give, [x for x in teams[i1].players if x.name in received], teams, points, i2)
+    sims = int(league.get("season", {}).get("simulations", 2000))
+    proj = standings_projection(teams, sim.cats, sim.weights, sims=sims)
+    move.p_first, move.p_podium = float(proj["p_first"][i1]), float(proj["p_podium"][i1])
+    total = points.sum(axis=1)
+
+    def rank(i):
+        return 1 + int(sum(1 for k, v in enumerate(total) if k != i and v > total[i] + 1e-9))
+
+    side2 = {"manager": sim.teams[i2].manager, "before": float(sim.base_total[i2]), "after": float(total[i2]),
+             "rank_before": sim.rank_of(i2), "rank_after": rank(i2)} if i2 is not None else None
+    log.info("[Moves simulation] %s cède %s, reçoit %s%s : %+.2f pts%s.", team1.manager, _names(move.give),
+             _names(move.recv), "" if i2 is not None else " (joueurs libres)", move.my_gain,
+             f", {side2['manager']} {move.partner_gain:+.2f}" if side2 else "")
+    return {"mode": "simulate", "today": sim.ctx["today"], "categories": sim.cats, "move": move,
+            "team1": {"manager": team1.manager, "before": float(sim.base_total[i1]), "after": float(total[i1]),
+                      "rank_before": sim.rank_of(i1), "rank_after": move.rank, "is_me": i1 == me},
+            "team2": side2, "free_agents": i2 is None}
+
+
+def _status(m, out):
+    if out["free_agents"]:
+        return ""
+    t1, t2 = out["team1"]["manager"], out["team2"]["manager"]
+    if m.my_gain >= 0 and m.partner_gain >= 0:
+        return "gagnant-gagnant"
+    if m.my_gain >= 0:
+        return f"{t2} perd des points"
+    if m.partner_gain >= 0:
+        return f"{t1} perd des points"
+    return "les deux perdent des points"
+
+
+def simulation_rows(out):
+    """Bloc de l'onglet moves_reco à partir de la ligne SIM_ROW : même disposition que les recherches
+    (8 lignes d'informations, en-tête, mouvement)."""
+    from scripts.draft.pool import CATEGORY_LABELS
+
+    m, cats, t1, t2 = out["move"], out["categories"], out["team1"], out["team2"]
+    labels = [CATEGORY_LABELS.get(c, c) for c in cats]
+    other = t2["manager"] if t2 else "joueurs libres"
+    lines = [[f"Simulation d'un mouvement - au {out['today'].isoformat()}"],
+             ["Mouvement", f"{t1['manager']} cède {_names(m.give)} ; reçoit {_names(m.recv)} "
+                           f"({'de ' + other if t2 else 'joueurs libres, statut waivers non vérifié'})"],
+             ["Point de vue", f"colonnes « moi » = {t1['manager']}" + (f", « partenaire » = {other}" if t2 else "")
+              + ("" if t1["is_me"] else " (lineup standard : mon lineup n'est optimisé que pour mon équipe)")]]
+    for label, side in (("Team 1", t1), ("Team 2", t2)):
+        if side:
+            lines.append([f"{label} : {side['manager']}", f"{side['before']:.1f} pts (rang {side['rank_before']}) -> "
+                                                         f"{side['after']:.1f} pts (rang {side['rank_after']})"])
+    lines += [[] for _ in range(HEADER_ROW - 1 - len(lines))]
+    lines.append(list(FIXED_COLUMNS) + [f"{l} (pts)" for l in labels] + [f"{l} (stats)" for l in labels])
+    lines.append(_move_row(1, m, other, _status(m, out), cats))
+    return lines
+
+
+def simulation_console(out):
+    m, t1, t2 = out["move"], out["team1"], out["team2"]
+    text = [f"Simulation : {t1['manager']} cède {_names(m.give)}, reçoit {_names(m.recv)}"
+            + (f" (de {t2['manager']})" if t2 else " (joueurs libres)"),
+            f"{t1['manager']} : {t1['before']:.1f} -> {t1['after']:.1f} pts ({m.my_gain:+.2f}), "
+            f"rang {t1['rank_before']} -> {t1['rank_after']}"]
+    if t2:
+        text.append(f"{t2['manager']} : {t2['before']:.1f} -> {t2['after']:.1f} pts ({m.partner_gain:+.2f}), "
+                    f"rang {t2['rank_before']} -> {t2['rank_after']}")
+    text.append(f"Matchs alignés (reçus) : {_games(m.recv_detail)} ; autres joueurs : {_changes(m.lineup_changes)}")
     return "\n".join(text)

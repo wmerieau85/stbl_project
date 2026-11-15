@@ -226,6 +226,7 @@ MANAGERS_SECTION = "Transco | Managers"
 MOVES_PLAYER_SECTION = "Moves | Player"      # Moves | Player 1..4 : manager | joueur
 MOVES_COMPARE_SECTION = "Moves | Compare"    # trade | manager (vide = tous), free agent (anciens : manager, auto...)
 MOVES_PLAYERS = 4
+MOVES_TEAM_SECTION = "Moves | Team"          # Moves | Team 1 / 2 : Player 1..4 | joueur (Simuler un mouvement)
 ROSTER_HELP = {"G": "postes titulaires Guard", "F": "postes titulaires Forward", "C": "postes titulaires Center",
                "UTIL": "postes titulaires Util", "BN": "banc", "IL": "blessés"}
 
@@ -437,6 +438,13 @@ def build_rows(cfg=None, bootstrap=None):
         entry = listed[i - 1] if i <= len(listed) else {"manager": side, "player": ""}
         add(f"{MOVES_PLAYER_SECTION} {i}", entry["manager"], entry["player"],
             "joueurs à échanger : les miens, ou ceux du manager de Moves | Compare" if i == 1 else "")
+    simulated = moves.get("simulate") or {}
+    for side in (1, 2):
+        names = list(simulated.get(f"team{side}") or [])
+        for i in range(1, max(MOVES_PLAYERS, len(names)) + 1):
+            add(f"{MOVES_TEAM_SECTION} {side}", f"Player {i}", names[i - 1] if i <= len(names) else "",
+                ("Simuler un mouvement : joueurs cédés par une équipe (tous chez le même manager)" if side == 1
+                 else "joueurs reçus en échange (tous chez un autre manager), ou joueurs libres") if i == 1 else "")
     compare = moves.get("compare") or {}
     add(MOVES_COMPARE_SECTION, compare.get("type", ""), compare.get("manager", ""),
         "trade + manager (vide = tous) : échange autour des joueurs de Moves | Player, ou recherche auto s'il n'y "
@@ -534,7 +542,7 @@ def parse_rows(rows, cfg=None, bootstrap=None):
     roster, scoring, order, keepers, teams = {}, {}, [], {}, {}
     stages, active, windows, dirs, grids, transco = {}, {}, {}, {}, {}, {}
     players_urls = {}
-    moves_players, moves_compare = {}, None
+    moves_players, moves_compare, moves_teams = {}, None, {}
     for key, items in grouped.items():
         domain, sub = _split_section(key)
         for section, param, value in items:
@@ -566,6 +574,11 @@ def parse_rows(rows, cfg=None, bootstrap=None):
             elif key == _norm(MANAGERS_SECTION):
                 if value:
                     teams[param] = value
+            elif key in (_norm(f"{MOVES_TEAM_SECTION} 1"), _norm(f"{MOVES_TEAM_SECTION} 2")):
+                side = int(key[-1])
+                number = _norm(param).replace("player", "").strip() or "1"
+                if value:
+                    moves_teams.setdefault(f"team{side}", {})[int(_number(number, section))] = value
             elif key.startswith(_norm(MOVES_PLAYER_SECTION)):
                 number = key[len(_norm(MOVES_PLAYER_SECTION)):].strip() or "1"
                 moves_players[int(_number(number, section))] = {"manager": param, "player": value}
@@ -628,6 +641,9 @@ def parse_rows(rows, cfg=None, bootstrap=None):
         draft["keepers"] = keepers
     if teams:
         league.setdefault("yahoo", {})["teams"] = teams
+    if moves_teams:
+        league.setdefault("moves", {})["simulate"] = {
+            side: [names[n] for n in sorted(names)] for side, names in moves_teams.items()}
     if moves_players or moves_compare:
         moves = league.setdefault("moves", {})
         moves["players"] = [moves_players[n] for n in sorted(moves_players) if moves_players[n]["player"]]
@@ -942,10 +958,14 @@ def missing_rows(rows, cfg=None, bootstrap=None):
         if alias in present:
             present.add((_norm(official[0]), _norm(official[1])))
     known = {(_norm(sec), _norm(par)) for sec, par, *_ in PARAMS}
+    sections = {sec for sec, _ in present}
+    teams = {_norm(f"{MOVES_TEAM_SECTION} {side}") for side in (1, 2)}
     out = []
     for row in build_rows(cfg, bootstrap)[1:]:
         key = (_norm(row[0]), _norm(row[1]))
         if key in known and key not in present:
+            out.append(row)
+        elif key[0] in teams and key[0] not in sections:      # lignes de Simuler un mouvement, à saisir
             out.append(row)
     return out
 

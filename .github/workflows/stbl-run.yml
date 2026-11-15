@@ -25,6 +25,7 @@ on:
           - yahoo_stats
           - season_update
           - season_moves
+          - season_simulate
           - season_all
           - history_snapshot
           - sources_accuracy

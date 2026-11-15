@@ -144,7 +144,7 @@ def compute(settings, league, today=None, book=None, roster_source=None):
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description="Module saison STBL")
-    parser.add_argument("command", choices=["update", "moves"])
+    parser.add_argument("command", choices=["update", "moves", "simulate"])
     parser.add_argument("--no-sheet", action="store_true", help="ne pas écrire dans Google Sheets")
     parser.add_argument("--date", help="date de calcul AAAA-MM-JJ (défaut : aujourd'hui)")
     parser.add_argument("--rosters", choices=["yahoo", "sheet"],
@@ -170,6 +170,8 @@ def main(argv=None):
         return 1
     if args.command == "moves":
         return _moves(result, settings, league, book)
+    if args.command == "simulate":
+        return _simulate(result, settings, league, book)
     season_rows = report.season_rows(result, league)
     roster_rows = report.roster_rows(result)
     os.makedirs(EXPORTS_DIR, exist_ok=True)
@@ -201,9 +203,35 @@ def _moves(result, settings, league, book):
     with open(path, "w", encoding="utf-8-sig", newline="") as fh:
         csv.writer(fh, delimiter=";").writerows(rows)
     if book is not None:
-        from scripts.sheets import write_tab
-        write_tab(book, league.get("google_sheets", {}).get("moves_reco_tab") or "moves_reco", rows)
+        from scripts.sheets import write_rows
+        if len(rows) >= moves.SIM_ROW:
+            log.warning("[Moves] %d lignes : tronquées à %d pour laisser la place au bloc Simuler un mouvement "
+                        "(ligne %d) ; réduisez Optim | Moves | Max results.", len(rows), moves.SIM_ROW - 1,
+                        moves.SIM_ROW)
+        write_rows(book, league.get("google_sheets", {}).get("moves_reco_tab") or "moves_reco", rows,
+                   1, moves.SIM_ROW - 1)
     print(moves.console(out))
+    return 0
+
+
+def _simulate(result, settings, league, book):
+    """Simuler un mouvement (Moves | Team 1 / Team 2) : bloc de moves_reco à partir de la ligne SIM_ROW."""
+    from scripts.season import moves
+
+    try:
+        out = moves.simulate_trade(result, league)
+    except moves.MovesError as exc:
+        log.error("%s", exc)
+        return 1
+    rows = moves.simulation_rows(out)
+    os.makedirs(EXPORTS_DIR, exist_ok=True)
+    path = os.path.join(EXPORTS_DIR, f"moves_simulation_{settings['active_season']}.csv")
+    with open(path, "w", encoding="utf-8-sig", newline="") as fh:
+        csv.writer(fh, delimiter=";").writerows(rows)
+    if book is not None:
+        from scripts.sheets import write_rows
+        write_rows(book, league.get("google_sheets", {}).get("moves_reco_tab") or "moves_reco", rows, moves.SIM_ROW)
+    print(moves.simulation_console(out))
     return 0
 
 

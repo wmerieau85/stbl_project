@@ -170,6 +170,34 @@ def write_block(spreadsheet, tab, rows, first_col="A", last_col=None):
     return ws
 
 
+def write_rows(spreadsheet, tab, rows, first_row=1, last_row=None):
+    """Écrit `rows` à partir de la ligne first_row en vidant d'abord les lignes first_row à last_row
+    (None = jusqu'en bas) sur toute la largeur : le reste de l'onglet n'est pas touché (onglet créé s'il
+    n'existe pas). Les lignes au-delà de last_row sont tronquées."""
+    import gspread
+    from gspread.utils import rowcol_to_a1
+
+    if last_row is not None:
+        rows = rows[:max(0, last_row - first_row + 1)]
+    width = max((len(r) for r in rows), default=1)
+    rows = [[_cell(v) for v in list(r) + [""] * (width - len(r))] for r in rows]
+    try:
+        ws = spreadsheet.worksheet(tab)
+    except gspread.WorksheetNotFound:
+        ws = spreadsheet.add_worksheet(title=tab, rows=max(first_row + len(rows) + 10, 100), cols=max(width, 26))
+    need_rows = max(first_row + len(rows) - 1, last_row or 0)
+    if ws.row_count < need_rows or ws.col_count < width:
+        ws.resize(rows=max(ws.row_count, need_rows), cols=max(ws.col_count, width))
+    end = last_row if last_row is not None else ws.row_count
+    if end >= first_row:
+        ws.batch_clear([f"{rowcol_to_a1(first_row, 1)}:{rowcol_to_a1(end, max(ws.col_count, width))}"])
+    if rows:
+        ws.update(values=rows, range_name=rowcol_to_a1(first_row, 1), value_input_option="RAW")
+    log.info("[Sheets] Onglet '%s', lignes %d à %s mises à jour (%d lignes).", tab, first_row,
+             last_row if last_row is not None else "la fin", len(rows))
+    return ws
+
+
 def rename_tab(spreadsheet, old, new):
     """Renomme l'onglet `old` en `new` s'il existe et que `new` n'existe pas encore. True si renommé."""
     import gspread
