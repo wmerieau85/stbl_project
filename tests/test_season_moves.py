@@ -416,3 +416,74 @@ def test_trade_without_players_runs_the_auto_search():
 def test_compare_trade_setting_is_read():
     cfg, _ = C.parse_rows(C.build_rows() + [["Moves | Compare", "Trade", "Pierre"]])
     assert cfg["league"]["moves"]["compare"] == {"type": "trade", "manager": "Pierre"}
+
+
+# --- Simuler un mouvement (Moves | Team 1 / Team 2) ---------------------------------------------
+
+def _sim_league(team1, team2):
+    league = _league([], {})
+    league["moves"]["simulate"] = {"team1": team1, "team2": team2}
+    return league
+
+
+def test_simulated_trade_matches_the_trade_search():
+    """Moi cède B contre C (Rival) : même gain que l'échange équivalent de la recherche manager."""
+    league = _sim_league(["B"], ["C"])
+    out = moves.simulate_trade(_result(league), league)
+    m = out["move"]
+    assert out["team1"]["manager"] == "Moi" and out["team2"]["manager"] == "Rival" and out["team1"]["is_me"]
+    ref = _league(["B"], {"type": "manager", "manager": "Rival"})
+    best = next(x for x in moves.simulate(_result(ref), ref)["moves"] if _names(x.recv) == ["C"])
+    assert m.my_gain == pytest.approx(best.my_gain) and m.partner_gain == pytest.approx(best.partner_gain)
+    assert out["team1"]["after"] - out["team1"]["before"] == pytest.approx(m.my_gain)
+
+
+def test_simulated_trade_between_two_other_managers():
+    league = _sim_league(["C"], ["E"])
+    out = moves.simulate_trade(_result(league), league)
+    assert (out["team1"]["manager"], out["team2"]["manager"], out["team1"]["is_me"]) == ("Rival", "Autre", False)
+    assert _names(out["move"].give) == ["C"] and _names(out["move"].recv) == ["E"]
+    assert out["team2"]["after"] - out["team2"]["before"] == pytest.approx(out["move"].partner_gain)
+
+
+def test_simulated_free_agent_move_and_uneven_trade():
+    league = _sim_league(["B"], ["G"])                        # G, H : joueurs libres
+    out = moves.simulate_trade(_result(league), league)
+    assert out["free_agents"] and out["team2"] is None and out["move"].partner_gain is None
+    auto = _league([], {"type": "auto free agent", "manager": ""})
+    best = moves.simulate(_result(auto), auto)["moves"][0]
+    assert (_names(best.give), _names(best.recv)) == (["B"], ["G"])
+    assert out["move"].my_gain == pytest.approx(best.my_gain)
+    league = _sim_league(["A", "B"], ["C"])                   # 2 contre 1
+    out = moves.simulate_trade(_result(league), league)
+    assert _names(out["move"].give) == ["A", "B"] and _names(out["move"].recv) == ["C"]
+
+
+@pytest.mark.parametrize("team1,team2,message", [
+    ([], ["C"], "au moins un joueur"),
+    (["A", "C"], ["E"], "même manager"),
+    (["A"], ["B"], "tous les joueurs sont chez Moi"),
+    (["G"], ["A"], "joueurs libres"),
+    (["A", "A"], ["C"], "listé deux fois"),
+    (["A"], ["Inconnu Total"], "introuvable"),
+])
+def test_simulated_trade_errors(team1, team2, message):
+    league = _sim_league(team1, team2)
+    with pytest.raises(moves.MovesError, match=message):
+        moves.simulate_trade(_result(league), league)
+
+
+def test_simulation_block_layout():
+    league = _sim_league(["B"], ["C"])
+    rows = moves.simulation_rows(moves.simulate_trade(_result(league), league))
+    assert rows[moves.HEADER_ROW - 1][:len(moves.FIXED_COLUMNS)] == list(moves.FIXED_COLUMNS)
+    row = rows[moves.HEADER_ROW]
+    assert row[:3] == [1, "B", "C"] and row[8] == "Rival" and len(row) == len(rows[moves.HEADER_ROW - 1])
+    assert rows[0][0].startswith("Simulation d'un mouvement") and moves.SIM_ROW > moves.HEADER_ROW + 25
+
+
+def test_simulation_settings_rows():
+    cfg, _ = C.parse_rows(C.build_rows() + [["Moves | Team 1", "Player 1", "Kris Dunn"],
+                                            ["Moves | Team 1", "Player 3", "Jalen Suggs"],
+                                            ["Moves | Team 2", "Player 1", "Tyler Herro"]])
+    assert cfg["league"]["moves"]["simulate"] == {"team1": ["Kris Dunn", "Jalen Suggs"], "team2": ["Tyler Herro"]}

@@ -42,7 +42,26 @@ par le module rotation.
 
 ### Simulation de mouvements (moves_reco)
 
-`python -m scripts.season moves` (option `--no-sheet` : console + `exports/moves_reco_<saison>.csv`).
+`python -m scripts.season moves` (menu Saison > Optim Moves ; option `--no-sheet` : console +
+`exports/moves_reco_<saison>.csv`) : recherches, lignes 1 à 39 de l'onglet.
+
+`python -m scripts.season simulate` (menu Saison > Simuler un mouvement ; export
+`exports/moves_simulation_<saison>.csv`) : un mouvement précis, saisi dans l'onglet settings :
+
+| Ligne | Colonne 2 | Colonne 3 |
+|---|---|---|
+| `Moves | Team 1` | `Player 1` à `Player 4` | joueurs cédés, tous chez le même manager (n'importe lequel, pas forcément le mien) |
+| `Moves | Team 2` | `Player 1` à `Player 4` | joueurs reçus en échange, tous chez un autre manager, ou joueurs libres (dans aucun effectif) |
+
+Le manager de chaque côté est retrouvé d'après ses joueurs ; échange déséquilibré possible (2 contre 1...,
+place dans l'effectif non vérifiée). Les deux effectifs sont modifiés : mon lineup est réoptimisé si mon
+équipe est concernée, une autre équipe garde son lineup standard (taux d'alignement). Résultat dans
+`moves_reco` **à partir de la ligne 40** (Optim Moves n'écrit que les lignes 1 à 39, Simuler un mouvement
+que les lignes 40 et suivantes : les deux blocs cohabitent) : 8 lignes d'informations (mouvement, points
+et rang de chaque équipe avant / après), en-tête en ligne 48 et le mouvement en ligne 49, dans les mêmes
+colonnes que les recherches, du point de vue de Team 1 (« moi » = Team 1, « partenaire » = Team 2 ;
+statut gagnant-gagnant ou équipe qui perd des points). « Compléter settings » ajoute les 8 lignes si elles
+manquent.
 
 Disposition de l'onglet identique pour tous les types (échanges ou joueurs libres, avec ou sans joueur saisi),
 pour qu'un autre onglet puisse le lire par formules : lignes 1 à 8 = informations sur la recherche (hauteur

@@ -27,7 +27,8 @@ var LABELS = {
   yahoo_rosters: 'Yahoo > MàJ rosters',
   yahoo_stats: 'Yahoo > Standings + Team Log',
   season_update: 'Saison > Projections',
-  season_moves: 'Saison > Moves',
+  season_moves: 'Saison > Optim Moves',
+  season_simulate: 'Saison > Simuler un mouvement',
   season_all: 'Saison > Tout mettre à jour',
   history_snapshot: 'Maintenance > Photo des sources',
   sources_accuracy: 'Maintenance > Pertinence des sources',
@@ -54,7 +55,8 @@ function onOpen() {
       .addItem('Standings + Team Log', 'run_yahoo_stats'))
     .addSubMenu(ui.createMenu('Saison')
       .addItem('Projections', 'run_season_update')
-      .addItem('Moves', 'run_season_moves')
+      .addItem('Optim Moves', 'run_season_moves')
+      .addItem('Simuler un mouvement', 'run_season_simulate')
       .addItem('Tout mettre à jour', 'run_season_all'))
     .addSubMenu(ui.createMenu('Maintenance')
       .addItem('Contrôle settings', 'run_settings_check')
@@ -84,6 +86,7 @@ function run_yahoo_rosters() { launch_('yahoo_rosters'); }
 function run_yahoo_stats() { launch_('yahoo_stats'); }
 function run_season_update() { launch_('season_update'); }
 function run_season_moves() { launch_('season_moves'); }
+function run_season_simulate() { launch_('season_simulate'); }
 function run_season_all() { launch_('season_all'); }
 function run_history_snapshot() { launch_('history_snapshot'); }
 function run_sources_accuracy() { launch_('sources_accuracy'); }
