@@ -202,6 +202,8 @@
       "auto_per_manager": 5,
       "auto_min_partner_gain": 0.0,
       "min_gain": 0.25,
+      "value_basis": "perceived",
+      "perceived_min_games": 5,
       "players": [],
       "compare": {}
     },
