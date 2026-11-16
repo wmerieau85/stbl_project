@@ -178,6 +178,11 @@ PARAMS = [
      "recherche auto : gain roto minimum de l'autre manager (0 = il ne perd rien, il a intérêt à accepter)"),
     ("Optim | Moves", "Min gain", "league", "moves.min_gain", "float",
      "recherches auto (échanges, joueurs libres) : gain roto minimum pour afficher un mouvement (0,25 pt)"),
+    ("Optim | Moves", "Value basis", "league", "moves.value_basis", "choice:perceived,projected",
+     "équilibre des échanges (Value tolerance) : perceived = valeur vue par les managers (moyenne réelle de la "
+     "saison x matchs à venir), projected = nos projections ; mon gain reste toujours calculé sur les projections"),
+    ("Optim | Moves", "Perceived min games", "league", "moves.perceived_min_games", "int",
+     "valeur perçue : en dessous de ce nombre de matchs joués, moyenne réelle mélangée à la projection"),
     ("Optim | Moves", "Free agent results", "league", "moves.fa_results", "int",
      "joueurs libres : options affichées"),
     ("Optim | Moves", "Free agent shortlist", "league", "moves.fa_shortlist", "int",
@@ -356,7 +361,8 @@ ADVANCED = {
     ("Optim | Minutes", p) for p in ("Team target", "Protected players", "Rotation size", "Deep bench floor",
                                      "Min real games", "Max cut per player")
 } | {
-    ("Optim | Moves", p) for p in ("Min results", "Auto shortlist", "Auto min partner gain", "Free agent shortlist")
+    ("Optim | Moves", p) for p in ("Min results", "Auto shortlist", "Auto min partner gain", "Free agent shortlist",
+                                   "Perceived min games")
 } | {
     ("Optim | History", p) for p in ("Projections interval (days)", "Stats interval (days)", "Retention (seasons)",
                                      "Shrink to current weights")

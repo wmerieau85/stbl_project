@@ -69,7 +69,7 @@ fixe), en-tête en ligne 9, propositions à partir de la ligne 10, toujours dans
 
 | A | B | C | D | E | F | G | H | I | J | K | L | M | N | O | P | Q... |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| # | Je cède (ou lâche) | Je reçois (ou ajoute) | Valeur cédée | Valeur reçue | Écart valeur (%) | Gain roto (moi) | Gain roto (partenaire, vide pour les joueurs libres) | Manager (« joueurs libres ») | Statut (gagnant-gagnant, il perd des points, dans / hors tolérance ; vide pour les joueurs libres) | Matchs alignés (reçus) | Effet sur mes autres joueurs | Points projetés | Rang projeté | Titre (%) | Podium (%) | points puis stats par catégorie |
+| # | Je cède (ou lâche) | Je reçois (ou ajoute) | Valeur cédée | Valeur reçue | Écart valeur (%) | Gain roto (moi) | Gain roto (partenaire, vide pour les joueurs libres) | Manager (« joueurs libres ») | Statut (gagnant-gagnant, il perd des points, dans / hors tolérance ; vide pour les joueurs libres) | Matchs alignés (reçus) | Effet sur mes autres joueurs | Points projetés | Rang projeté | Titre (%) | Podium (%) | points puis stats par catégorie, puis Valeur perçue cédée / reçue / Écart perçu (%) |
 Réglages dans l'onglet settings :
 
 | Ligne | Colonne 2 | Colonne 3 |
@@ -81,6 +81,7 @@ Réglages dans l'onglet settings :
 Anciens types toujours acceptés : `manager` (= `trade` avec joueurs), `auto` (recherche d'échanges, lignes
 `Moves | Player` ignorées), `auto free agent` (recherche de joueurs libres, lignes ignorées).
 | `Optim | Moves` | `Value tolerance` | écart de valeur accepté, 10 % par défaut |
+| `Optim | Moves` | `Value basis` / `Perceived min games` | `perceived` / 5 : valeur sur laquelle se juge l'équilibre d'un échange. **Perçue** = ce que voient les managers : moyenne réelle de la saison par match (phase `season`) au-dessus du niveau de remplacement × matchs à venir (blessure actuelle comprise ; les matchs déjà manqués ne pénalisent pas un joueur revenu), mélangée à la projection par match sous 5 matchs joués. `projected` = nos projections (ancien comportement). Mon gain reste toujours calculé sur les projections ; les colonnes D-F affichent la valeur projetée, les 3 dernières la valeur perçue. |
 | `Optim | Moves` | `Max results` / `Min results` / `Free agent results` / `Free agent shortlist` | 20 / 10 / 6 / 15 |
 | `Optim | Moves` | `Auto max players` / `Auto shortlist` / `Auto per manager` / `Auto min partner gain` | 2 / 40 / 5 / 0 |
 | `Optim | Moves` | `Min gain` | 0,25 pt roto : gain minimum d'un mouvement affiché par les recherches auto (`auto`, `auto free agent`) ; en dessous, deux lineups presque équivalents (un joueur lâché qui ne jouait pas) donnent un gain sans intérêt |

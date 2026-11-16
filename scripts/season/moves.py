@@ -85,6 +85,10 @@ class Move:
     stat_delta: np.ndarray = None    # écart de mes stats finales par catégorie (FG% en fraction, REB en unités...)
     lineup_changes: list = field(default_factory=list)   # [(nom, écart de matchs alignés)] mes autres joueurs
     out_of_tolerance: bool = False
+    trade_give: float = 0.0          # valeur servant à l'équilibre de l'échange (perçue, ou projetée)
+    trade_recv: float = 0.0
+    perceived_give: float | None = None   # valeur perçue (affichage), sans données réelles : None
+    perceived_recv: float | None = None
     p_first: float | None = None
     p_podium: float | None = None
     partner_name: str = ""
@@ -95,6 +99,11 @@ class Move:
     @property
     def value_diff(self):
         return _value_diff(self.value_give, self.value_recv)
+
+    @property
+    def trade_diff(self):
+        """Écart de valeur vu par les managers (Value basis) : équilibre de l'échange."""
+        return _value_diff(self.trade_give, self.trade_recv)
 
 
 def replacement_level(pool, rostered):
@@ -154,9 +163,38 @@ class Simulator:
         rostered = sum(len(t.players) for t in self.teams)
         self.repl_lt = replacement_level(self.ctx["lt_pool"], rostered) or 0.0
         self.repl_st = replacement_level(self.ctx["st_pool"], rostered)
+        conf = league.get("moves") or {}
+        self.basis = str(conf.get("value_basis") or PERCEIVED).strip().lower()
+        self.min_games = max(1, int(conf.get("perceived_min_games", 5) or 5))
+        season_pool = self.ctx.get("season_pool")
+        self.repl_real = replacement_level(season_pool, rostered) if season_pool is not None else None
+        self.real = {name_key(pl.name): pl for pl in season_pool.players} if season_pool is not None else {}
 
     def value(self, p):
+        """Valeur projetée (mon intérêt) : st puis lt, au-dessus du niveau de remplacement."""
         return player_value(p, self.repl_lt, self.repl_st)
+
+    def perceived(self, p):
+        """Valeur vue par les managers : production réelle par match de la saison (phase season, comme les
+        moyennes Yahoo) x matchs à venir. Les matchs déjà manqués ne comptent pas (un joueur revenu de
+        blessure est coté sur ce qu'il produit), une blessure actuelle si (matchs à venir de la phase lt).
+        Moins de Perceived min games matchs joués : moyenne réelle mélangée à la projection par match."""
+        if not p.found or not p.p_play:
+            return 0.0
+        projected = p.value - self.repl_lt
+        real = self.real.get(name_key(p.name)) or self.real.get(name_key(p.display or ""))
+        if real is not None and (real.gp or 0) > 0 and self.repl_real is not None:
+            weight = min(1.0, (real.gp or 0) / self.min_games)
+            per_game = weight * (real.value_avg - self.repl_real) + (1 - weight) * projected
+        else:
+            per_game = projected
+        return max(0.0, per_game * (p.games_st_sched + p.games_lt_sched) * p.p_play)
+
+    def trade_value(self, p):
+        """Valeur pour l'équilibre d'un échange (Optim | Moves | Value basis) : perçue, sinon projetée."""
+        if self.basis == PERCEIVED and self.repl_real is not None:
+            return self.perceived(p)
+        return self.value(p)
 
     def index(self, manager):
         for i, t in enumerate(self.teams):
@@ -212,11 +250,17 @@ class Simulator:
         changes = sorted(((x.display or x.name, x.games_used - before[x.name]) for x in mine
                           if x.name in before and x.name not in received and x.name not in given
                           and abs(x.games_used - before[x.name]) >= 1.0), key=lambda c: c[1])
-        return Move(give, recv, sum(self.value(p) for p in give), sum(self.value(p) for p in recv),
+        move = Move(give, recv, sum(self.value(p) for p in give), sum(self.value(p) for p in recv),
                     float(total[me]), float(total[me] - self.base_total[me]), partner_gain, rank,
                     points[me] - self.base_points[me], teams, recv_games=sum(d[1] for d in detail),
                     recv_detail=detail, lineup_changes=changes,
                     stat_delta=category_values(teams[me].final, self.cats) - self.base_values[me])
+        move.trade_give = sum(self.trade_value(p) for p in give)
+        move.trade_recv = sum(self.trade_value(p) for p in recv)
+        if self.repl_real is not None:
+            move.perceived_give = sum(self.perceived(p) for p in give)
+            move.perceived_recv = sum(self.perceived(p) for p in recv)
+        return move
 
     def rank_of(self, me):
         total = self.base_total
@@ -356,10 +400,14 @@ def min_move_gain(conf):
     return max(value, 1e-6)
 
 
+PERCEIVED, PROJECTED = "perceived", "projected"     # Optim | Moves | Value basis
+PERCEIVED_COLUMNS = ("Valeur perçue cédée", "Valeur perçue reçue", "Écart perçu (%)")
+
+
 def display_order(m):
     """Ordre d'affichage des échanges : meilleur gain roto pour moi d'abord (arrondi au centième de point),
     puis, à gain égal, le plus équitable (plus petit écart de valeur)."""
-    return (-round(m.my_gain, 2), abs(m.value_diff))
+    return (-round(m.my_gain, 2), abs(m.trade_diff))
 
 
 def _trades(sim, me, p, conf):
@@ -377,7 +425,7 @@ def _trades(sim, me, p, conf):
     candidates = []
     for combo in itertools.combinations(pool_team.players, k):
         give, recv = (fixed, list(combo)) if p["mine"] else (list(combo), fixed)
-        vg, vr = sum(sim.value(x) for x in give), sum(sim.value(x) for x in recv)
+        vg, vr = sum(sim.trade_value(x) for x in give), sum(sim.trade_value(x) for x in recv)
         candidates.append((abs(_value_diff(vg, vr)), give, recv))
     candidates.sort(key=lambda c: c[0])
 
@@ -564,8 +612,8 @@ def _screen(sim, me, partner, max_players, tolerance, batch=4000):
         gives, recvs = _combos(my_players, k), _combos(their_players, k)
         if not gives or not recvs:
             continue
-        vg = np.array([sum(sim.value(x) for x in c) for c in gives])
-        vr = np.array([sum(sim.value(x) for x in c) for c in recvs])
+        vg = np.array([sum(sim.trade_value(x) for x in c) for c in gives])
+        vr = np.array([sum(sim.trade_value(x) for x in c) for c in recvs])
         scale = np.maximum(np.abs(vg)[:, None], np.abs(vr)[None, :])
         diff = np.where(scale < 1e-9, 1.0, np.abs(vr[None, :] - vg[:, None]) / np.where(scale < 1e-9, 1, scale))
         gi, ri = np.nonzero(diff <= tolerance + 1e-9)
@@ -653,7 +701,7 @@ def _auto(sim, me, p, conf):
             key = _core(sim, me, move)
             kept = target.get(key)
             # même effet pour moi : on garde le plus équitable (le remplissage sert à équilibrer)
-            if kept is None or (abs(move.value_diff), -move.my_gain) < (abs(kept.value_diff), -kept.my_gain):
+            if kept is None or (abs(move.trade_diff), -move.my_gain) < (abs(kept.trade_diff), -kept.my_gain):
                 target[key] = move
         if len(best) >= minimum:
             break
@@ -825,8 +873,18 @@ def _move_row(i, m, manager, status, cats):
            manager, status, _games(m.recv_detail), _changes(m.lineup_changes),
            round(m.my_points, 1), m.rank, _pct(m.p_first), _pct(m.p_podium)]
     row += [round(float(d), 2) for d in m.cat_delta]
-    row += [_stat(c, d) for c, d in zip(cats, m.stat_delta)] if m.stat_delta is not None else []
+    row += [_stat(c, d) for c, d in zip(cats, m.stat_delta)] if m.stat_delta is not None else [""] * len(cats)
+    if m.perceived_give is not None:
+        row += [round(m.perceived_give, 1), round(m.perceived_recv, 1), _pct(_value_diff(m.perceived_give, m.perceived_recv))]
+    else:
+        row += ["", "", ""]
     return row
+
+
+def _header(labels):
+    """En-tête des mouvements : colonnes fixes, points puis stats par catégorie, valeurs perçues."""
+    return list(FIXED_COLUMNS) + [f"{l} (pts)" for l in labels] + [f"{l} (stats)" for l in labels] + \
+        list(PERCEIVED_COLUMNS)
 
 
 def rows(out):
@@ -869,7 +927,7 @@ def rows(out):
     lines.append(["Sans mouvement", base])
     # bloc d'informations de hauteur fixe : l'en-tête du tableau est toujours sur la même ligne
     lines += [[] for _ in range(HEADER_ROW - 1 - len(lines))]
-    lines.append(list(FIXED_COLUMNS) + [f"{l} (pts)" for l in labels] + [f"{l} (stats)" for l in labels])
+    lines.append(_header(labels))
     if not out["moves"] and auto:
         lines.append(["", "aucun échange gagnant-gagnant : élargissez la tolérance (Optim | Moves | Value "
                           "tolerance), Auto max players ou Auto shortlist, ou baissez Auto min partner gain"])
@@ -888,6 +946,10 @@ def rows(out):
             manager, status = "joueurs libres", ""
         lines.append(_move_row(i, m, manager, status, cats))
     lines.append([])
+    lines.append(["Valeur perçue (3 dernières colonnes) = moyenne réelle de la saison par match au-dessus du niveau de "
+                  "remplacement x matchs à venir (blessure actuelle comprise, matchs déjà manqués non comptés) : ce que "
+                  "voient les managers ; l'équilibre des échanges (Value tolerance) se juge sur elle (Optim | Moves | "
+                  "Value basis), mon gain toujours sur les projections."])
     lines.append(["Valeur = valeur par match au-dessus du niveau de remplacement (dernier joueur d'effectif "
                   "de la ligue, st puis lt) x matchs attendus d'ici la fin de saison, jamais négative. "
                   "Matchs alignés (reçus) = matchs que mon lineup optimisé donnerait à chaque joueur reçu, sur ses "
@@ -1063,7 +1125,7 @@ def simulation_rows(out):
             lines.append([f"{label} : {side['manager']}", f"{side['before']:.1f} pts (rang {side['rank_before']}) -> "
                                                          f"{side['after']:.1f} pts (rang {side['rank_after']})"])
     lines += [[] for _ in range(HEADER_ROW - 1 - len(lines))]
-    lines.append(list(FIXED_COLUMNS) + [f"{l} (pts)" for l in labels] + [f"{l} (stats)" for l in labels])
+    lines.append(_header(labels))
     lines.append(_move_row(1, m, other, _status(m, out), cats))
     return lines
 

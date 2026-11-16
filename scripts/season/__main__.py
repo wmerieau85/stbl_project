@@ -139,7 +139,9 @@ def compute(settings, league, today=None, book=None, roster_source=None):
             "my_team": league["draft"].get("my_team"), "unknown": unknown, "league_rate": league_rate,
             "weights": weights,
             "context": {"lt_pool": lt_pool, "st_pool": st_pool, "games": games, "today": today, "horizon": horizon,
-                        "league": league}}
+                        "league": league,
+                        # stats réelles de la saison : valeur perçue des joueurs (équilibre des échanges)
+                        "season_pool": _pool(season, conf.get("season_phase", "season"))}}
 
 
 def main(argv=None):

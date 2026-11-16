@@ -313,8 +313,8 @@ def test_auto_free_agent_setting_is_read():
 def test_display_order_gain_first_then_balance():
     from types import SimpleNamespace as M
 
-    rows = [M(name="équitable", my_gain=2.004, value_diff=0.01), M(name="gros gain", my_gain=3.0, value_diff=-0.09),
-            M(name="déséquilibré", my_gain=2.0, value_diff=0.08)]
+    rows = [M(name="équitable", my_gain=2.004, trade_diff=0.01), M(name="gros gain", my_gain=3.0, trade_diff=-0.09),
+            M(name="déséquilibré", my_gain=2.0, trade_diff=0.08)]
     # gains égaux au centième (2,004 et 2,0) : départagés par l'écart de valeur
     assert [m.name for m in sorted(rows, key=moves.display_order)] == ["gros gain", "équitable", "déséquilibré"]
 
@@ -487,3 +487,61 @@ def test_simulation_settings_rows():
                                             ["Moves | Team 1", "Player 3", "Jalen Suggs"],
                                             ["Moves | Team 2", "Player 1", "Tyler Herro"]])
     assert cfg["league"]["moves"]["simulate"] == {"team1": ["Kris Dunn", "Jalen Suggs"], "team2": ["Tyler Herro"]}
+
+
+# --- Valeur perçue (Optim | Moves | Value basis) ------------------------------------------------
+
+def _real_pool(gp_a=10):
+    """Stats réelles de la saison : A bien meilleur que projeté (9 contre 5), C moins bon (2 contre 9)."""
+    real = {"A": 9, "B": 2, "C": 2, "D": 3, "E": 6, "F": 5, "G": 4, "H": 1}
+    players = [_player(i, n, v) for i, (n, v) in enumerate(real.items())]
+    players[0].gp = gp_a
+    return Pool(players)
+
+
+def _perceived_sim(basis="perceived", gp_a=10):
+    league = _league(["B"], {"type": "manager", "manager": "Rival"})
+    league["moves"]["value_basis"] = basis
+    result = _result(league)
+    result["context"]["season_pool"] = _real_pool(gp_a)
+    return moves.Simulator(result, league), result
+
+
+def test_perceived_value_real_per_game_times_games_ahead():
+    sim, result = _perceived_sim()
+    a = sim.find_on(result["teams"][0], "A")
+    c = sim.find_on(result["teams"][1], "C")
+    # remplacement : 6e valeur (6 joueurs dans les effectifs) = 3 en projeté, 2 en réel
+    assert sim.value(a) == pytest.approx((5 - 3) * 10) and sim.perceived(a) == pytest.approx((9 - 2) * 10)
+    assert sim.value(c) == pytest.approx((9 - 3) * 10) and sim.perceived(c) == pytest.approx(0.0)
+    assert sim.trade_value(a) == sim.perceived(a)
+    sim, result = _perceived_sim(gp_a=2)                       # 2 matchs sur 5 : 40 % réel, 60 % projeté
+    a = sim.find_on(result["teams"][0], "A")
+    assert sim.perceived(a) == pytest.approx((0.4 * 7 + 0.6 * 2) * 10)
+
+
+def test_projected_basis_and_no_real_data_keep_projected_values():
+    sim, result = _perceived_sim("projected")
+    a = sim.find_on(result["teams"][0], "A")
+    assert sim.trade_value(a) == sim.value(a)
+    league = _league(["B"], {"type": "manager", "manager": "Rival"})
+    plain = moves.Simulator(_result(league), league)          # pas de phase season : valeur projetée
+    a = plain.find_on(plain.teams[0], "A")
+    assert plain.trade_value(a) == plain.value(a)
+
+
+def test_perceived_values_shown_at_the_end_of_each_row():
+    sim, result = _perceived_sim()
+    league = sim.league
+    out = moves.simulate(result, league)
+    rows = moves.rows(out)
+    header, first = rows[moves.HEADER_ROW - 1], rows[moves.HEADER_ROW]
+    assert header[-3:] == list(moves.PERCEIVED_COLUMNS) and len(first) == len(header)
+    m = out["moves"][0]
+    assert first[-3:-1] == [round(m.perceived_give, 1), round(m.perceived_recv, 1)]
+    assert header[:len(moves.FIXED_COLUMNS)] == list(moves.FIXED_COLUMNS)    # colonnes fixes inchangées
+
+
+def test_value_basis_setting():
+    cfg, _ = C.parse_rows(C.build_rows() + [["Optim | Moves", "Value basis", "projected"]])
+    assert cfg["league"]["moves"]["value_basis"] == "projected"
