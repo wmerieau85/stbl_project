@@ -228,3 +228,29 @@ def test_project_team_return_after_season_end_shown_as_season():
     league = dict(LEAGUE, _injuries={"henri veesaar": date(2027, 7, 1)})
     (p,) = project_team("Moi", "Equipe", roster, None, pool, None, _games(), TODAY, 15, league).players
     assert p.games_sched == 0 and p.out_until == "season"
+
+
+def test_injuries_tab_uses_reference_names_and_keeps_espn_name(monkeypatch):
+    """Player = nom de référence (comme les autres onglets), ESPN name = nom ESPN ; un Override saisi sous
+    l'ancien nom ESPN (onglet d'avant) ou sous le nom de référence est conservé."""
+    from scripts import injuries as inj
+    from scripts import player_linker
+
+    ref = {"CJ McCollum": "C.J. McCollum", "Jimmy Butler III": "Jimmy Butler", "C.J. McCollum": "C.J. McCollum",
+           "Jimmy Butler": "Jimmy Butler", "Inconnu Total": None}
+    monkeypatch.setattr(player_linker, "canonical_names", lambda names: {n: ref.get(n) for n in names})
+    espn = [inj.Injury("CJ McCollum", "ATL", "Out", "2026-12-01"), inj.Injury("Jimmy Butler III", "GSW", "Out", "2026-12-05"),
+            inj.Injury("Inconnu Total", "TOR", "Out", "2026-12-10")]
+    sheet = inj.uniformize(inj.from_rows([inj.HEADER[:8], ["CJ McCollum", "ATL", "Out", "", "season"],
+                                          ["Jimmy Butler", "GSW", "Out", "", "2027-01-15", "", "", "", "Jimmy Butler III"]]))
+    merged = inj.merge(inj.uniformize(espn), sheet)
+    rows = {r[0]: r for r in inj.to_rows(merged)[1:]}
+    assert rows["C.J. McCollum"][4] == "season" and rows["C.J. McCollum"][8] == "CJ McCollum"
+    assert rows["Jimmy Butler"][4] == "2027-01-15" and rows["Jimmy Butler"][8] == "Jimmy Butler III"
+    assert rows["Inconnu Total"][8] == ""                      # introuvable dans la base : nom ESPN gardé
+    assert inj.to_rows(merged)[0][-1] == "ESPN name"
+    from scripts.names import name_key
+
+    avail = inj.availability(merged, date(2026, 11, 20))       # indexé sous les deux noms
+    assert avail[name_key("C.J. McCollum")] == avail[name_key("CJ McCollum")] == inj.SEASON
+    assert avail[name_key("Jimmy Butler III")] == avail[name_key("Jimmy Butler")] == date(2027, 1, 15)
