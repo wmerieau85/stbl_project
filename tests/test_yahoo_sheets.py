@@ -26,7 +26,7 @@ def test_yahoo_extracts_write_to_independent_fixed_blocks(monkeypatch):
     }], {"Team A": {"rank": 1, "stats": {"fgp": 0.51}, "points": {"fgp": 12}}})
     sheets.write_team_log(object(), "yahoo", [{
         "team_id": 2, "team": "Team A", "manager": "Manager A",
-        "players": [{"player": "Player A", "player_id": "1", "gp": 12, "fgm": 71, "fga": 138}],
+        "players": [{"player": "Player A", "player_id": "1", "gp": 12, "fgm": 71, "fga": 138, "yahoo_name": "Player A."}],
     }])
 
     assert [write[2] for write in writes] == ["A", "L", "V", "AH", "AO"]
@@ -36,6 +36,7 @@ def test_yahoo_extracts_write_to_independent_fixed_blocks(monkeypatch):
     assert writes[3][1][1] == [1, "Team A", "Manager A", "FG%", 0.51, 12]
     assert writes[4][1][1][:8] == [2, "Team A", "Manager A", "Player A", "1", 12, 71, 138]
     assert len(writes[4][1][0]) == len(sheets.TEAM_LOG_HEADER)
+    assert writes[4][1][0][-1] == "yahoo_name" and writes[4][1][1][-1] == "Player A."   # en fin de bloc
 
 
 def test_push_projections_leaves_formula_columns_a_and_b_unwritten(monkeypatch):

@@ -22,7 +22,7 @@ RANKINGS_HEADER = [
 STANDINGS_HEADER = ["rank", "team", "manager", "category", "stat", "points"]
 TEAM_LOG_HEADER = [
     "team_id", "team", "manager", "player", "player_id", "GP", "FGM", "FGA", "FG%", "FTM", "FTA", "FT%",
-    "3PTM", "PTS", "REB", "AST", "ST", "BLK", "TO",
+    "3PTM", "PTS", "REB", "AST", "ST", "BLK", "TO", "yahoo_name",
 ]
 STANDINGS_CATEGORIES = [
     ("fgp", "FG%"), ("ftp", "FT%"), ("fg3m", "3PTM"), ("pts", "PTS"), ("reb", "REB"),
@@ -104,6 +104,6 @@ def write_team_log(book, tab, teams):
                 player.get("ftm", ""), player.get("fta", ""), player.get("ftp", ""),
                 player.get("fg3m", ""), player.get("pts", ""), player.get("reb", ""),
                 player.get("ast", ""), player.get("stl", ""), player.get("blk", ""),
-                player.get("tov", ""),
+                player.get("tov", ""), player.get("yahoo_name", ""),
             ])
     write_block(book, tab, rows, first_col=TEAM_LOG_START_COL)
