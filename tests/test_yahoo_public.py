@@ -1,5 +1,6 @@
 import pytest
 
+from scripts import db, player_linker
 from scripts.yahoo import public
 from scripts.yahoo import __main__ as yahoo_main
 
@@ -75,7 +76,7 @@ def test_team_log_reports_when_yahoo_has_not_published_it(monkeypatch):
         public.team_log("24104", 1, "2025-26")
 
 
-def test_stats_command_writes_both_blocks_and_maps_manager(monkeypatch):
+def test_stats_command_writes_both_blocks_and_maps_manager(monkeypatch, tmp_path):
     settings = {"active_season": "2025-26", "http": {"timeout": 10}}
     league = {
         "yahoo": {"league_id": "24104", "teams": {"Manager A": "Team A"}},
@@ -88,7 +89,9 @@ def test_stats_command_writes_both_blocks_and_maps_manager(monkeypatch):
     monkeypatch.setattr(yahoo_main, "_sync_config", lambda _settings, current: current)
     monkeypatch.setattr(yahoo_main, "open_spreadsheet", lambda _spreadsheet_id, _settings: "book")
     monkeypatch.setattr(public, "teams", lambda *args, **kwargs: [{"team_id": 1, "name": "Team A"}])
-    monkeypatch.setattr(public, "team_log", lambda *args, **kwargs: [{"player": "Player A"}])
+    monkeypatch.setattr(public, "team_log", lambda *args, **kwargs: [{"player": "Kelly Oubre Jr."}])
+    monkeypatch.setattr(player_linker, "canonical_names", lambda names: {n: "Kelly Oubre" for n in names})
+    monkeypatch.setattr(db, "DB_PATH", str(tmp_path / "t.sqlite"))
     monkeypatch.setattr(public, "standings", lambda *args, **kwargs: {"Team A": {"rank": 1}})
     monkeypatch.setattr(yahoo_main.yahoo_sheets, "write_standings",
                         lambda book, tab, teams, standings: writes.append(("standings", book, tab, teams, standings)))
@@ -99,6 +102,8 @@ def test_stats_command_writes_both_blocks_and_maps_manager(monkeypatch):
     assert writes[0][0:3] == ("standings", "book", "yahoo")
     assert writes[0][3][0]["manager"] == "Manager A"
     assert writes[1][0:3] == ("team_log", "book", "yahoo")
+    # noms uniformisés comme dans le bloc rosters, nom Yahoo gardé dans yahoo_name
+    assert writes[1][3][0]["players"] == [{"player": "Kelly Oubre", "yahoo_name": "Kelly Oubre Jr."}]
 
 
 def test_stats_command_writes_standings_before_team_log_is_published(monkeypatch, capsys):

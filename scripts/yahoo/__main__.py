@@ -74,6 +74,8 @@ def _uniform_names(players):
     from scripts.names import strip_accents
     from scripts.player_linker import canonical_names
 
+    if not any(p.get("player") for p in players):      # Team Log pas encore publié : rien à uniformiser
+        return players
     init_db()
     names = canonical_names({p["player"] for p in players if p.get("player")})
     missing = sorted(n for n, c in names.items() if c is None)
@@ -265,6 +267,8 @@ def main(argv=None):
                     players = []
                     without_log.append(name)
                 team_rows.append({"team_id": team["team_id"], "team": name, "manager": manager, "players": players})
+            # noms uniformisés comme dans le bloc rosters (nom Yahoo d'origine dans yahoo_name)
+            _uniform_names([p for t in team_rows for p in t["players"]])
             standings = public.standings(league_id, timeout, season=season)
             yahoo_sheets.write_standings(book, tab, team_rows, standings)
             yahoo_sheets.write_team_log(book, tab, team_rows)
