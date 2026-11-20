@@ -1,11 +1,12 @@
 """Analyse des écarts entre la draft et la saison à date (onglet season_analysis).
 
-Pour chaque équipe, on part du classement de l'assistant de draft (draft_reco : projections de la phase
-draft, rotation « les meilleurs joueurs par match jouent leurs matchs projetés jusqu'au plafond de la
-ligue », points roto espérés sur la saison) et l'on arrive aux standings Yahoo à date, par étapes :
+Pour chaque équipe, on part des totaux de draft sur la saison (projections de la phase draft x matchs
+prévus par la rotation de draft : colonne « GP draft » de l'onglet bdd, comme le bloc draft de board ; à
+défaut, rotation de l'assistant de draft, les meilleurs joueurs par match jusqu'au plafond de la ligue), en
+points roto exacts (rang dans chaque catégorie, totaux arrondis, comme Yahoo et board), et l'on arrive aux
+standings Yahoo à date, par étapes :
 
-    draft_reco (saison, points espérés)
-    + unité       : mêmes totaux, en points exacts (rang dans chaque catégorie, comme Yahoo)
+    draft (saison, points exacts)
     + calendrier  : totaux ramenés à date (matchs déjà joués par l'équipe NBA de chaque joueur)
     = attendu à date
     + blessures / matchs : matchs joués par rapport aux matchs prévus à la draft
@@ -19,7 +20,8 @@ Les étapes sont enchaînées dans cet ordre (en roto les effets se chevauchent 
 s'additionnent exactement. Le détail par joueur donne, pour chaque axe, les points que l'équipe perdrait si
 l'on retirait cet effet du joueur (les effets des joueurs ne s'additionnent pas exactement).
 
-Données : phases draft et season (stats réelles) de la base ; onglet yahoo (blocs draft, rosters et Team Log).
+Données : phases draft et season (stats réelles) de la base ; onglet yahoo (blocs draft, rosters et Team Log) ;
+colonne GP draft de l'onglet bdd.
 Sans dates de transactions, un joueur drafté parti voit ses matchs non comptés classés en mouvements, un
 joueur toujours là en rotation.
 """
@@ -29,14 +31,14 @@ from collections import defaultdict
 
 import numpy as np
 
-from scripts.draft.engine import LOWER_IS_BETTER, category_values, roto_points
+from scripts.draft.engine import LOWER_IS_BETTER, category_values
 from scripts.draft.pool import STATS
 from scripts.names import name_key
 
 log = logging.getLogger(__name__)
 
 STEPS = (("injury", "Blessures / matchs"), ("perf", "Régime"), ("rotation", "Rotation"), ("moves", "Mouvements"))
-SUMMARY_HEADER = ["Manager", "draft_reco (saison, espérés)", "Unité", "Calendrier", "Attendu à date"] + \
+SUMMARY_HEADER = ["Manager", "Draft (saison)", "Calendrier", "Attendu à date"] + \
     [label for _, label in STEPS] + ["Reste", "Réel (Yahoo)"]
 DETAIL_HEADER = ["Manager", "Joueur", "Statut", "Matchs comptés prévus à date", "Matchs joués (NBA)",
                  "Matchs comptés", "Blessures / matchs (pts)", "Régime (pts)", "Rotation (pts)",
@@ -64,8 +66,10 @@ def draft_rotation(players, cap):
     return alloc
 
 
-def analyze(draft_pool, real_pool, picks, rosters, team_log, cap, categories, weights):
-    """picks / rosters : {manager: [joueurs]} ; team_log : {manager: {joueur: (matchs, totaux STATS)}}.
+def analyze(draft_pool, real_pool, picks, rosters, team_log, cap, categories, weights, draft_games=None):
+    """picks / rosters : {manager: [joueurs]} ; team_log : {manager: {joueur: (matchs, totaux STATS)}} ;
+    draft_games : {manager: {joueur: matchs prévus à la draft}} (colonne GP draft de bdd), sinon rotation de
+    l'assistant de draft.
 
     Retourne {"managers", "summary": {manager: {étape: points}}, "detail": [lignes joueur]}."""
     zero = np.zeros(len(STATS))
@@ -76,8 +80,17 @@ def analyze(draft_pool, real_pool, picks, rosters, team_log, cap, categories, we
     managers = sorted(team_log)
     full, axes, players_of = {}, {}, {}
     for m in managers:
-        drafted = [p for p in (draft_pool.find(n) for n in picks.get(m, [])) if p is not None and p.gp]
-        alloc = draft_rotation(drafted, cap)
+        if draft_games and draft_games.get(m):
+            alloc, drafted = {}, []
+            for n, g in draft_games[m].items():
+                p = draft_pool.find(n)
+                if p is not None and p.gp:
+                    if p.name not in alloc:
+                        drafted.append(p)
+                    alloc[p.name] = alloc.get(p.name, 0.0) + float(g or 0)
+        else:
+            drafted = [p for p in (draft_pool.find(n) for n in picks.get(m, [])) if p is not None and p.gp]
+            alloc = draft_rotation(drafted, cap)
         full[m] = sum((p.per_game * alloc[p.name] for p in drafted), zero.copy())
         on_roster = {name_key(n) for n in rosters.get(m, [])}
         logged = {name_key(n): (n, g, np.asarray(t, dtype=float)) for n, (g, t) in team_log[m].items()}
@@ -115,19 +128,17 @@ def analyze(draft_pool, real_pool, picks, rosters, team_log, cap, categories, we
                          {"in": tl}))
         axes[m], players_of[m] = ax, rows
 
-    def values(totals):
-        return np.array([category_values(totals[m], categories) for m in managers])
+    def values(totals):          # totaux arrondis à l'entier, comme Yahoo et board (égalités partagées)
+        return np.array([category_values(np.round(totals[m]), categories) for m in managers])
 
     actual = {m: sum((np.asarray(t, dtype=float) for _, t in team_log[m].values()), zero.copy()) for m in managers}
     weights = list(weights)
     summary = {m: {} for m in managers}
-    reco = roto_points(values(full), categories, weights).sum(axis=1)
     exact_full = exact_points(values(full), categories, weights)
     current = {m: axes[m]["base"].copy() for m in managers}
     previous = exact_points(values(current), categories, weights)
     for i, m in enumerate(managers):
-        summary[m].update(reco=reco[i], unit=exact_full[i] - reco[i], calendar=previous[i] - exact_full[i],
-                          expected=previous[i])
+        summary[m].update(draft=exact_full[i], calendar=previous[i] - exact_full[i], expected=previous[i])
     for step, _ in STEPS:
         for m in managers:
             current[m] = current[m] + (axes[m]["out"] + axes[m]["in"] if step == "moves" else axes[m][step])
@@ -163,13 +174,13 @@ def rows(result, me=None, today=None):
     """Lignes de l'onglet season_analysis."""
     s = result["summary"]
     out = [[f"Analyse draft -> saison à date{' au ' + today.isoformat() if today else ''}"],
-           ["Lecture", "draft_reco (points espérés sur la saison) -> unité (points exacts) -> calendrier (matchs déjà "
+           ["Lecture", "draft (totaux de la rotation de draft sur la saison, comme board) -> calendrier (matchs déjà "
                        "joués) = attendu à date -> blessures / matchs, régime, rotation, mouvements, reste = réel "
-                       "(standings Yahoo). Les étapes s'additionnent ; en points roto."],
+                       "(standings Yahoo). Les étapes s'additionnent ; en points roto exacts."],
            [], SUMMARY_HEADER]
     for m in sorted(result["managers"], key=lambda x: -s[x]["real"]):
         v = s[m]
-        out.append([m + (" (moi)" if m == me else ""), round(v["reco"], 1), round(v["unit"], 1),
+        out.append([m + (" (moi)" if m == me else ""), round(v["draft"], 1),
                     round(v["calendar"], 1), round(v["expected"], 1)]
                    + [round(v[step], 1) for step, _ in STEPS] + [round(v["rest"], 1), round(v["real"], 1)])
     out += [[], ["Détail par joueur : points roto que chaque effet a valu à l'équipe (négatif = il lui a coûté des "
@@ -181,6 +192,29 @@ def rows(result, me=None, today=None):
                     round(d["counted"]), round(d["injury"], 1), round(d["perf"], 1), round(d["rotation"], 1),
                     round(d["moves"], 1), round(d["total"], 1)])
     return out
+
+
+def read_draft_games(rows_):
+    """Onglet bdd -> {manager: {joueur: matchs prévus}} (lignes de phase draft, colonnes Team Draft, Player et
+    GP draft) ; None si la colonne GP draft est absente."""
+    from scripts.sheets import cell_number
+
+    header = [str(h).strip().casefold() for h in (rows_[0] if rows_ else [])]
+    try:
+        team, phase, player, games = (header.index(n) for n in ("team draft", "phase", "player", "gp draft"))
+    except ValueError:
+        return None
+    out = defaultdict(dict)
+    for r in rows_[1:]:
+        cells = list(r) + [""] * (len(header) - len(r))
+        if str(cells[phase]).strip().lower() != "draft" or not str(cells[team]).strip() or not str(cells[player]).strip():
+            continue
+        try:
+            g = cell_number(cells[games]) if str(cells[games]).strip() else 0.0
+        except ValueError:
+            g = 0.0
+        out[str(cells[team]).strip()][str(cells[player]).strip()] = g
+    return out or None
 
 
 def read_yahoo_tab(rows_):

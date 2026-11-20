@@ -242,9 +242,17 @@ def _analysis(settings, league, book):
     if not team_log:
         log.error("Analyse : bloc Team Log vide dans l'onglet yahoo (Yahoo > Standings + Team Log).")
         return 1
+    try:     # rotation de draft saisie dans bdd (colonne GP draft, comme le bloc draft de board)
+        draft_games = analysis.read_draft_games(read_range(book, gs.get("projections_tab") or "bdd", "A1:CZ4000"))
+    except Exception as exc:
+        log.warning("Analyse : colonne GP draft de bdd non lue (%s) : rotation de l'assistant de draft.", exc)
+        draft_games = None
+    if draft_games is None:
+        log.warning("Analyse : colonne « GP draft » absente de bdd : rotation de l'assistant de draft utilisée.")
     cats = [c for c in CATEGORY_ORDER if float(league["categories"].get(c, 0) or 0) > 0]
     weights = [float(league["categories"][c]) for c in cats]
-    result = analysis.analyze(draft_pool, real_pool, picks, rosters, team_log, games_cap(league), cats, weights)
+    result = analysis.analyze(draft_pool, real_pool, picks, rosters, team_log, games_cap(league), cats, weights,
+                              draft_games=draft_games)
     rows = analysis.rows(result, me=league.get("draft", {}).get("my_team"), today=date.today())
     os.makedirs(EXPORTS_DIR, exist_ok=True)
     path = os.path.join(EXPORTS_DIR, f"season_analysis_{season}.csv")
@@ -254,7 +262,7 @@ def _analysis(settings, league, book):
     s = result["summary"]
     for m in sorted(result["managers"], key=lambda x: -s[x]["real"]):
         v = s[m]
-        print(f"{m:10} draft {v['reco']:5.1f} -> attendu à date {v['expected']:5.1f} | blessures {v['injury']:+5.1f} "
+        print(f"{m:10} draft {v['draft']:5.1f} -> attendu à date {v['expected']:5.1f} | blessures {v['injury']:+5.1f} "
               f"régime {v['perf']:+5.1f} rotation {v['rotation']:+5.1f} mouvements {v['moves']:+5.1f} "
               f"reste {v['rest']:+5.1f} -> réel {v['real']:5.1f}")
     return 0
