@@ -235,7 +235,8 @@ def _analysis(settings, league, book):
         return 1
     from scripts.sheets import read_range, write_tab
     try:
-        picks, rosters, team_log = analysis.read_yahoo_tab(read_range(book, gs.get("yahoo_tab", "yahoo"), "A1:BH3000"))
+        yahoo_rows = read_range(book, gs.get("yahoo_tab", "yahoo"), "A1:BX3000")
+        picks, rosters, team_log = analysis.read_yahoo_tab(yahoo_rows)
     except ValueError as exc:
         log.error("%s", exc)
         return 1
@@ -249,10 +250,17 @@ def _analysis(settings, league, book):
         draft_games = None
     if draft_games is None:
         log.warning("Analyse : colonne « GP draft » absente de bdd : rotation de l'assistant de draft utilisée.")
+    transactions = analysis.read_transactions(yahoo_rows)
+    timeline = None
+    if transactions is None:
+        log.warning("Analyse : bloc des transactions absent de l'onglet yahoo (Yahoo > Standings + Team Log) : "
+                    "départs classés en joueurs libres, sans bilan des mouvements.")
+    else:
+        timeline = _games_timeline(season)
     cats = [c for c in CATEGORY_ORDER if float(league["categories"].get(c, 0) or 0) > 0]
     weights = [float(league["categories"][c]) for c in cats]
     result = analysis.analyze(draft_pool, real_pool, picks, rosters, team_log, games_cap(league), cats, weights,
-                              draft_games=draft_games)
+                              draft_games=draft_games, transactions=transactions, timeline=timeline)
     rows = analysis.rows(result, me=league.get("draft", {}).get("my_team"), today=date.today())
     os.makedirs(EXPORTS_DIR, exist_ok=True)
     path = os.path.join(EXPORTS_DIR, f"season_analysis_{season}.csv")
@@ -263,9 +271,31 @@ def _analysis(settings, league, book):
     for m in sorted(result["managers"], key=lambda x: -s[x]["real"]):
         v = s[m]
         print(f"{m:10} draft {v['draft']:5.1f} -> attendu à date {v['expected']:5.1f} | blessures {v['injury']:+5.1f} "
-              f"régime {v['perf']:+5.1f} rotation {v['rotation']:+5.1f} mouvements {v['moves']:+5.1f} "
+              f"régime {v['perf']:+5.1f} rotation {v['rotation']:+5.1f} échanges {v['trade']:+5.1f} "
+              f"libres {v['fa']:+5.1f} "
               f"reste {v['rest']:+5.1f} -> réel {v['real']:5.1f}")
     return 0
+
+
+def _games_timeline(season):
+    """Matchs joués à chaque date : photos de history.sqlite, sinon prorata du calendrier NBA."""
+    from scripts.config import HISTORY_PATH
+    from scripts.season import analysis
+
+    history, games = None, None
+    if os.path.exists(HISTORY_PATH):
+        try:
+            history = analysis.read_games_history(HISTORY_PATH, season)
+        except Exception as exc:
+            log.warning("Analyse : history.sqlite illisible (%s) : prorata du calendrier.", exc)
+    if not history:
+        log.warning("Analyse : pas de photos des stats dans history.sqlite : matchs avant / après chaque "
+                    "transaction estimés au prorata du calendrier.")
+        try:
+            games = load_games(season)
+        except Exception as exc:
+            log.warning("Analyse : calendrier NBA indisponible (%s) : prorata des jours.", exc)
+    return analysis.Timeline(history, games, today=date.today().isoformat())
 
 
 def _simulate(result, settings, league, book):
