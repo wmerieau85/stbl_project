@@ -298,3 +298,122 @@ def standings(league_id, timeout=30, session=None, season=None):
                 elif key:
                     entry[kind][key] = _num(cell.get_text())
     return out
+
+
+# --- Transactions (add / drop / échanges) --------------------------------------------------------
+
+TX_PAGE = 25            # transactions par page Yahoo (?count=0, 25, 50...)
+TX_MAX_PAGES = 60
+_MONTHS = {m: i for i, m in enumerate(("jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct",
+                                       "nov", "dec"), 1)}
+
+
+def _tx_date(text, season):
+    """« Nov 20, 10:13 am » -> ('2026-11-20', '10:13') ; année déduite de la saison (juil.-déc. = 1re année)."""
+    m = re.match(r"\s*([A-Za-z]{3})[a-z]*\.?\s+(\d{1,2}),\s*(\d{1,2}:\d{2}\s*[ap]m)?", text or "")
+    if not m or m.group(1).lower() not in _MONTHS:
+        return "", (text or "").strip()
+    month, day = _MONTHS[m.group(1).lower()], int(m.group(2))
+    first = int(_season_year(season)) if season else None
+    year = (first if month >= 7 else first + 1) if first else None
+    time = (m.group(3) or "").replace(" ", "")
+    if time:
+        hh, rest = time.split(":")
+        hour = int(hh) % 12 + (12 if rest.endswith("pm") else 0)
+        time = f"{hour:02d}:{rest[:2]}"
+    return (f"{year:04d}-{month:02d}-{day:02d}" if year else f"{month:02d}-{day:02d}"), time
+
+
+def _tx_player(block):
+    link = block.select_one('a[href*="/nba/players/"][target="sports"]') or block.select_one('a[href*="/players/"]')
+    if link is None:
+        return None
+    pid = re.search(r"/players/(\d+)", link.get("href", ""))
+    pos = block.select_one(".F-position")
+    nba_team, positions = "", ""
+    if pos is not None and " - " in pos.get_text():
+        nba_team, positions = (x.strip() for x in pos.get_text().split(" - ", 1))
+    return {"player": clean_display_name(link.get_text(" ", strip=True)), "player_id": pid.group(1) if pid else "",
+            "nba_team": nba_team, "positions": positions}
+
+
+def _tx_team(cell):
+    link = cell.select_one('a[href*="/nba/"]') if cell is not None else None
+    stamp = cell.select_one(".F-timestamp") if cell is not None else None
+    team_id = re.search(r"/nba/\d+/(\d+)", link.get("href", "")) if link is not None else None
+    return (team_id.group(1) if team_id else "", link.get_text(" ", strip=True) if link is not None else "",
+            stamp.get_text(" ", strip=True) if stamp is not None else "")
+
+
+def parse_transactions(html, season=None):
+    """Page Transactions -> ([transaction], page suivante ?). Une ligne par joueur :
+    {date, time, type (add / drop / trade), team_id, team, player, player_id, nba_team, positions, detail,
+    other_team_id, other_team, transaction}. Échange : un bloc de deux lignes (icône F-trade, rowspan=2),
+    chacune « joueurs - Traded to - équipe qui les reçoit » ; other_team = équipe d'origine. Les lignes
+    « Trading List » (joueurs proposés à l'échange) sont ignorées."""
+    soup = BeautifulSoup(html, "html.parser")
+    table = soup.select_one("table.Tst-transaction-table")
+    nav = soup.select_one(".pagingnavlist")
+    has_next = nav is not None and any("next" in a.get_text().lower() for a in nav.select("a"))
+    if table is None:
+        return [], False
+    rows = table.find_all("tr")
+    out, i, seq = [], 0, 0
+    while i < len(rows):
+        cells = rows[i].find_all("td", recursive=False)
+        if not cells:
+            i += 1
+            continue
+        seq += 1
+        if cells[0].select_one(".F-trade") is not None:
+            span = int(cells[0].get("rowspan") or 2)
+            sides = []
+            for k, row in enumerate(rows[i:i + span]):
+                tds = row.find_all("td", recursive=False)[1 if k == 0 else 0:]
+                players = [p for p in (_tx_player(b) for b in (tds[0].find_all("p") or [tds[0]])) if p] if tds else []
+                team_id, team, stamp = _tx_team(tds[-1] if tds else None)
+                sides.append((players, team_id, team, stamp))
+            stamp = next((s[3] for s in sides if s[3]), "")
+            day, time = _tx_date(stamp, season)
+            for k, (players, team_id, team, _) in enumerate(sides):
+                origin = next((s for j, s in enumerate(sides) if j != k), ([], "", "", ""))
+                for p in players:
+                    out.append(dict(p, date=day, time=time, type="trade", team_id=team_id, team=team,
+                                    detail="Traded", other_team_id=origin[1], other_team=origin[2], transaction=seq))
+            i += span
+            continue
+        titles = [s.get("title", "") for s in cells[0].select("span[title]")]
+        kinds = ["add" if "Added" in t else "drop" if "Dropped" in t else "" for t in titles]
+        if any(kinds) and len(cells) >= 2:
+            team_id, team, stamp = _tx_team(cells[-1])
+            day, time = _tx_date(stamp, season)
+            blocks = cells[1].select("div.Pbot-xs") or [cells[1]]
+            for kind, block in zip(kinds, blocks):
+                p = _tx_player(block)
+                if not kind or p is None:
+                    continue
+                note = block.select_one("h6")
+                out.append(dict(p, date=day, time=time, type=kind, team_id=team_id, team=team,
+                                detail=re.sub(r"\s+", " ", note.get_text(" ", strip=True)) if note else "",
+                                other_team_id="", other_team="", transaction=seq))
+        i += 1
+    return out, has_next
+
+
+def transactions(league_id, season, timeout=30, session=None, max_pages=TX_MAX_PAGES):
+    """Toutes les transactions de la saison (page « All Transactions », 25 par page, de la plus récente)."""
+    out, seen = [], set()
+    for page in range(max_pages):
+        html = fetch(f"transactions?transactionsfilter=all&count={page * TX_PAGE}", league_id, timeout, session,
+                     season=season)
+        rows, has_next = parse_transactions(html, season)
+        offset = len(out)
+        for r in rows:
+            r["transaction"] = f"{page}-{r['transaction']}"
+            key = (r["date"], r["time"], r["type"], r["player_id"], r["team_id"])
+            if key not in seen:
+                seen.add(key)
+                out.append(r)
+        if not rows or not has_next or len(out) == offset:
+            break
+    return out

@@ -97,6 +97,10 @@ def test_stats_command_writes_both_blocks_and_maps_manager(monkeypatch, tmp_path
                         lambda book, tab, teams, standings: writes.append(("standings", book, tab, teams, standings)))
     monkeypatch.setattr(yahoo_main.yahoo_sheets, "write_team_log",
                         lambda book, tab, teams: writes.append(("team_log", book, tab, teams)))
+    monkeypatch.setattr(public, "transactions", lambda *a, **k: [{"player": "Kelly Oubre Jr.", "type": "add",
+                                                                  "team": "Team A"}])
+    monkeypatch.setattr(yahoo_main.yahoo_sheets, "write_transactions",
+                        lambda book, tab, moves, managers: writes.append(("transactions", moves, managers)))
 
     assert yahoo_main.main(["stats"]) == 0
     assert writes[0][0:3] == ("standings", "book", "yahoo")
@@ -104,6 +108,9 @@ def test_stats_command_writes_both_blocks_and_maps_manager(monkeypatch, tmp_path
     assert writes[1][0:3] == ("team_log", "book", "yahoo")
     # noms uniformisés comme dans le bloc rosters, nom Yahoo gardé dans yahoo_name
     assert writes[1][3][0]["players"] == [{"player": "Kelly Oubre", "yahoo_name": "Kelly Oubre Jr."}]
+    # transactions : noms uniformisés, managers retrouvés par le nom d'équipe
+    assert writes[2][0] == "transactions" and writes[2][1][0]["player"] == "Kelly Oubre"
+    assert writes[2][2] == {"team a": "Manager A"}
 
 
 def test_stats_command_writes_standings_before_team_log_is_published(monkeypatch, capsys):
@@ -125,6 +132,7 @@ def test_stats_command_writes_standings_before_team_log_is_published(monkeypatch
                         lambda book, tab, teams, standings: writes.append(("standings", teams)))
     monkeypatch.setattr(yahoo_main.yahoo_sheets, "write_team_log",
                         lambda book, tab, teams: writes.append(("team_log", teams)))
+    monkeypatch.setattr(yahoo_main.yahoo_sheets, "write_transactions", lambda *a, **k: None)
 
     assert yahoo_main.main(["stats"]) == 0
     assert [w[0] for w in writes] == ["standings", "team_log"]
@@ -222,3 +230,47 @@ def test_rosters_command_writes_block_and_csv(monkeypatch, tmp_path):
     assert tab == "yahoo" and teams[0]["manager"] == "Manager A"
     assert "1;Team A;Manager A;Player A.;1;DEN;C;C;;Player A" in (tmp_path / "yahoo_rosters_2026-27.csv").read_text(
         encoding="utf-8-sig")
+
+
+def _fixture(name):
+    import os
+    with open(os.path.join(os.path.dirname(__file__), "fixtures", name), encoding="utf-8") as fh:
+        return fh.read()
+
+
+def test_parse_transactions_add_drop_and_trading_list():
+    rows, has_next = public.parse_transactions(_fixture("yahoo_transactions_all.html"), "2026-27")
+    assert has_next                                                    # lien « Next 25 »
+    first = rows[0]
+    assert (first["date"], first["time"], first["type"], first["team"], first["team_id"]) == \
+        ("2026-11-20", "10:13", "add", "Starkos", "8")
+    assert (first["player"], first["nba_team"], first["positions"], first["detail"]) == \
+        ("Kasparas Jakučionis", "MIL", "G", "$0 Waiver")
+    assert rows[1]["type"] == "drop" and rows[1]["player"] == "Santi Aldama" and rows[1]["detail"] == "To Waivers"
+    assert [r["type"] for r in rows] == ["add", "drop", "add", "drop", "trade", "trade"]   # Trading List ignorées
+    assert rows[3]["time"] == "20:56"                                  # 8:56 pm
+
+
+def test_parse_transactions_trades():
+    rows, has_next = public.parse_transactions(_fixture("yahoo_transactions_trades.html"), "2026-27")
+    assert not has_next and len(rows) == 12 and all(r["type"] == "trade" for r in rows)
+    mine = [r for r in rows if r["date"] == "2026-10-22"]
+    received = {r["player"]: (r["team"], r["other_team"]) for r in mine}
+    assert received["Caleb Wilson"] == ("EL Commodores", "Les Mousquetons")
+    assert received["Kon Knueppel"] == ("Les Mousquetons", "EL Commodores")
+    assert len({r["transaction"] for r in mine}) == 1                  # un seul échange
+
+
+def test_transactions_follow_pages(monkeypatch):
+    pages = {0: _fixture("yahoo_transactions_all.html"), 25: _fixture("yahoo_transactions_trades.html")}
+    calls = []
+
+    def fake_fetch(path, league_id, timeout=30, session=None, season=None):
+        count = int(path.rsplit("=", 1)[1])
+        calls.append(count)
+        return pages[count]
+
+    monkeypatch.setattr(public, "fetch", fake_fetch)
+    rows = public.transactions("4205", "2026-27")
+    assert calls == [0, 25]                                            # page 2 sans « Next 25 » : arrêt
+    assert len(rows) == 4 + 12                                         # échange du 8/11 sur les deux pages : une fois

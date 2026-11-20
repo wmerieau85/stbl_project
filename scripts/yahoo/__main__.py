@@ -272,6 +272,13 @@ def main(argv=None):
             standings = public.standings(league_id, timeout, season=season)
             yahoo_sheets.write_standings(book, tab, team_rows, standings)
             yahoo_sheets.write_team_log(book, tab, team_rows)
+            try:        # transactions de la saison (add / drop / échanges) : bloc en fin d'onglet
+                moves = public.transactions(league_id, season, timeout)
+                _uniform_names(moves)
+                yahoo_sheets.write_transactions(book, tab, moves, manager_by_team)
+                print(f"{len(moves)} transaction(s) écrite(s) dans l'onglet {tab}.")
+            except (public.PublicPageError, requests.RequestException) as exc:
+                logging.warning("Transactions Yahoo non lues (%s) : bloc inchangé.", exc)
             if len(without_log) == len(team_rows):
                 logging.warning("Team Log pas encore publié par Yahoo (après la première semaine de jeu) : "
                                 "bloc Team Log vide, standings écrits.")
