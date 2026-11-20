@@ -146,7 +146,7 @@ def compute(settings, league, today=None, book=None, roster_source=None):
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description="Module saison STBL")
-    parser.add_argument("command", choices=["update", "moves", "simulate"])
+    parser.add_argument("command", choices=["update", "moves", "simulate", "analysis"])
     parser.add_argument("--no-sheet", action="store_true", help="ne pas écrire dans Google Sheets")
     parser.add_argument("--date", help="date de calcul AAAA-MM-JJ (défaut : aujourd'hui)")
     parser.add_argument("--rosters", choices=["yahoo", "sheet"],
@@ -164,6 +164,8 @@ def main(argv=None):
         book = open_spreadsheet(gs["draft_spreadsheet_id"], settings)
         if gs.get("config_tab"):
             league = config_sheet.pull(book, gs["config_tab"])
+    if args.command == "analysis":
+        return _analysis(settings, league, book)
     try:
         result = compute(settings, league, date.fromisoformat(args.date) if args.date else None,
                          book=book, roster_source=args.rosters)
@@ -213,6 +215,48 @@ def _moves(result, settings, league, book):
         write_rows(book, league.get("google_sheets", {}).get("moves_reco_tab") or "moves_reco", rows,
                    1, moves.SIM_ROW - 1)
     print(moves.console(out))
+    return 0
+
+
+def _analysis(settings, league, book):
+    """Analyse draft -> saison à date (onglet season_analysis) : onglet yahoo + phases draft et season."""
+    from scripts.config import games_cap
+    from scripts.season import analysis
+
+    if book is None:
+        log.error("Analyse : le classeur est nécessaire (onglet yahoo : draft, rosters, Team Log).")
+        return 1
+    gs = league.get("google_sheets", {})
+    season = settings["active_season"]
+    draft_pool = _pool(season, "draft")
+    real_pool = _pool(season, (league.get("season") or {}).get("season_phase", "season"))
+    if draft_pool is None or real_pool is None:
+        log.error("Analyse : projections de la phase draft ou stats réelles (phase season) absentes de la base.")
+        return 1
+    from scripts.sheets import read_range, write_tab
+    try:
+        picks, rosters, team_log = analysis.read_yahoo_tab(read_range(book, gs.get("yahoo_tab", "yahoo"), "A1:BH3000"))
+    except ValueError as exc:
+        log.error("%s", exc)
+        return 1
+    if not team_log:
+        log.error("Analyse : bloc Team Log vide dans l'onglet yahoo (Yahoo > Standings + Team Log).")
+        return 1
+    cats = [c for c in CATEGORY_ORDER if float(league["categories"].get(c, 0) or 0) > 0]
+    weights = [float(league["categories"][c]) for c in cats]
+    result = analysis.analyze(draft_pool, real_pool, picks, rosters, team_log, games_cap(league), cats, weights)
+    rows = analysis.rows(result, me=league.get("draft", {}).get("my_team"), today=date.today())
+    os.makedirs(EXPORTS_DIR, exist_ok=True)
+    path = os.path.join(EXPORTS_DIR, f"season_analysis_{season}.csv")
+    with open(path, "w", encoding="utf-8-sig", newline="") as fh:
+        csv.writer(fh, delimiter=";").writerows(rows)
+    write_tab(book, gs.get("season_analysis_tab") or "season_analysis", rows)
+    s = result["summary"]
+    for m in sorted(result["managers"], key=lambda x: -s[x]["real"]):
+        v = s[m]
+        print(f"{m:10} draft {v['reco']:5.1f} -> attendu à date {v['expected']:5.1f} | blessures {v['injury']:+5.1f} "
+              f"régime {v['perf']:+5.1f} rotation {v['rotation']:+5.1f} mouvements {v['moves']:+5.1f} "
+              f"reste {v['rest']:+5.1f} -> réel {v['real']:5.1f}")
     return 0
 
 
