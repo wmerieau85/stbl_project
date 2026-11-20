@@ -29,6 +29,7 @@ var LABELS = {
   season_update: 'Saison > Projections',
   season_moves: 'Saison > Optim Moves',
   season_simulate: 'Saison > Simuler un mouvement',
+  season_analysis: 'Saison > Analyse draft / à date',
   season_all: 'Saison > Tout mettre à jour',
   history_snapshot: 'Maintenance > Photo des sources',
   sources_accuracy: 'Maintenance > Pertinence des sources',
@@ -57,6 +58,7 @@ function onOpen() {
       .addItem('Projections', 'run_season_update')
       .addItem('Optim Moves', 'run_season_moves')
       .addItem('Simuler un mouvement', 'run_season_simulate')
+      .addItem('Analyse draft / à date', 'run_season_analysis')
       .addItem('Tout mettre à jour', 'run_season_all'))
     .addSubMenu(ui.createMenu('Maintenance')
       .addItem('Contrôle settings', 'run_settings_check')
@@ -87,6 +89,7 @@ function run_yahoo_stats() { launch_('yahoo_stats'); }
 function run_season_update() { launch_('season_update'); }
 function run_season_moves() { launch_('season_moves'); }
 function run_season_simulate() { launch_('season_simulate'); }
+function run_season_analysis() { launch_('season_analysis'); }
 function run_season_all() { launch_('season_all'); }
 function run_history_snapshot() { launch_('history_snapshot'); }
 function run_sources_accuracy() { launch_('sources_accuracy'); }

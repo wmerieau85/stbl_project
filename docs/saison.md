@@ -135,3 +135,26 @@ Anciens types toujours acceptés : `manager` (= `trade` avec joueurs), `auto` (r
   joueurs gardés. Colonnes « (pts) » : points roto gagnés ou perdus par catégorie ; colonnes
   « (stats) » : écart de mes stats de fin de saison (FG% / FT% en points de pourcentage, les autres
   en unités : +20,1 REB, -137 PTS).
+
+### Analyse draft -> saison à date (season_analysis)
+
+`python -m scripts.season analysis` (menu Saison > Analyse draft / à date ; export
+`exports/season_analysis_<saison>.csv`). Pour chaque équipe, chemin en points roto de `draft_reco` aux
+standings Yahoo, par étapes qui s'additionnent :
+
+| Étape | Mesure |
+|---|---|
+| draft_reco | projections de la phase draft, rotation de l'assistant (meilleurs joueurs par match jusqu'au plafond de la ligue), points espérés sur la saison |
+| Unité | mêmes totaux en points exacts (rang par catégorie, comme Yahoo) |
+| Calendrier | totaux ramenés à date selon les matchs déjà joués par l'équipe NBA de chaque joueur (= attendu à date) |
+| Blessures / matchs | matchs joués (stats réelles, phase season) par rapport aux matchs prévus à la draft |
+| Régime | production réelle par match par rapport à la projection de draft, sur les matchs comptés (Team Log) |
+| Rotation | matchs comptés pour l'équipe par rapport à ceux que la rotation de draft prévoyait |
+| Mouvements | joueurs arrivés (Team Log), moins les matchs non comptés des joueurs draftés partis |
+| Reste | non attribué (joueur drafté sans projection...) ; = réel (standings Yahoo, recalculés depuis le Team Log) |
+
+Les étapes sont enchaînées dans cet ordre (en roto les effets se chevauchent). Le détail par joueur donne,
+pour chaque axe, les points roto que l'effet a valus à l'équipe (mesurés en le retirant, effets non
+additifs). Données : onglet `yahoo` (blocs draft, rosters, Team Log) et phases draft / season de la base. Sans
+dates de transactions, les matchs non comptés d'un joueur drafté parti sont classés en mouvements, ceux d'un
+joueur toujours là en rotation.

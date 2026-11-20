@@ -231,6 +231,7 @@ sont acceptés (`python -m scripts.run --list` les affiche avec leurs commandes)
 | Draft > Yahoo Draft / Yahoo Rankings | `yahoo_draft` / `yahoo_rankings` | `scripts.yahoo draft` / `rankings` |
 | Yahoo > MàJ rosters / Standings + Team Log | `yahoo_rosters` / `yahoo_stats` | `scripts.yahoo rosters` / `stats` |
 | Saison > Projections / Optim Moves / Tout mettre à jour | `season_update` / `season_moves` / `season_all` | `scripts.season update` / `moves` / rosters + stats + update + moves |
+| Saison > Analyse draft / à date | `season_analysis` | `scripts.season analysis` : onglet `season_analysis`, écart entre `draft_reco` et les standings Yahoo à date, par axe (calendrier, blessures, régime, rotation, mouvements) et par joueur |
 | Saison > Simuler un mouvement | `season_simulate` | `scripts.season simulate` : échange saisi dans `Moves | Team 1` / `Team 2` (ou joueurs libres), bloc de `moves_reco` à partir de la ligne 40 |
 | Maintenance > Contrôle settings | `settings_check` | `scripts.config_sheet check` (liste aussi les paramètres absents) |
 | Maintenance > Compléter settings | `settings_complete` | `scripts.config_sheet complete` : ajoute les paramètres absents de l'onglet (valeur en vigueur + aide) à la fin de leur section, hors paramètres avancés ; liste les paramètres avancés à leur valeur par défaut (lignes supprimables) |

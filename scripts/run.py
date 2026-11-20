@@ -52,6 +52,7 @@ COMMANDS = {
     "season_update": Command("Saison > Projections", (_m("scripts.season", "update"),)),
     "season_moves": Command("Saison > Optim Moves", (_m("scripts.season", "moves"),)),
     "season_simulate": Command("Saison > Simuler un mouvement", (_m("scripts.season", "simulate"),)),
+    "season_analysis": Command("Saison > Analyse draft / à date", (_m("scripts.season", "analysis"),)),
     "season_all": Command("Saison > Tout mettre à jour", (_m("scripts.yahoo", "rosters"), _m("scripts.yahoo", "stats"),
                                                           _m("scripts.season", "update"),
                                                           _m("scripts.season", "moves"))),
