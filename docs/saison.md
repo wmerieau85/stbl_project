@@ -144,8 +144,7 @@ standings Yahoo, par étapes qui s'additionnent :
 
 | Étape | Mesure |
 |---|---|
-| draft_reco | projections de la phase draft, rotation de l'assistant (meilleurs joueurs par match jusqu'au plafond de la ligue), points espérés sur la saison |
-| Unité | mêmes totaux en points exacts (rang par catégorie, comme Yahoo) |
+| Draft (saison) | projections de la phase draft x matchs prévus par ta rotation de draft (colonne `GP draft` de `bdd`, comme le bloc draft de `board` : même total TOT) ; à défaut, rotation de l'assistant de draft. Points exacts (rang par catégorie, totaux arrondis, comme Yahoo) |
 | Calendrier | totaux ramenés à date selon les matchs déjà joués par l'équipe NBA de chaque joueur (= attendu à date) |
 | Blessures / matchs | matchs joués (stats réelles, phase season) par rapport aux matchs prévus à la draft |
 | Régime | production réelle par match par rapport à la projection de draft, sur les matchs comptés (Team Log) |

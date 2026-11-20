@@ -38,7 +38,7 @@ def _league():
 def test_steps_add_up_from_draft_reco_to_yahoo_standings():
     res, log = _league()
     for m, v in res["summary"].items():
-        assert v["reco"] + v["unit"] + v["calendar"] == pytest.approx(v["expected"])
+        assert v["draft"] + v["calendar"] == pytest.approx(v["expected"])
         steps = sum(v[s] for s, _ in analysis.STEPS)
         assert v["expected"] + steps + v["rest"] == pytest.approx(v["real"])
     totals = np.array([[sum(t[STATS.index(c)] for _, t in log[m].values()) for c in CATS] for m in res["managers"]])
@@ -88,3 +88,25 @@ def test_read_yahoo_tab_blocks():
     assert picks == {"X": ["A1"]} and rosters == {"X": ["A2"]}
     gp, totals = log["X"]["A1"]
     assert gp == 12 and totals[STATS.index("pts")] == 1234.5 and totals[STATS.index("tov")] == 20
+
+
+def test_draft_games_from_bdd_replace_the_assistant_rotation():
+    """Rotation de draft saisie dans bdd (GP draft) : A2 sur le banc (0 match prévu) -> attendu de X plus bas."""
+    header = ["Team Draft", "Team Season", "Phase", "Player"] + [""] * 3 + ["GP draft"]
+    rows = [header, ["X", "X", "draft", "A1"] + [""] * 3 + ["82"], ["X", "X", "draft", "A2"] + [""] * 3 + [""],
+            ["X", "X", "lt", "A1"] + [""] * 3 + ["70"], ["Y", "Y", "draft", "B1"] + [""] * 3 + ["60,5"]]
+    games = analysis.read_draft_games(rows)
+    assert games == {"X": {"A1": 82.0, "A2": 0.0}, "Y": {"B1": 60.5}}
+    assert analysis.read_draft_games([["Team Draft", "Phase", "Player"], ["X", "draft", "A1"]]) is None
+    res, log = _league()
+    draft = Pool([_p(1, "A1", 82, 20, 5, 3), _p(2, "A2", 82, 10, 8, 2), _p(3, "B1", 82, 18, 6, 3),
+                  _p(4, "B2", 82, 12, 7, 2), _p(5, "C1", 82, 15, 9, 3), _p(6, "C2", 82, 11, 4, 2)])
+    real = Pool([_p(k, n, 10, 10, 5) for k, n in enumerate(["A1", "A2", "B1", "B2", "C1", "C2", "D"], 1)])
+    picks = {"X": ["A1", "A2"], "Y": ["B1", "B2"], "Z": ["C1", "C2"]}
+    rosters = {"X": ["A1", "A2"], "Y": ["B1", "B2"], "Z": ["C1", "C2"]}
+    bench = analysis.analyze(draft, real, picks, rosters, log, 82 * 4, CATS, W,
+                             draft_games={"X": {"A1": 82, "A2": 0}})
+    a2 = next(d for d in bench["detail"] if d["player"] == "A2")
+    assert a2["expected_games"] == 0                              # sur le banc dans la rotation de draft
+    for v in bench["summary"].values():
+        assert v["draft"] + v["calendar"] == pytest.approx(v["expected"])
