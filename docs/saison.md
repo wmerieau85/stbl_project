@@ -148,12 +148,20 @@ standings Yahoo, par étapes qui s'additionnent :
 | Calendrier | totaux ramenés à date selon les matchs déjà joués par l'équipe NBA de chaque joueur (= attendu à date) |
 | Blessures / matchs | matchs joués (stats réelles, phase season) par rapport aux matchs prévus à la draft |
 | Régime | production réelle par match par rapport à la projection de draft, sur les matchs comptés (Team Log) |
-| Rotation | matchs comptés pour l'équipe par rapport à ceux que la rotation de draft prévoyait |
-| Mouvements | joueurs arrivés (Team Log), moins les matchs non comptés des joueurs draftés partis |
+| Rotation | gestion du banc pendant la détention : matchs comptés par rapport aux matchs joués chez l'équipe x part prévue à la draft |
+| Échanges | joueurs reçus en échange (Team Log), moins les matchs perdus des joueurs draftés échangés (joués après leur départ x part prévue) |
+| Joueurs libres | idem pour les joueurs ajoutés / lâchés |
 | Reste | non attribué (joueur drafté sans projection...) ; = réel (standings Yahoo, recalculés depuis le Team Log) |
 
 Les étapes sont enchaînées dans cet ordre (en roto les effets se chevauchent). Le détail par joueur donne,
 pour chaque axe, les points roto que l'effet a valus à l'équipe (mesurés en le retirant, effets non
-additifs). Données : onglet `yahoo` (blocs draft, rosters, Team Log) et phases draft / season de la base. Sans
-dates de transactions, les matchs non comptés d'un joueur drafté parti sont classés en mouvements, ceux d'un
-joueur toujours là en rotation.
+additifs). Le bilan des mouvements donne, pour chaque transaction (mon équipe d'abord, puis les autres du
+meilleur au pire), les points roto gagnés depuis par rapport à garder le partant : apport de l'arrivant pendant
+ce séjour, contre production réelle du partant depuis son départ x part de ses matchs que l'équipe comptait
+(bilans non additifs).
+
+Données : onglet `yahoo` (blocs draft, rosters, Team Log et transactions en BJ), phases draft / season de la
+base, et pour les matchs joués avant / après chaque transaction les photos quotidiennes des stats de
+`history.sqlite` (à défaut, prorata du calendrier NBA, puis des jours). Sans bloc transactions, les matchs non
+comptés d'un joueur drafté parti sont classés en joueurs libres, ceux d'un joueur toujours là en rotation, et
+il n'y a pas de bilan.

@@ -52,7 +52,8 @@ def test_axes_by_player():
     assert by["A1"]["injury"] < 0 and by["A1"]["status"] == "drafté"            # 2 matchs sur 10 prévus
     assert by["B1"]["perf"] > 0                                                 # 25 pts au lieu de 18 : 1er en PTS
     assert by["B2"]["perf"] == 0          # 5 pts au lieu de 12, mais Y reste 1er en PTS : aucun point roto perdu
-    assert by["C2"]["status"] == "parti" and by["D"]["status"] == "arrivé" and by["D"]["moves"] >= 0
+    assert by["C2"]["status"] == "parti" and by["D"]["status"] == "arrivé" and by["D"]["fa"] >= 0
+    assert by["D"]["trade"] == 0 and res["moves"] == []          # sans transactions : joueurs libres, pas de bilan
     assert by["A2"]["expected_games"] == pytest.approx(10.0)                    # 82 matchs x 10/82
     assert res["summary"]["X"]["injury"] < 0
 
@@ -110,3 +111,87 @@ def test_draft_games_from_bdd_replace_the_assistant_rotation():
     assert a2["expected_games"] == 0                              # sur le banc dans la rotation de draft
     for v in bench["summary"].values():
         assert v["draft"] + v["calendar"] == pytest.approx(v["expected"])
+
+
+def _dated():
+    """X échange A2 à Y contre B2 le 2026-10-25 (4 matchs joués) ; Z lâche C2 pour D le 2026-10-28 (6 matchs)."""
+    draft = Pool([_p(1, "A1", 82, 20, 5, 3), _p(2, "A2", 82, 10, 8, 2), _p(3, "B1", 82, 18, 6, 3),
+                  _p(4, "B2", 82, 12, 7, 2), _p(5, "C1", 82, 15, 9, 3), _p(6, "C2", 82, 11, 4, 2)])
+    real = Pool([_p(1, "A1", 10, 20, 5), _p(2, "A2", 10, 10, 8), _p(3, "B1", 10, 25, 6), _p(4, "B2", 10, 12, 7),
+                 _p(5, "C1", 10, 15, 9), _p(6, "C2", 10, 11, 4), _p(7, "D", 10, 14, 6)])
+    picks = {"X": ["A1", "A2"], "Y": ["B1", "B2"], "Z": ["C1", "C2"]}
+    rosters = {"X": ["A1", "B2"], "Y": ["B1", "A2"], "Z": ["C1", "D"]}
+    log = {"X": {"A1": _log(10, 200, 50), "A2": _log(4, 40, 32), "B2": _log(6, 72, 42)},
+           "Y": {"B1": _log(10, 250, 60), "B2": _log(4, 48, 28), "A2": _log(6, 60, 48)},
+           "Z": {"C1": _log(10, 150, 90), "C2": _log(3, 33, 12), "D": _log(4, 56, 24)}}
+    tx = [{"date": "2026-10-25", "type": "trade", "manager": "Y", "other_manager": "X", "player": "A2",
+           "transaction": "t1"},
+          {"date": "2026-10-25", "type": "trade", "manager": "X", "other_manager": "Y", "player": "B2",
+           "transaction": "t1"},
+          {"date": "2026-10-28", "type": "add", "manager": "Z", "other_manager": "", "player": "D",
+           "transaction": "t2"},
+          {"date": "2026-10-28", "type": "drop", "manager": "Z", "other_manager": "", "player": "C2",
+           "transaction": "t2"}]
+    history = {n.lower(): [("2026-10-21", 0), ("2026-10-25", 4), ("2026-10-28", 6), ("2026-11-02", 10)]
+               for n in ["A1", "A2", "B1", "B2", "C1", "C2", "D"]}
+    timeline = analysis.Timeline(history, today="2026-11-02")
+    return analysis.analyze(draft, real, picks, rosters, log, 82 * 4, CATS, W, transactions=tx, timeline=timeline)
+
+
+def test_dated_moves_split_trades_and_free_agents():
+    res = _dated()
+    for v in res["summary"].values():
+        steps = sum(v[s] for s, _ in analysis.STEPS)
+        assert v["expected"] + steps + v["rest"] == pytest.approx(v["real"])
+    by = {(d["manager"], d["player"]): d for d in res["detail"]}
+    assert by[("X", "A2")]["status"] == "parti (échange)" and by[("X", "A2")]["owned"] == 4
+    assert by[("X", "B2")]["status"] == "arrivé (échange)" and by[("X", "B2")]["owned"] == 6
+    assert by[("Z", "C2")]["status"] == "parti (joueur libre)" and by[("Z", "C2")]["owned"] == 6
+    assert by[("Z", "C2")]["rotation"] < 0          # 3 matchs comptés sur 6 joués chez Z : banc
+    assert by[("Z", "D")]["status"] == "arrivé (joueur libre)" and by[("Z", "D")]["trade"] == 0
+    assert by[("X", "A1")]["rotation"] == 0         # tous ses matchs comptés
+
+
+def test_move_review_by_transaction():
+    res = _dated()
+    moves = {(d["manager"], d["date"]): d for d in res["moves"]}
+    assert set(moves) == {("X", "2026-10-25"), ("Y", "2026-10-25"), ("Z", "2026-10-28")}
+    z = moves[("Z", "2026-10-28")]
+    assert z["type"] == "joueur libre" and z["in"] == ["D"] and z["out"] == ["C2"]
+    assert moves[("X", "2026-10-25")]["type"] == "échange" and moves[("X", "2026-10-25")]["out"] == ["A2"]
+    rows = analysis.rows(res, me="Z")
+    start = rows.index(analysis.MOVES_HEADER)
+    assert rows[start + 1][:5] == ["Z", "2026-10-28", "joueur libre", "D", "C2"]
+    assert len(rows[rows.index(analysis.DETAIL_HEADER) + 1]) == len(analysis.DETAIL_HEADER)
+
+
+def test_read_transactions_block_in_chronological_order():
+    from scripts.sheets import column_index
+    from scripts.yahoo import sheets as ys
+
+    start = column_index(ys.TRANSACTIONS_START_COL)
+    header = [""] * start + ys.TRANSACTIONS_HEADER
+
+    def row(day, kind, manager, player, tid, other=""):
+        values = {"date": day, "type": kind, "manager": manager, "player": player, "transaction": tid,
+                  "other_manager": other}
+        return [""] * start + [values.get(h, "") for h in ys.TRANSACTIONS_HEADER]
+
+    rows = [header, row("28/10/2026", "add", "Z", "D", "t3"), row("2026-10-25", "drop", "X", "A1", "t2"),
+            row("2026-10-25", "add", "X", "A1", "t1"), row("2026-10-24", "waiver", "X", "E", "t0")]
+    tx = analysis.read_transactions(rows)
+    assert [(t["date"], t["transaction"]) for t in tx] == [("2026-10-25", "t1"), ("2026-10-25", "t2"),
+                                                           ("2026-10-28", "t3")]
+    assert analysis.read_transactions([["date"]]) is None
+
+
+def test_timeline_history_then_calendar_then_days():
+    t = analysis.Timeline({"a": [("2026-10-21", 0), ("2026-10-25", 3)]}, today="2026-10-31")
+    assert t.before(["a"], "2026-10-24", 8) == 0 and t.before(["a"], "2026-10-26", 8) == 3
+    assert t.before(["a"], "9999-12-31", 8) == 8
+    games = [("2026-10-21", "BOS", "NYK"), ("2026-10-23", "BOS", "MIA"), ("2026-10-27", "BOS", "LAL"),
+             ("2026-10-29", "CHI", "BOS")]
+    t = analysis.Timeline(games=games, today="2026-10-31")
+    assert t.before(["x"], "2026-10-25", 4, "BOS") == 2            # 2 matchs de BOS sur 4 avant le 25
+    t = analysis.Timeline(today="2026-10-31", start="2026-10-21")
+    assert t.before(["x"], "2026-10-26", 10) == pytest.approx(5)    # moitié des jours
