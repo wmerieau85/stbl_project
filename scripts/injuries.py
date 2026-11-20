@@ -4,7 +4,7 @@ Source : https://site.api.espn.com/apis/site/v2/sports/basketball/nba/injuries (
 https://www.espn.com/nba/injuries). À chaque calcul (pondération lt, Saison > Projections / Moves),
 la liste ESPN est relue et l'onglet est réécrit :
 
-    Player | NBA | Status | ESPN return | Override | Return used | Updated | Comment
+    Player | NBA | Status | ESPN return | Override | Return used | Updated | Comment | ESPN name
 
 - Override (saisi à la main, conservé d'une mise à jour à l'autre, ligne gardée même si ESPN ne liste
   plus le joueur) : une date (2027-03-02 ou 02/03/2027), « season » / « saison » (absent jusqu'à la fin
@@ -14,8 +14,9 @@ la liste ESPN est relue et l'onglet est réécrit :
 - Return used : date retenue ; aucun match avant cette date (ni en ST ni en LT), matchs projetés
   ramenés au calendrier restant après le retour (phases lt / st et simulation de saison) ; « season » :
   joueur gardé dans les phases lt / st avec toutes ses projections à 0.
-- Noms ESPN rapprochés des noms de référence de la base avec les alias de l'onglet players
-  (player_linker.canonical_names) ; blessé introuvable dans la base : signalé.
+- Player = nom de référence de la base (alias de l'onglet players appliqués, player_linker.canonical_names),
+  comme dans les autres onglets ; ESPN name = nom ESPN quand il diffère. Un Override saisi sous l'un ou
+  l'autre nom est reconnu ; blessé introuvable dans la base : nom ESPN gardé, signalé.
 ESPN indisponible : la dernière version de l'onglet est utilisée telle quelle.
 
 Réglages : Optim | Season | Injuries (espn = ESPN + onglet, sheet = onglet seul, off) et
@@ -33,7 +34,7 @@ from scripts.names import clean_display_name, name_key
 log = logging.getLogger(__name__)
 
 ESPN_URL = "https://site.api.espn.com/apis/site/v2/sports/basketball/nba/injuries"
-HEADER = ["Player", "NBA", "Status", "ESPN return", "Override", "Return used", "Updated", "Comment"]
+HEADER = ["Player", "NBA", "Status", "ESPN return", "Override", "Return used", "Updated", "Comment", "ESPN name"]
 SEASON = "season"
 
 
@@ -47,6 +48,7 @@ class Injury:
     updated: str = ""
     comment: str = ""
     return_used: str = ""        # AAAA-MM-JJ, « season » ou ""
+    espn_name: str = ""          # nom ESPN quand il diffère du nom de référence (colonne Player)
 
 
 def _parse_date(text):
@@ -123,8 +125,30 @@ def from_rows(rows):
             continue
         out.append(Injury(player=str(r[0]).strip(), nba_team=str(r[1]).strip(), status=str(r[2]).strip(),
                           espn_return=str(r[3]).strip(), override=str(r[4]).strip(), updated=str(r[6]).strip(),
-                          comment=str(r[7]).strip()))
+                          comment=str(r[7]).strip(), espn_name=str(r[8]).strip()))
     return out
+
+
+def uniformize(injuries):
+    """Nom de référence de la base dans Player, nom ESPN d'origine dans espn_name (s'il diffère). Base
+    inaccessible (tests, première installation) : noms inchangés."""
+    names = {n for i in injuries for n in (i.player, i.espn_name) if n}
+    if not names:
+        return injuries
+    try:
+        from scripts.player_linker import canonical_names
+
+        mapping = canonical_names(names)
+    except Exception as exc:
+        log.debug("Noms de référence non lus (%s).", exc)
+        return injuries
+    for inj in injuries:
+        ref = mapping.get(inj.espn_name) if inj.espn_name else None
+        ref = ref or mapping.get(inj.player)
+        if ref and ref != inj.player:
+            inj.espn_name = inj.espn_name or inj.player
+            inj.player = ref
+    return injuries
 
 
 def merge(espn, sheet):
@@ -152,7 +176,7 @@ def to_rows(injuries):
     order = sorted(injuries, key=lambda i: (i.return_used == "", i.return_used != SEASON,
                                             i.return_used or "9999", i.player))
     return [HEADER] + [[i.player, i.nba_team, i.status, i.espn_return, i.override, i.return_used, i.updated,
-                        i.comment] for i in order]
+                        i.comment, i.espn_name] for i in order]
 
 
 def availability(injuries, today, canonical=None):
@@ -173,6 +197,8 @@ def availability(injuries, today, canonical=None):
         else:
             continue
         out[name_key(inj.player)] = value
+        if inj.espn_name:
+            out[name_key(inj.espn_name)] = value
         ref = (canonical or {}).get(inj.player)
         if ref:
             out[name_key(ref)] = value
@@ -249,7 +275,7 @@ def load(league, settings=None, book=None, today=None, write=True, timeout=30):
         try:
             from scripts.sheets import read_range
 
-            sheet = from_rows(read_range(book, tab, "A1:H3000"))
+            sheet = uniformize(from_rows(read_range(book, tab, "A1:I3000")))
         except Exception:  # onglet absent : créé plus bas
             sheet = []
     espn = None
@@ -258,6 +284,8 @@ def load(league, settings=None, book=None, today=None, write=True, timeout=30):
             espn = fetch_espn(timeout)
         except (requests.RequestException, ValueError) as exc:
             log.warning("[Blessures] ESPN indisponible (%s) : dernière version de l'onglet utilisée.", exc)
+    if espn is not None:
+        uniformize(espn)        # noms de référence avant le rapprochement des Override de l'onglet
     if espn is None:
         injuries = sheet
         for inj in injuries:

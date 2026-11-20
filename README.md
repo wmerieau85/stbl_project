@@ -194,7 +194,9 @@ match chez 9cat). Avant la pondération lt, chaque source qui donne des minutes 
 La liste des blessés d'[ESPN](https://www.espn.com/nba/injuries) (API publique, statut et date de retour
 estimée) fait foi : elle est relue à chaque pondération lt et à chaque projection de saison / Moves, puis
 recopiée dans l'onglet `injuries` (`Player | NBA | Status | ESPN return | Override | Return used | Updated |
-Comment`).
+Comment | ESPN name`). `Player` est le nom de référence de la base (alias de l'onglet `players` appliqués),
+comme dans les autres onglets ; `ESPN name` garde le nom ESPN quand il diffère (« CJ McCollum » pour
+C.J. McCollum). Un Override saisi sous l'un ou l'autre nom est reconnu.
 
 - Joueur « Out » avec date de retour : aucun match avant cette date. Au niveau GP de la pondération, une
   source qui projette plus de matchs que son équipe n'en jouera après le retour (ratio matchs projetés /
