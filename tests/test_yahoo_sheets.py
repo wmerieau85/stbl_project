@@ -185,3 +185,18 @@ def test_write_team_draft_skips_formula_column():
 
     book = _FakeBook([['=XLOOKUP($D2;rosters!$C:$C;rosters!$A:$A)']])
     assert bdd.write_team_draft(book, {"projections_tab": "bdd"}, {"Player A": "Arno"}) == 0
+
+
+def test_transactions_block_after_team_log(monkeypatch):
+    writes = []
+    monkeypatch.setattr(sheets, "write_block",
+                        lambda book, tab, rows, first_col: writes.append((tab, rows, first_col)))
+    sheets.write_transactions(object(), "yahoo", [
+        {"date": "2026-10-22", "time": "10:00", "type": "trade", "team_id": "1", "team": "EL Commodores",
+         "player": "Caleb Wilson", "player_id": "1", "nba_team": "CHI", "positions": "F", "detail": "Traded",
+         "other_team": "Les Mousquetons", "transaction": "0-4", "yahoo_name": "Caleb Wilson"}],
+        {"el commodores": "Commish", "les mousquetons": "Cliffy"})
+    tab, rows, col = writes[0]
+    assert col == "BJ" and rows[0] == sheets.TRANSACTIONS_HEADER
+    row = dict(zip(rows[0], rows[1]))
+    assert (row["manager"], row["other_manager"], row["type"], row["player"]) == ("Commish", "Cliffy", "trade", "Caleb Wilson")

@@ -7,6 +7,7 @@ ROSTERS_START_COL = "L"
 RANKINGS_START_COL = "V"
 STANDINGS_START_COL = "AH"
 TEAM_LOG_START_COL = "AO"
+TRANSACTIONS_START_COL = "BJ"     # après le Team Log (AO:BH) et une colonne vide
 
 DRAFT_HEADER = [
     "pick", "round", "pick_in_round", "team", "manager", "player", "positions", "nba_team",
@@ -90,6 +91,28 @@ def write_standings(book, tab, teams, standings):
                 stats.get(category, ""), points.get(category, ""),
             ])
     write_block(book, tab, rows, first_col=STANDINGS_START_COL)
+
+
+TRANSACTIONS_HEADER = [
+    "date", "time", "type", "team_id", "team", "manager", "player", "player_id", "nba_team", "positions",
+    "detail", "other_team", "other_manager", "transaction", "yahoo_name",
+]
+
+
+def write_transactions(book, tab, transactions, manager_of=None):
+    """Bloc des transactions de la saison (add / drop / trade), de la plus récente à la plus ancienne."""
+    manager_of = manager_of or {}
+
+    def manager(team):
+        return manager_of.get(str(team or "").strip().casefold(), "")
+
+    rows = [TRANSACTIONS_HEADER]
+    for t in transactions:
+        rows.append([t.get("date", ""), t.get("time", ""), t.get("type", ""), t.get("team_id", ""),
+                     t.get("team", ""), manager(t.get("team")), t.get("player", ""), t.get("player_id", ""),
+                     t.get("nba_team", ""), t.get("positions", ""), t.get("detail", ""), t.get("other_team", ""),
+                     manager(t.get("other_team")), t.get("transaction", ""), t.get("yahoo_name", "")])
+    write_block(book, tab, rows, first_col=TRANSACTIONS_START_COL)
 
 
 def write_team_log(book, tab, teams):
