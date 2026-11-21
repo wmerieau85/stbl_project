@@ -3,7 +3,9 @@
 Réglages de l'onglet settings :
 - Moves | Player 1..4 : manager | joueur. Le manager est soit le mien (je cède ces joueurs), soit celui
   de Moves | Compare (je reçois ces joueurs). Ligne sans joueur : ignorée.
-- Moves | Compare : « manager » + nom du manager (échange), « free agent » (je lâche mes joueurs),
+- Moves | Compare : « trade » (voir resolve_compare : avec mes joueurs et sans manager, recherche auto chez
+  tous les managers autour de ces joueurs), « manager » + nom du manager (échange), « free agent » (je lâche
+  mes joueurs),
   « auto » (+ nom du manager facultatif) : recherche d'échanges sans joueur saisi (Moves | Player ignorés), ou
   « auto free agent » : recherche de joueurs libres sans joueur saisi (Moves | Player ignorés).
 - Optim | Moves : tolérance de valeur, nombre de résultats...
@@ -314,7 +316,8 @@ def _auto_plan(league):
     other = str(compare.get("manager") or "").strip()
     if other and other.casefold() == str(me or "").casefold():
         raise MovesError("Moves | Compare : le manager comparé ne peut pas être le mien.")
-    return {"me": me, "side": me, "mine": True, "players": [], "kind": "auto", "other": other}
+    players = [str(n).strip() for n in compare.get("players") or [] if str(n).strip()]
+    return {"me": me, "side": me, "mine": True, "players": players, "kind": "auto", "other": other}
 
 
 def _auto_free_agent_plan(league):
@@ -331,7 +334,9 @@ TRADE = "trade"
 def resolve_compare(league):
     """Types simplifiés de Moves | Compare, ramenés aux modes internes (ligue copiée si besoin) :
     trade : avec joueurs saisis -> manager (échange autour d'eux ; manager visé = Valeur, ou celui des
-    joueurs listés s'ils ne sont pas à moi), sans joueur -> auto (Valeur = un manager ou vide = tous) ;
+    joueurs listés s'ils ne sont pas à moi) ; mes joueurs sans manager visé -> auto chez tous les managers,
+    limitée aux échanges où je cède un ou plusieurs de ces joueurs ; sans joueur -> auto (Valeur = un
+    manager ou vide = tous) ;
     free agent : avec joueurs -> free agent (je les lâche), sans joueur -> auto free agent.
     Les anciens types (manager, auto, auto free agent) gardent leur sens."""
     moves = league.get("moves") or {}
@@ -347,10 +352,10 @@ def resolve_compare(league):
             side = str(listed[0].get("manager") or me).strip()
             if not other and side.casefold() != me.casefold():
                 other = side
-            if not other:
-                raise MovesError("Moves | Compare = trade avec mes joueurs : indiquez le manager visé en Valeur "
-                                 "(ou videz les lignes Moves | Player pour chercher chez tous les managers).")
-            compare = {"type": "manager", "manager": other}
+            if other:
+                compare = {"type": "manager", "manager": other}
+            else:      # mes joueurs sans manager visé : recherche auto chez tous, autour de ces joueurs
+                compare = {"type": "auto", "manager": "", "players": [e["player"] for e in listed]}
     elif kind == "free agent" and not listed:
         compare = {"type": AUTO_FREE_AGENT, "manager": ""}
     else:
@@ -598,11 +603,12 @@ class _Side:
         return self.in_exp[i] * fit - self.out_used[o] - movable_t * share
 
 
-def _screen(sim, me, partner, max_players, tolerance, batch=4000):
-    """Crible rapide des échanges k contre k avec `partner` : [(gain moi, gain partenaire, cédés, reçus)]."""
+def _screen(sim, me, partner, max_players, tolerance, batch=4000, offered=None):
+    """Crible rapide des échanges k contre k avec `partner` : [(gain moi, gain partenaire, cédés, reçus)].
+    offered : mes joueurs à céder (recherche autour d'eux : je cède un ou plusieurs d'entre eux, rien d'autre)."""
     mine, theirs = sim.teams[me], sim.teams[partner]
     rate = theirs.lineup_rate or 1.0
-    my_players = [x for x in mine.players if x.found]
+    my_players = list(offered) if offered else [x for x in mine.players if x.found]
     their_players = [x for x in theirs.players if x.found]
     base_totals = np.array([t.final for t in sim.teams])
     base_values = sim.base_values.astype(float)
@@ -664,9 +670,14 @@ def _auto(sim, me, p, conf):
     minimum = min(int(conf.get("min_results", 10)), limit)
     per_manager = max(1, int(conf.get("auto_per_manager", 5)))
     min_gain = min_move_gain(conf)
+    offered = [sim.find_on(sim.teams[me], name) for name in p.get("players") or []]
+    if len({id(x) for x in offered}) < len(offered):
+        raise MovesError("Moves | Player : le même joueur est listé deux fois.")
+    if offered:
+        max_players = min(max_players, len(offered))
     screened, tested = [], 0
     for partner in partners:
-        found, n = _screen(sim, me, partner, max_players, tolerance)
+        found, n = _screen(sim, me, partner, max_players, tolerance, offered=offered)
         tested += n
         screened += [(partner,) + c for c in found]
     # le crible est approché : marge d'un demi-point sur le gain du partenaire avant la simulation exacte
@@ -724,7 +735,7 @@ def _auto(sim, me, p, conf):
     log.info("[Moves auto] %d échanges possibles, %d à ±%.0f %% de valeur, %d intéressants au crible, "
              "%d simulés, %d gagnant-gagnant, %d affichés.", tested, len(screened), 100 * tolerance, len(pool),
              simulated, len(best), len(moves))
-    return {"mode": "auto", "partner": None, "partner_team": None, "fixed": [], "tested": tested,
+    return {"mode": "auto", "partner": None, "partner_team": None, "fixed": offered, "tested": tested,
             "kept": len(screened), "screened": len(pool), "simulated": simulated, "win_win": len(best),
             "tolerance": tolerance, "min_partner_gain": min_partner, "max_players": max_players,
             "partners": [sim.teams[i].manager for i in partners], "moves": moves}
@@ -899,6 +910,8 @@ def rows(out):
     lines = [[f"Mouvements - simulation au {out['today'].isoformat()}"]]
     if auto:
         lines.append(["Mouvement", "recherche auto d'échanges avec " + ", ".join(out["partners"])])
+        if out["fixed"]:
+            lines.append(["Joueurs proposés", "Je cède un ou plusieurs de : " + _names(out["fixed"])])
         lines.append(["Taille", f"1 contre 1 à {out['max_players']} contre {out['max_players']}"])
         lines.append(["Tolérance de valeur", f"±{100 * out['tolerance']:.0f} %"])
         lines.append(["Gain minimum du partenaire", f"{out['min_partner_gain']:+.2f} pts roto"])
