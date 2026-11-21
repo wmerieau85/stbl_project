@@ -120,7 +120,6 @@ def test_identity_move_has_no_gain():
 
 @pytest.mark.parametrize("players,compare,side,message", [
     ([], {"type": "manager", "manager": "Rival"}, "Moi", "Aucun joueur"),
-    (["B"], {"type": "trade", "manager": ""}, "Moi", "indiquez le manager visé"),
     (["C"], {"type": "free agent"}, "Rival", "doivent être les miens"),
     (["E"], {"type": "manager", "manager": "Rival"}, "Autre", "attendu Moi ou Rival"),
     (["B"], {}, "Moi", "Moves | Compare"),
@@ -396,6 +395,7 @@ def test_auto_free_agents_skip_players_never_aligned(monkeypatch):
     (["B"], "Moi", {"type": "trade", "manager": "Rival"}, {"type": "manager", "manager": "Rival"}),
     (["C"], "Rival", {"type": "trade", "manager": ""}, {"type": "manager", "manager": "Rival"}),   # ses joueurs
     ([], "Moi", {"type": "trade", "manager": "Rival"}, {"type": "auto", "manager": "Rival"}),
+    (["B"], "Moi", {"type": "trade", "manager": ""}, {"type": "auto", "manager": "", "players": ["B"]}),
     ([], "Moi", {"type": "trade", "manager": ""}, {"type": "auto", "manager": ""}),
     (["B"], "Moi", {"type": "free agent", "manager": ""}, {"type": "free agent", "manager": ""}),
     ([], "Moi", {"type": "free agent", "manager": ""}, {"type": "auto free agent", "manager": ""}),
@@ -404,6 +404,22 @@ def test_auto_free_agents_skip_players_never_aligned(monkeypatch):
 def test_simplified_compare_types(players, side, compare, expected):
     league = _league(players, compare, side=side)
     assert moves.resolve_compare(league)["moves"]["compare"] == expected
+
+
+def test_trade_with_my_players_and_no_manager_searches_all_managers_around_them():
+    league = _auto_league()
+    league["moves"]["compare"] = {"type": "trade", "manager": ""}
+    league["moves"]["players"] = [{"manager": "Moi", "player": "P1"}, {"manager": "Moi", "player": "P2"}]
+    out = moves.simulate(_auto_result(league), league)
+    assert out["mode"] == "auto" and out["partners"] == ["Rival", "Autre"] and out["moves"]
+    assert all(set(_names(m.give)) <= {"P1", "P2"} for m in out["moves"])       # jamais R1
+    assert _names(out["fixed"]) == ["P1", "P2"] and out["max_players"] == 2
+    rows = moves.rows(out)
+    assert rows[moves.HEADER_ROW - 1][0] == "#"                                 # en-tête toujours en ligne 9
+    assert any(r and r[0] == "Joueurs proposés" for r in rows[:moves.HEADER_ROW])
+    league["moves"]["players"] = [{"manager": "Moi", "player": "P1"}]
+    out = moves.simulate(_auto_result(league), league)
+    assert all(_names(m.give) == ["P1"] for m in out["moves"]) and out["max_players"] == 1
 
 
 def test_trade_without_players_runs_the_auto_search():
