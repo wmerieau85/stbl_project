@@ -96,6 +96,7 @@ class Move:
     partner_name: str = ""
     screen_gain: float | None = None     # recherche auto : gain estimé par le crible rapide
     partner_loses: bool = False          # recherche auto : ajouté pour le minimum, l'autre manager perd
+    tier: str = ""                       # recherche auto autour de mes joueurs : palier de repli (TIERS)
     alternatives: list = field(default_factory=list)   # joueurs libres auto : autres [joueurs lâchés], même gain
 
     @property
@@ -392,6 +393,11 @@ def simulate(result, league):
 
 
 MIN_GAIN = 0.25    # Optim | Moves | Min gain : gain roto minimum d'un mouvement des recherches auto
+MAX_LOSS = 1.0     # Optim | Moves | Auto max loss : perte roto acceptée au dernier palier (recherche autour de mes joueurs)
+NEUTRAL = 0.10     # en dessous de ce gain (ou de cette perte), je n'y gagne ni n'y perds
+# recherche auto autour de mes joueurs, trop peu d'échanges gagnant-gagnant : paliers de repli, dans l'ordre
+TIERS = {"win-win": "gagnant-gagnant", "me only": "il perd des points", "neutral": "neutre pour moi",
+         "small loss": "je perds un peu"}
 
 
 def min_move_gain(conf):
@@ -680,12 +686,15 @@ def _auto(sim, me, p, conf):
         found, n = _screen(sim, me, partner, max_players, tolerance, offered=offered)
         tested += n
         screened += [(partner,) + c for c in found]
-    # le crible est approché : marge d'un demi-point sur le gain du partenaire avant la simulation exacte
-    pool = [c for c in screened if c[1] > 0 and c[2] >= min_partner - 0.5]
+    # le crible est approché : marge d'un demi-point sur le gain du partenaire avant la simulation exacte ;
+    # autour de mes joueurs, on garde aussi les échanges neutres ou un peu perdants pour moi (paliers de repli)
+    max_loss = max(0.0, float(conf.get("auto_max_loss", MAX_LOSS))) if offered else 0.0
+    floor = -(max_loss + 0.5) if offered else 0.0
+    pool = [c for c in screened if c[1] > floor and (offered or c[2] >= min_partner - 0.5)]
     pool.sort(key=lambda c: -(c[1] + 0.25 * min(c[2], 0.0)))
     queue = _interleave([[c for c in pool if len(c[3]) == k] for k in range(1, max_players + 1)])
 
-    best, losing, simulated, rounds = {}, {}, 0, 0
+    best, losing, neutral, small, simulated, rounds = {}, {}, {}, {}, 0, 0
     while queue and rounds < 4:
         # par lot de Auto shortlist ; au plus 2 x Auto per manager simulés par manager et par lot (variété)
         batch, count, rest = [], {}, []
@@ -706,9 +715,14 @@ def _auto(sim, me, p, conf):
             move = sim.move(me, give, recv, teams, points, partner)
             move.partner_name, move.screen_gain = sim.teams[partner].manager, gain
             simulated += 1
-            if move.my_gain < min_gain:
+            if move.my_gain >= min_gain:
+                target = best if move.partner_gain >= min_partner - 1e-9 else losing
+            elif offered and move.my_gain >= -NEUTRAL:
+                target = neutral
+            elif offered and move.my_gain >= -max_loss - 1e-9:
+                target = small
+            else:
                 continue
-            target = best if move.partner_gain >= min_partner - 1e-9 else losing
             key = _core(sim, me, move)
             kept = target.get(key)
             # même effet pour moi : on garde le plus équitable (le remplissage sert à équilibrer)
@@ -727,18 +741,25 @@ def _auto(sim, me, p, conf):
         return out[:cap]
 
     moves = balanced(best.values(), limit)
-    # trop peu d'échanges gagnant-gagnant : complétés par ceux où je gagne mais où l'autre manager perd
+    for m in moves:
+        m.tier = "win-win" if offered else ""
+    # trop peu d'échanges gagnant-gagnant : complétés par ceux où je gagne mais où l'autre manager perd, puis
+    # (autour de mes joueurs) ceux qui me sont neutres, puis ceux où je perds au plus Auto max loss
     extra = [m for m in balanced(losing.values(), limit) if m.partner_gain < min_partner - 1e-9]
     for m in extra[:max(0, minimum - len(moves))]:
-        m.partner_loses = True
+        m.partner_loses, m.tier = True, "me only" if offered else ""
         moves.append(m)
+    for tier, found in (("neutral", neutral), ("small loss", small)):
+        for m in balanced(found.values(), limit)[:max(0, minimum - len(moves))]:
+            m.tier, m.partner_loses = tier, m.partner_gain < min_partner - 1e-9
+            moves.append(m)
     log.info("[Moves auto] %d échanges possibles, %d à ±%.0f %% de valeur, %d intéressants au crible, "
              "%d simulés, %d gagnant-gagnant, %d affichés.", tested, len(screened), 100 * tolerance, len(pool),
              simulated, len(best), len(moves))
     return {"mode": "auto", "partner": None, "partner_team": None, "fixed": offered, "tested": tested,
             "kept": len(screened), "screened": len(pool), "simulated": simulated, "win_win": len(best),
             "tolerance": tolerance, "min_partner_gain": min_partner, "max_players": max_players,
-            "partners": [sim.teams[i].manager for i in partners], "moves": moves}
+            "partners": [sim.teams[i].manager for i in partners], "moves": moves, "max_loss": max_loss}
 
 
 MIN_RECV_GAMES = 0.5      # recherche auto de joueurs libres : matchs alignés minimum du joueur ajouté
@@ -941,7 +962,10 @@ def rows(out):
     # bloc d'informations de hauteur fixe : l'en-tête du tableau est toujours sur la même ligne
     lines += [[] for _ in range(HEADER_ROW - 1 - len(lines))]
     lines.append(_header(labels))
-    if not out["moves"] and auto:
+    if not out["moves"] and auto and out["fixed"]:
+        lines.append(["", f"aucun échange où je perds moins de {out['max_loss']:.2f} pt (Optim | Moves | Auto max "
+                          "loss) : élargissez la tolérance (Value tolerance) ou Auto shortlist"])
+    elif not out["moves"] and auto:
         lines.append(["", "aucun échange gagnant-gagnant : élargissez la tolérance (Optim | Moves | Value "
                           "tolerance), Auto max players ou Auto shortlist, ou baissez Auto min partner gain"])
     elif not out["moves"] and out["mode"] == AUTO_FREE_AGENT:
@@ -952,7 +976,10 @@ def rows(out):
                           "(Optim | Moves | Value tolerance)" if trade else "aucun joueur libre"])
     for i, m in enumerate(out["moves"], 1):
         if auto:
-            manager, status = m.partner_name, "il perd des points" if m.partner_loses else "gagnant-gagnant"
+            manager = m.partner_name
+            status = TIERS[m.tier] if m.tier else ("il perd des points" if m.partner_loses else "gagnant-gagnant")
+            if m.tier in ("neutral", "small loss") and m.partner_loses:
+                status += ", il perd aussi"
         elif trade:
             manager, status = partner.manager, "hors tolérance" if m.out_of_tolerance else "dans la tolérance"
         else:
@@ -988,7 +1015,9 @@ def console(out):
         for i, m in enumerate(out["moves"][:10], 1):
             text.append(f"{i:>2}. avec {m.partner_name} : {_names(m.give)} -> {_names(m.recv)} : {m.my_gain:+.2f} pts, "
                         f"{m.partner_name} {m.partner_gain:+.2f} (valeur {m.value_give:.1f} -> {m.value_recv:.1f}, "
-                        f"{100 * m.value_diff:+.1f} %), rang {m.rank}" + (" [il perd des points]" if m.partner_loses else ""))
+                        f"{100 * m.value_diff:+.1f} %), rang {m.rank}"
+                        + (f" [{TIERS[m.tier]}]" if m.tier and m.tier != "win-win"
+                           else " [il perd des points]" if m.partner_loses else ""))
         if not out["moves"]:
             text.append("Aucun échange gagnant-gagnant trouvé.")
         return "\n".join(text)

@@ -75,7 +75,7 @@ Réglages dans l'onglet settings :
 | Ligne | Colonne 2 | Colonne 3 |
 |---|---|---|
 | `Moves | Player 1` à `4` | manager : le mien (je cède ces joueurs) ou celui de `Moves | Compare` (je les reçois) | joueur (vide = ignoré) |
-| `Moves | Compare` | `trade` | nom du manager, ou vide = tous : avec des joueurs dans `Moves | Player`, échange autour d'eux (mes joueurs : avec ce manager, ou vide = recherche auto chez tous les managers où je cède un ou plusieurs de ces joueurs ; ses joueurs : vide = le sien) ; sans joueur, recherche auto d'échanges |
+| `Moves | Compare` | `trade` | nom du manager, ou vide = tous : avec des joueurs dans `Moves | Player`, échange autour d'eux (mes joueurs : avec ce manager, ou vide = recherche auto chez tous les managers où je cède un ou plusieurs de ces joueurs ; trop peu d'échanges gagnant-gagnant (`Min results`) : complétés, dans l'ordre, par ceux où je suis seul gagnant, puis neutres pour moi (±0,1 pt), puis où je perds au plus `Auto max loss` (1 pt) ; ses joueurs : vide = le sien) ; sans joueur, recherche auto d'échanges |
 | `Moves | Compare` | `free agent` | (vide) : avec des joueurs (les miens), je les lâche et les meilleurs joueurs libres sont testés à leur place ; sans joueur, recherche auto (qui lâcher, qui prendre) |
 
 Anciens types toujours acceptés : `manager` (= `trade` avec joueurs), `auto` (recherche d'échanges, lignes
