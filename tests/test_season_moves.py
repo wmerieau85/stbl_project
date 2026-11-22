@@ -422,6 +422,22 @@ def test_trade_with_my_players_and_no_manager_searches_all_managers_around_them(
     assert all(_names(m.give) == ["P1"] for m in out["moves"]) and out["max_players"] == 1
 
 
+def test_search_around_my_players_falls_back_on_small_losses():
+    """P1 seul : aucun échange ne me fait gagner ; complétés par ceux où je perds au plus Auto max loss."""
+    league = _auto_league()
+    league["moves"].update(compare={"type": "trade", "manager": ""}, min_results=10, auto_max_loss=1.0,
+                           players=[{"manager": "Moi", "player": "P1"}])
+    out = moves.simulate(_auto_result(league), league)
+    assert out["moves"] and all(m.tier == "small loss" and -1.0 <= m.my_gain < -moves.NEUTRAL for m in out["moves"])
+    assert [m.my_gain for m in out["moves"]] == sorted((m.my_gain for m in out["moves"]), reverse=True)
+    rows = moves.rows(out)
+    first = rows[moves.HEADER_ROW]
+    assert first[0] == 1 and "je perds un peu" in first
+    league["moves"]["auto_max_loss"] = 0.2
+    out = moves.simulate(_auto_result(league), league)
+    assert out["moves"] == [] and "Auto max loss" in moves.rows(out)[moves.HEADER_ROW][1]
+
+
 def test_trade_without_players_runs_the_auto_search():
     league = _auto_league("Rival")
     league["moves"]["compare"] = {"type": "trade", "manager": "Rival"}

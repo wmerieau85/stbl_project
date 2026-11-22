@@ -176,6 +176,10 @@ PARAMS = [
      "recherche auto : échanges affichés au plus par manager (variété des propositions)"),
     ("Optim | Moves", "Auto min partner gain", "league", "moves.auto_min_partner_gain", "float",
      "recherche auto : gain roto minimum de l'autre manager (0 = il ne perd rien, il a intérêt à accepter)"),
+    ("Optim | Moves", "Auto max loss", "league", "moves.auto_max_loss", "float",
+     "recherche auto autour de mes joueurs (Moves | Player, sans manager) : trop peu d'échanges gagnant-gagnant -> "
+     "complétés par ceux où je suis seul gagnant, puis neutres pour moi, puis où je perds au plus ce nombre de "
+     "points roto (1 pt)"),
     ("Optim | Moves", "Min gain", "league", "moves.min_gain", "float",
      "recherches auto (échanges, joueurs libres) : gain roto minimum pour afficher un mouvement (0,25 pt)"),
     ("Optim | Moves", "Value basis", "league", "moves.value_basis", "choice:perceived,projected",
